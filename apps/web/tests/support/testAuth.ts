@@ -1,6 +1,7 @@
 import { createServerClient, type CookieMethodsServer } from "@supabase/ssr";
 import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
-import { platformAdmins } from "@loyalty/db";
+import { eq } from "drizzle-orm";
+import { platformAdmins, roles, users } from "@loyalty/db";
 import { adminDb, createBusinessWithOwner } from "@loyalty/db/admin";
 
 // Compartido por apps/web/tests/*.test.ts que necesitan sesiones reales,
@@ -126,4 +127,26 @@ export async function createBusinessWithRealOwner(input: {
     createdByAuthUserId: input.createdByAuthUserId,
   });
   return { business, ownerAuthUserId };
+}
+
+// Staff real en un negocio existente: auth.users real (login posible) +
+// fila en public.users con el rol global 'staff'. adminDb SOLO como setup de
+// test (regla de CLAUDE.md).
+export async function createRealStaffUser(input: {
+  businessId: string;
+  email: string;
+  password: string;
+}): Promise<string> {
+  const staffAuthUserId = await createOwnerAuthUser(input.email, input.password);
+  const [staffRole] = await adminDb.select().from(roles).where(eq(roles.name, "staff"));
+  if (!staffRole) {
+    throw new Error("No existe el rol global 'staff' — revisa el seed de roles.");
+  }
+  await adminDb.insert(users).values({
+    businessId: input.businessId,
+    authUserId: staffAuthUserId,
+    email: input.email,
+    roleId: staffRole.id,
+  });
+  return staffAuthUserId;
 }
