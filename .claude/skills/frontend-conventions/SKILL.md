@@ -1,6 +1,6 @@
 ---
 name: frontend-conventions
-description: Convenciones de UI y reglas de acceso a datos para toda pantalla de feature en apps/web (dashboard, rewards, customers, etc.). Úsala SIEMPRE antes de escribir o modificar páginas, componentes o server actions de features — define los patrones de Next.js App Router/shadcn/Tailwind y las reglas NO negociables de datos tenant-scoped.
+description: Convenciones de UI y reglas de acceso a datos para toda pantalla de feature en apps/web (dashboard, rewards, customers, scanner, etc.). Úsala SIEMPRE antes de escribir o modificar páginas, componentes o server actions de features — define los patrones de Next.js App Router/shadcn/Tailwind, las reglas NO negociables de datos tenant-scoped, y las convenciones de PWA/scanner (cámara, lector USB, instalabilidad).
 ---
 
 # Convenciones de frontend — apps/web
@@ -115,6 +115,61 @@ export async function mutarAlgo(_prev: State, formData: FormData): Promise<State
   // revalidatePath("/<feature>") al final si cambió lo que la página muestra
 }
 ```
+
+## PWA / scanner (Fase 3+)
+
+### Instalabilidad y service worker
+- **Manifest** (`app/manifest.ts` de App Router): `name`/`short_name`,
+  `start_url` apuntando a la ruta del scanner, `display: "standalone"`,
+  `theme_color`/`background_color` coherentes con el tema, íconos 192 y 512
+  (maskable). Sin manifest válido no hay prompt de instalación.
+- **Service worker MÍNIMO**: solo lo necesario para que la app sea
+  instalable y cargue su shell. **SIN cola offline** — el MVP exige conexión
+  al registrar sellos/canjes: un movimiento de sello que "se guarda para
+  después" rompe la idempotencia y el cooldown server-side. Si no hay red,
+  la UI lo dice claro y no permite operar; NUNCA aceptar la operación en
+  local para "sincronizar luego".
+- No usar librerías de PWA (next-pwa, workbox) sin preguntar — regla de
+  dependencias. Un SW de ~20 líneas escrito a mano basta para el MVP.
+
+### Cámara
+- **Solo en contexto seguro**: `getUserMedia` exige HTTPS; `localhost`
+  cuenta como seguro en dev, pero un teléfono apuntando a la IP de la
+  laptop NO — para probar en móvil real hace falta túnel HTTPS o el flag
+  de "insecure origins" del navegador de prueba (documentar cuál se usó).
+  La UI debe detectar contexto no-seguro y explicar, no fallar en silencio.
+- **Permiso con gesto del usuario**: la cámara se pide al tocar "Escanear",
+  nunca al montar la página (los navegadores lo penalizan y el usuario no
+  tiene contexto). Denegado → mensaje claro + fallback (input USB/búsqueda
+  manual), no un reintento en loop.
+- **`facingMode: "environment"`** (cámara trasera) — es la que apunta al QR
+  del cliente. Detener el stream (`track.stop()`) al desmontar o al navegar:
+  cámara encendida sin usarse = batería y desconfianza.
+
+### Doble entrada: cámara y lector USB → UN solo manejador
+- Los lectores USB/bluetooth de QR son "keyboard wedge": tipean el
+  contenido del código como texto veloz + Enter en el elemento enfocado.
+- Patrón obligatorio: **un único manejador `onToken(token: string)`** que
+  reciba el token venga de donde venga. La cámara lo llama con el texto
+  decodificado del QR; un `<input>` siempre enfocado (autofocus + re-focus
+  al blur, invisible o discreto) lo llama en el Enter del lector. Cero
+  lógica duplicada entre las dos vías: mismo trim, misma validación de
+  forma, mismo POST.
+- El token es OPACO: el cliente/scanner NUNCA lo interpreta ni deriva nada
+  de él — se manda tal cual al server, que resuelve DENTRO del tenant de la
+  sesión (mismo patrón anti-IDOR de siempre: token de otro negocio =
+  not found idéntico a inexistente).
+- Tras cada lectura (éxito o error): limpiar el input y re-enfocarlo — el
+  mostrador encadena escaneos sin tocar la pantalla.
+
+### Reglas de negocio en el server, SIEMPRE
+- La UI del scanner solo REFLEJA lo que el server decidió: cooldown,
+  idempotencia, sellos suficientes, negocio/empleado activos y sucursal
+  válida se evalúan server-side en cada operación. Deshabilitar un botón en
+  la UI es cortesía, no seguridad.
+- Toda operación de sello/canje manda su `idempotency_key` generada en el
+  cliente POR ACCIÓN (no por sesión); un replay devuelve el resultado
+  original, jamás un segundo movimiento.
 
 ## Qué NO hacer (errores ya cometidos o casi)
 

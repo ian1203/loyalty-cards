@@ -12,7 +12,8 @@ import { getVerifiedSession } from "../../lib/supabase/session";
 
 // Shell del dashboard: autenticado, tenant-scoped (business_id de la sesión
 // verificada, nunca de input de cliente). Sin métricas todavía — de aquí se
-// navega a las features de Fase 2 (/rewards, /customers).
+// navega a las features de Fase 2 (/rewards, /customers) y Fase 3
+// (/scanner).
 export default async function DashboardPage() {
   const session = await getVerifiedSession();
 
@@ -33,7 +34,7 @@ export default async function DashboardPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <h1 className="text-2xl font-semibold">{businessName}</h1>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Link href="/rewards">
           <Card className="h-full transition-colors hover:bg-accent">
             <CardHeader>
@@ -50,6 +51,16 @@ export default async function DashboardPage() {
               <CardTitle>Clientes</CardTitle>
               <CardDescription>
                 Da de alta clientes y consulta su tarjeta de sellos.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+        <Link href="/scanner">
+          <Card className="h-full transition-colors hover:bg-accent">
+            <CardHeader>
+              <CardTitle>Scanner</CardTitle>
+              <CardDescription>
+                Escanea el QR del cliente para sellar o canjear.
               </CardDescription>
             </CardHeader>
           </Card>

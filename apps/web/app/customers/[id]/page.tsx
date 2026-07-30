@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
+import QRCode from "qrcode";
 import { customerBalances, customers, loyaltyPrograms, withTenantContext } from "@loyalty/db";
 import { Badge } from "../../../components/ui/badge";
 import {
@@ -10,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../components/ui/card";
+import { StampProgressBar } from "../../../components/StampProgressBar";
 import { requireTenantSession } from "../../../lib/supabase/session";
 import { findInTenant } from "../../../lib/tenant";
 
@@ -33,6 +35,16 @@ export default async function CustomerDetailPage({
   const data = await withTenantContext(session.businessId, async (tx) => {
     const row = await findInTenant(tx, session, customers, id);
     if (!row) return null;
+
+    // El QR se genera acá, con row.walletToken todavía en scope — ANTES de
+    // armar el objeto `customer` saneado de abajo. El SVG (marcado, no el
+    // token) es lo único que sale de este bloque; el string crudo del token
+    // nunca llega al objeto que la página renderiza.
+    const qrSvg = await QRCode.toString(row.walletToken, {
+      type: "svg",
+      margin: 1,
+      width: 220,
+    });
 
     // Solo los campos que la vista usa — NUNCA wallet_token (hallazgo de la
     // revisión: aunque hoy no cruza al cliente, dejarlo fuera del objeto
@@ -69,14 +81,14 @@ export default async function CustomerDetailPage({
         ),
       );
 
-    return { customer, balances };
+    return { customer, balances, qrSvg };
   });
 
   if (!data) {
     notFound();
   }
 
-  const { customer, balances } = data;
+  const { customer, balances, qrSvg } = data;
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
@@ -86,6 +98,23 @@ export default async function CustomerDetailPage({
           ← Clientes
         </Link>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Código QR</CardTitle>
+          <CardDescription>
+            Para pruebas del scanner: este código codifica el token opaco del
+            cliente, lo mismo que llevará el pase de Wallet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* eslint-disable-next-line react/no-danger -- SVG generado server-side por la librería `qrcode`, no HTML de usuario */}
+          <div
+            className="w-fit rounded-md bg-white p-3"
+            dangerouslySetInnerHTML={{ __html: qrSvg }}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -121,33 +150,25 @@ export default async function CustomerDetailPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          {balances.map((balance) => {
-            const progress = Math.min(
-              100,
-              Math.round((balance.currentStamps / balance.stampsRequired) * 100),
-            );
-            return (
-              <div key={balance.programName} className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium">{balance.programName}</p>
-                  <div className="flex items-center gap-2">
-                    {!balance.programActive ? (
-                      <Badge variant="secondary">Programa pausado</Badge>
-                    ) : null}
-                    <span className="text-sm text-muted-foreground">
-                      {balance.currentStamps} de {balance.stampsRequired} sellos
-                    </span>
-                  </div>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${progress}%` }}
-                  />
+          {balances.map((balance) => (
+            <div key={balance.programName} className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <p className="font-medium">{balance.programName}</p>
+                <div className="flex items-center gap-2">
+                  {!balance.programActive ? (
+                    <Badge variant="secondary">Programa pausado</Badge>
+                  ) : null}
+                  <span className="text-sm text-muted-foreground">
+                    {balance.currentStamps} de {balance.stampsRequired} sellos
+                  </span>
                 </div>
               </div>
-            );
-          })}
+              <StampProgressBar
+                current={balance.currentStamps}
+                required={balance.stampsRequired}
+              />
+            </div>
+          ))}
         </CardContent>
       </Card>
     </main>
