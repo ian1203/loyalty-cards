@@ -150,3 +150,11 @@ export async function createRealStaffUser(input: {
   });
   return staffAuthUserId;
 }
+
+// Construye un FormData a partir de un objeto plano — todas las Server
+// Actions de features reciben FormData, no objetos.
+export function form(fields: Record<string, string>): FormData {
+  const fd = new FormData();
+  for (const [key, value] of Object.entries(fields)) fd.set(key, value);
+  return fd;
+}
