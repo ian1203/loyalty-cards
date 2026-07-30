@@ -30,17 +30,48 @@ otro; más `apps/web/tests/fail-closed.test.ts` (sin sesión/sesión inválida
 → fail closed) y `apps/web/tests/admin-access.test.ts` (rol dueño no llega
 a `/admin`).
 
+**FASE 2 — Programa de sellos + directorio de clientes**: `/rewards`
+(config del programa: stamps_required, cooldown, activo; reglas de
+recompensa — solo dueño edita, staff ve read-only, todo auditado) y
+`/customers` (alta manual dueño/staff con balance inicial 0 y wallet_token
+opaco; directorio con búsqueda tenant-scoped; detalle anti-IDOR). UI:
+Tailwind v4 + shadcn/ui (ver skill `frontend-conventions` — rige toda
+pantalla de feature). Patrón de seguridad clave: la lógica de cada action
+vive en `logic.ts` (SIN `"use server"`, recibe la sesión como parámetro —
+en un archivo `"use server"` quedaría expuesta como endpoint invocable con
+sesión forjada) y `actions.ts` es un shim que resuelve la sesión desde
+cookies verificadas. Primitivos compartidos en `apps/web/lib/tenant.ts`:
+`findInTenant` (lectura por id anti-IDOR), `resolveActor` + `writeAuditLog`
+(audit con `actor_user_id` — NUNCA `actor_auth_user_id`, cuya FK apunta a
+`platform_admins` y rechaza actores de tenant). Definición de "listo"
+cumplida: `apps/web/tests/fase2-features.test.ts` prueba con sesiones
+reales IDOR (cliente de B desde A → null idéntico a inexistente), listado
+sin fuga cross-tenant, staff no edita el programa, alta+dedupe por tenant,
+y cero `@loyalty/db/admin` en rutas de feature (test permanente).
+Revisión `tenant-security-reviewer`: sin hallazgos críticos/altos.
+
 ## Fase actual: sin definir todavía
-FASE 2 (candidatos: pantallas con datos reales, `/customers`, `/enroll`,
-scanner) no está acotada. No la empieces sin pedir el alcance primero —
-misma regla que ya regía para Fase 0 → Fase 1.
+FASE 2b (candidato principal: `/enroll` público para que el cliente final
+se dé de alta solo) no está acotada. Tampoco Fase 3 (scanner, sellado,
+canje — el motor en packages/core sigue stub). No las empieces sin pedir
+el alcance primero — misma regla que rigió Fase 0 → 1 → 2.
 
 ## Arquitectura (decidida, no re-litigar)
 - Monorepo, TypeScript-first. Frontend: Next.js. DB: PostgreSQL (Supabase/Neon).
 - Auth: Supabase Auth. Claims de tenant (`business_id`/`tenant_role`/
   `location_id`/`is_platform_admin`) inyectados vía custom access token hook
   (función Postgres), nunca calculados en la app a partir de datos sin
-  verificar.
+  verificar. Firma asimétrica (ES256, JWKS por proyecto); TTL del access
+  token: 3600 s (`jwt_expiry` en supabase/config.toml).
+- Revocación (decidido; se implementa cuando existan las operaciones): la
+  verificación local del JWT NO revoca al instante — un usuario desactivado
+  o un negocio suspendido conserva su token hasta que expira (≤1 h) o se
+  refresca. Para el dashboard de solo-lectura eso es aceptable y nos
+  apoyamos en el TTL corto. Para operaciones sensibles (canje de recompensa,
+  suspensión de negocio, escaneo de sellos — Fase 3) se hará además un check
+  en vivo de `businesses.status`/`users.is_active` contra la DB en el
+  momento de la acción. No implementar ese check antes de que existan esas
+  operaciones.
 - Motor de lealtad como paquete aislado y testeable (packages/core).
 - Modelo de lealtad: SELLOS por visita (no puntos ni saldo monetario).
   Programa define stamps_required; cada visita = +1 sello; al llegar al total
