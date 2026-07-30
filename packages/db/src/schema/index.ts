@@ -1,3 +1,4 @@
+export * from "./platformAdmins";
 export * from "./businesses";
 export * from "./roles";
 export * from "./users";

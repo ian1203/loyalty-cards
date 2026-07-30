@@ -1,2 +1,2 @@
 export * from "./schema";
-export { withTenantContext } from "./tenantContext";
+export { withTenantContext, type VerifiedBusinessId } from "./tenantContext";

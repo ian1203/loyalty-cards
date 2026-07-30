@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, type AnyColumn } from "drizzle-orm";
+import { eq, sql, type AnyColumn } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { adminDb } from "../src/client";
@@ -20,7 +20,7 @@ import {
   users,
   walletPasses,
 } from "../src/schema";
-import { withTenantContext } from "../src/tenantContext";
+import { withTenantContext, type VerifiedBusinessId } from "../src/tenantContext";
 
 // Complementa isolation.test.ts: en vez de probar solo un par de tablas a
 // mano, recorre las 13 tablas con business_id (todas las tenant-scoped
@@ -33,6 +33,9 @@ import { withTenantContext } from "../src/tenantContext";
 
 let owner: typeof businesses.$inferSelect;
 let foreign: typeof businesses.$inferSelect;
+// Único cast de este archivo: fixture de adminDb, fuente confiable
+// equivalente a una sesión verificada en producción.
+let ownerBusinessId: VerifiedBusinessId;
 
 type Fixture = {
   role: typeof roles.$inferSelect;
@@ -66,13 +69,22 @@ beforeAll(async () => {
     .returning();
 
   const businessId = owner.id;
+  ownerBusinessId = businessId as VerifiedBusinessId;
 
   // roles ya no es tenant-scoped (catálogo global sembrado por migración):
   // se referencia, no se crea.
   const [role] = await adminDb.select().from(roles).where(eq(roles.name, "owner"));
+
+  // users.auth_user_id tiene FK real a auth.users(id) (Fase 1). Este test
+  // opera a nivel de DB, no de Supabase Auth, así que sembramos directo una
+  // fila mínima en auth.users (solo "id" es NOT NULL sin default) —
+  // suficiente para satisfacer la FK, no crea una identidad real con la que
+  // se pueda hacer login.
+  const authUserId = randomUUID();
+  await adminDb.execute(sql`insert into auth.users (id) values (${authUserId})`);
   const [user] = await adminDb
     .insert(users)
-    .values({ businessId, email: `u-${suffix}@test.dev`, roleId: role.id })
+    .values({ businessId, authUserId, email: `u-${suffix}@test.dev`, roleId: role.id })
     .returning();
   const [location] = await adminDb.insert(locations).values({ businessId, name: `Loc ${suffix}` }).returning();
   const [employee] = await adminDb
@@ -315,7 +327,7 @@ async function expectRlsViolation(promise: Promise<unknown>): Promise<void> {
 describe.each(specs())("aislamiento de tenant — write path — $name", (spec) => {
   it("INSERT con business_id ajeno falla (viola WITH CHECK)", async () => {
     await expectRlsViolation(
-      withTenantContext(owner.id, (tx) =>
+      withTenantContext(ownerBusinessId, (tx) =>
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tx.insert(spec.table) as any).values(spec.insertValues(fx, foreign.id)),
       ),
@@ -326,7 +338,7 @@ describe.each(specs())("aislamiento de tenant — write path — $name", (spec) 
     const ownId = spec.ownRowId(fx);
 
     await expectRlsViolation(
-      withTenantContext(owner.id, (tx) =>
+      withTenantContext(ownerBusinessId, (tx) =>
         tx
           .update(spec.table)
           .set({ businessId: foreign.id })
@@ -335,7 +347,7 @@ describe.each(specs())("aislamiento de tenant — write path — $name", (spec) 
     );
 
     // La fila debe seguir intacta, todavía en el tenant original.
-    const [stillOwned] = await withTenantContext(owner.id, (tx) =>
+    const [stillOwned] = await withTenantContext(ownerBusinessId, (tx) =>
       tx.select().from(spec.table).where(eq(spec.table.id, ownId)),
     );
     expect((stillOwned as { businessId: string } | undefined)?.businessId).toBe(owner.id);
@@ -344,12 +356,12 @@ describe.each(specs())("aislamiento de tenant — write path — $name", (spec) 
 
 describe("aislamiento de tenant — write path — businesses (raíz, política por id)", () => {
   it("A no puede leer ni escribir la fila de negocio B (política por id, no business_id)", async () => {
-    const rows = await withTenantContext(owner.id, (tx) =>
+    const rows = await withTenantContext(ownerBusinessId, (tx) =>
       tx.select().from(businesses).where(eq(businesses.id, foreign.id)),
     );
     expect(rows).toHaveLength(0);
 
-    const updated = await withTenantContext(owner.id, (tx) =>
+    const updated = await withTenantContext(ownerBusinessId, (tx) =>
       tx.update(businesses).set({ name: "Hacked" }).where(eq(businesses.id, foreign.id)).returning(),
     );
     expect(updated).toHaveLength(0);

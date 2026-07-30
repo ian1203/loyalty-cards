@@ -2,6 +2,7 @@ import { foreignKey, index, jsonb, pgTable, text, timestamp, uuid } from "drizzl
 import { businesses } from "./businesses";
 import { employees } from "./employees";
 import { locations } from "./locations";
+import { platformAdmins } from "./platformAdmins";
 import { users } from "./users";
 
 // Append-only: sin updated_at ni trigger.
@@ -14,6 +15,10 @@ export const auditLogs = pgTable(
       .references(() => businesses.id),
     actorUserId: uuid("actor_user_id"),
     actorEmployeeId: uuid("actor_employee_id"),
+    // Acciones de plataforma (p.ej. alta de negocio) las hace un admin
+    // general, no un users.id de ese negocio — no es FK compuesta con
+    // business_id porque el admin no pertenece a ningún tenant.
+    actorAuthUserId: uuid("actor_auth_user_id").references(() => platformAdmins.authUserId),
     locationId: uuid("location_id"),
     action: text("action").notNull(),
     entityType: text("entity_type").notNull(),

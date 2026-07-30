@@ -9,8 +9,13 @@ export const users = pgTable(
     businessId: uuid("business_id")
       .notNull()
       .references(() => businesses.id),
+    // Supabase Auth es dueño de las credenciales (nunca guardamos password
+    // hashes propios); este es el único vínculo entre nuestra fila de
+    // negocio y la identidad real en auth.users. Sin .references() de
+    // Drizzle: auth.users la administra Supabase, no nuestras migraciones —
+    // la FK real se agrega a mano en SQL (ver migración de auth).
+    authUserId: uuid("auth_user_id").notNull().unique(),
     email: text("email").notNull(),
-    passwordHash: text("password_hash"),
     roleId: uuid("role_id")
       .notNull()
       .references(() => roles.id),

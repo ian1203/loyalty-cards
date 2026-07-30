@@ -8,7 +8,7 @@ import {
   loyaltyPrograms,
   transactions,
 } from "../src/schema";
-import { withTenantContext } from "../src/tenantContext";
+import { withTenantContext, type VerifiedBusinessId } from "../src/tenantContext";
 
 // Este suite es la definición de "listo" de la Fase 0: demuestra, contra
 // Postgres real y usando el rol de aplicación normal `app_user` (nunca el
@@ -21,6 +21,11 @@ import { withTenantContext } from "../src/tenantContext";
 
 let businessA: typeof businesses.$inferSelect;
 let businessB: typeof businesses.$inferSelect;
+// Único cast de este archivo: los fixtures de test, creados por adminDb, son
+// una fuente confiable de business_id (equivalente a una sesión verificada
+// en producción). withTenantContext ya no acepta un string crudo.
+let businessAId: VerifiedBusinessId;
+let businessBId: VerifiedBusinessId;
 let customerA: typeof customers.$inferSelect;
 let customerB: typeof customers.$inferSelect;
 let locationA: typeof locations.$inferSelect;
@@ -37,10 +42,12 @@ beforeAll(async () => {
     .insert(businesses)
     .values({ name: "Isolation Test A", slug: `isolation-a-${suffix}` })
     .returning();
+  businessAId = businessA.id as VerifiedBusinessId;
   [businessB] = await adminDb
     .insert(businesses)
     .values({ name: "Isolation Test B", slug: `isolation-b-${suffix}` })
     .returning();
+  businessBId = businessB.id as VerifiedBusinessId;
 
   [customerA] = await adminDb
     .insert(customers)
@@ -106,7 +113,7 @@ afterAll(async () => {
 
 describe("aislamiento de tenant — customers (tabla hoja)", () => {
   it("A no puede leer un customer de B vía SELECT (vacío, no error)", async () => {
-    const rows = await withTenantContext(businessA.id, (tx) =>
+    const rows = await withTenantContext(businessAId, (tx) =>
       tx.select().from(customers).where(eq(customers.id, customerB.id)),
     );
 
@@ -115,7 +122,7 @@ describe("aislamiento de tenant — customers (tabla hoja)", () => {
 
   it("A no puede insertar un customer con business_id de B", async () => {
     await expect(
-      withTenantContext(businessA.id, (tx) =>
+      withTenantContext(businessAId, (tx) =>
         tx.insert(customers).values({
           businessId: businessB.id,
           walletToken: `hack-${Date.now()}`,
@@ -125,7 +132,7 @@ describe("aislamiento de tenant — customers (tabla hoja)", () => {
   });
 
   it("A no puede modificar un customer de B vía UPDATE", async () => {
-    const updated = await withTenantContext(businessA.id, (tx) =>
+    const updated = await withTenantContext(businessAId, (tx) =>
       tx
         .update(customers)
         .set({ fullName: "Hacked by A" })
@@ -134,20 +141,20 @@ describe("aislamiento de tenant — customers (tabla hoja)", () => {
     );
     expect(updated).toHaveLength(0);
 
-    const stillIntact = await withTenantContext(businessB.id, (tx) =>
+    const stillIntact = await withTenantContext(businessBId, (tx) =>
       tx.select().from(customers).where(eq(customers.id, customerB.id)),
     );
     expect(stillIntact[0]?.fullName).not.toBe("Hacked by A");
   });
 
   it("A sí puede leer y escribir sus propios datos", async () => {
-    const rows = await withTenantContext(businessA.id, (tx) =>
+    const rows = await withTenantContext(businessAId, (tx) =>
       tx.select().from(customers).where(eq(customers.id, customerA.id)),
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]?.id).toBe(customerA.id);
 
-    const updated = await withTenantContext(businessA.id, (tx) =>
+    const updated = await withTenantContext(businessAId, (tx) =>
       tx
         .update(customers)
         .set({ fullName: "Updated by A" })
@@ -166,7 +173,7 @@ describe("aislamiento de tenant — customers (tabla hoja)", () => {
 
 describe("aislamiento de tenant — transactions (tabla relacional)", () => {
   it("A no puede leer las transactions de B", async () => {
-    const rows = await withTenantContext(businessA.id, (tx) =>
+    const rows = await withTenantContext(businessAId, (tx) =>
       tx.select().from(transactions).where(eq(transactions.id, transactionB.id)),
     );
     expect(rows).toHaveLength(0);
@@ -174,7 +181,7 @@ describe("aislamiento de tenant — transactions (tabla relacional)", () => {
 
   it("A no puede insertar una transaction con business_id de B", async () => {
     await expect(
-      withTenantContext(businessA.id, (tx) =>
+      withTenantContext(businessAId, (tx) =>
         tx.insert(transactions).values({
           businessId: businessB.id,
           customerId: customerB.id,
@@ -187,7 +194,7 @@ describe("aislamiento de tenant — transactions (tabla relacional)", () => {
   });
 
   it("A sí puede leer su propia transaction", async () => {
-    const rows = await withTenantContext(businessA.id, (tx) =>
+    const rows = await withTenantContext(businessAId, (tx) =>
       tx.select().from(transactions).where(eq(transactions.id, transactionA.id)),
     );
     expect(rows).toHaveLength(1);
@@ -195,7 +202,7 @@ describe("aislamiento de tenant — transactions (tabla relacional)", () => {
   });
 
   it("un JOIN no filtra filas de B hacia el contexto de A", async () => {
-    const rows = await withTenantContext(businessA.id, (tx) =>
+    const rows = await withTenantContext(businessAId, (tx) =>
       tx
         .select()
         .from(transactions)

@@ -1,4 +1,5 @@
 import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { platformAdmins } from "./platformAdmins";
 
 export const businessStatusEnum = pgEnum("business_status", [
   "active",
@@ -16,9 +17,10 @@ export const businesses = pgTable("businesses", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-  // Sin FK a users.id: crearla generaría un ciclo de dependencia con
-  // users.business_id -> businesses.id, y un negocio puede existir antes de
-  // que exista ningún usuario (alta/provisioning).
-  createdBy: uuid("created_by"),
-  updatedBy: uuid("updated_by"),
+  // FK real ahora que platform_admins existe (Fase 1): un negocio lo crea
+  // un admin general, no un users.id — platform_admins no depende de
+  // businesses, así que no hay el ciclo que sí existía contra users.id en
+  // Fase 0.
+  createdBy: uuid("created_by").references(() => platformAdmins.authUserId),
+  updatedBy: uuid("updated_by").references(() => platformAdmins.authUserId),
 });

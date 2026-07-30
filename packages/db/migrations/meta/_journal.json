@@ -57,6 +57,27 @@
       "when": 1785379466540,
       "tag": "0007_tidy_anita_blake",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785387069688,
+      "tag": "0008_breezy_jack_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785387093178,
+      "tag": "0009_amused_radioactive_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785387105649,
+      "tag": "0010_supabase_auth_bridge",
+      "breakpoints": true
     }
   ]
 }
