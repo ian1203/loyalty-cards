@@ -1,6 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { afterAll, describe, expect, it } from "vitest";
+import { platformAdmins } from "@loyalty/db";
+import { adminDb } from "@loyalty/db/admin";
 import { getVerifiedSession, requirePlatformAdmin, requireTenantSession } from "../lib/supabase/session";
-import { createMemoryCookieJar } from "./support/testAuth";
+import {
+  createMemoryCookieJar,
+  createPlatformAdmin,
+  signInAsCookieJar,
+  supabaseAdminClient,
+} from "./support/testAuth";
 
 // Paso (f) del endurecimiento de Fase 1: sin sesión / con una sesión
 // inválida o corrupta, el único punto sancionado de lectura de identidad
@@ -77,5 +85,67 @@ describe("Fase 1 — fail-closed sin sesión o con sesión inválida", () => {
 
     const session = await getVerifiedSession(jar);
     expect(session.authenticated).toBe(false);
+  });
+});
+
+// Caso pedido explícitamente: sesión VÁLIDA (login real, JWT real,
+// verificado) pero sin claim de tenant — ni platform_admin ni asignado a
+// ningún negocio (p.ej. un auth.users recién creado por invitación, antes
+// de que exista su fila en public.users, o uno desactivado). Distinto de
+// los casos de arriba (sin sesión / firma inválida): acá la firma SÍ es
+// válida, el problema es que no hay negocio ni rol que resolver.
+describe("Fase 1 — fail-closed con sesión válida pero sin claim de tenant", () => {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const password = "no-tenant-claim-test-password-1";
+  let orphanAuthUserId: string;
+  let platformAdminAuthUserId: string;
+
+  afterAll(async () => {
+    // platform_admins primero: FK RESTRICT hacia auth.users (deliberado, ver
+    // packages/db/migrations/0010_supabase_auth_bridge.sql) — deleteUser
+    // fallaría si la fila siguiera ahí.
+    await adminDb
+      .delete(platformAdmins)
+      .where(eq(platformAdmins.authUserId, platformAdminAuthUserId));
+
+    const admin = supabaseAdminClient();
+    await admin.auth.admin.deleteUser(orphanAuthUserId);
+    await admin.auth.admin.deleteUser(platformAdminAuthUserId);
+  });
+
+  it("un auth.users real, sin fila en public.users y sin platform_admins (nunca pasó por /admin), no es ni admin ni tenant_user — falla cerrado", async () => {
+    const email = `fail-closed-orphan-${suffix}@test.dev`;
+    const { data, error } = await supabaseAdminClient().auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (error || !data.user) {
+      throw new Error(`No se pudo crear el usuario huérfano: ${error?.message}`);
+    }
+    orphanAuthUserId = data.user.id;
+
+    const jar = await signInAsCookieJar(email, password);
+    const session = await getVerifiedSession(jar);
+
+    expect(session).toEqual({ authenticated: false });
+    expect(await requirePlatformAdmin(jar)).toBeNull();
+    expect(await requireTenantSession(jar)).toBeNull();
+  });
+
+  it("un platform admin real entra por su propio carril, aunque no tenga negocio asignado", async () => {
+    const email = `fail-closed-admin-${suffix}@test.dev`;
+    platformAdminAuthUserId = await createPlatformAdmin(email, password);
+
+    const jar = await signInAsCookieJar(email, password);
+    const session = await getVerifiedSession(jar);
+
+    expect(session).toEqual({
+      authenticated: true,
+      kind: "platform_admin",
+      authUserId: platformAdminAuthUserId,
+    });
+    // El carril de tenant_user, en cambio, sigue cerrado para este admin.
+    expect(await requireTenantSession(jar)).toBeNull();
   });
 });
