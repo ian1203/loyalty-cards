@@ -1,2 +1,6 @@
 export * from "./schema";
-export { withTenantContext, type VerifiedBusinessId } from "./tenantContext";
+export {
+  withTenantContext,
+  type TenantTransaction,
+  type VerifiedBusinessId,
+} from "./tenantContext";

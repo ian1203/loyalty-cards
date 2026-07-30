@@ -11,7 +11,7 @@ import { appDb } from "./client";
 // verificada" en un error de compilación en vez de un descuido silencioso.
 export type VerifiedBusinessId = Brand<string, "VerifiedBusinessId">;
 
-type TenantTransaction = Parameters<
+export type TenantTransaction = Parameters<
   Parameters<(typeof appDb)["transaction"]>[0]
 >[0];
 
