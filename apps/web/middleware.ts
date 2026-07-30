@@ -1,39 +1,58 @@
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Placeholder de resolución de tenant por request: sin autenticación real
-// todavía (fuera de scope de Fase 0), el business_id llega en un header —
-// TODO reemplazar por sesión/JWT en la fase de auth. Se reenvía a los route
-// handlers (que sí corren en runtime Node.js) vía un header interno; ahí es
-// donde se debe llamar a withTenantContext() de @loyalty/db antes de tocar
-// la base de datos. Un route handler que no reciba x-tenant-business-id debe
-// tratarlo como no autenticado (401/403) — nunca asumir un tenant por
-// defecto ni proceder sin él.
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is not set`);
+  }
+  return value;
+}
+
+// Único trabajo de este middleware: mantener viva la sesión de Supabase
+// (refrescar el access token si venció, usando el refresh token) y dejar
+// las cookies actualizadas en la respuesta. NO resuelve tenant ni toma
+// ninguna decisión de autorización aquí — eso pasa en runtime Node (route
+// handlers/server components), vía getVerifiedSession() en
+// lib/supabase/session.ts, que verifica la firma del JWT y lee los claims
+// reales (business_id/role/location_id/is_platform_admin).
+//
+// El placeholder de Fase 0 (header x-business-id reenviado como
+// x-tenant-business-id) se retira por completo: ya no hay ninguna vía de
+// tenant por header, ese era exactamente el TODO que resuelve esta fase.
 //
 // Este middleware corre en el runtime Edge de Next.js, que no soporta el
-// driver `pg` (TCP nativo de Node) — por eso no importa @loyalty/db
-// directamente ni llama a withTenantContext() aquí.
-//
-// Fail-closed fuera de dev: confiar en un header que pone el propio cliente
-// para decidir de qué negocio son los datos es exactamente el escenario que
-// no puede llegar a producción sin autenticación real detrás. Mientras ese
-// TODO siga sin resolverse, el header se ignora fuera de desarrollo — mejor
-// que cualquier ruta de datos futura falle cerrada (sin tenant resuelto) a
-// que confíe en un input del cliente sin verificar.
-export function middleware(request: NextRequest) {
-  const trustClientTenantHeader = process.env.NODE_ENV !== "production";
-  const requestHeaders = new Headers(request.headers);
+// driver `pg` (TCP nativo de Node) — por eso nunca importa @loyalty/db ni
+// llama a withTenantContext() aquí, y por lo que no puede (ni debe) ser el
+// lugar donde se decide autorización.
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({ request });
 
-  if (trustClientTenantHeader) {
-    const businessId = request.headers.get("x-business-id");
-    if (businessId) {
-      requestHeaders.set("x-tenant-business-id", businessId);
-    }
-  } else {
-    requestHeaders.delete("x-tenant-business-id");
-  }
+  const supabase = createServerClient(
+    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          for (const { name, value } of cookiesToSet) {
+            request.cookies.set(name, value);
+          }
+          response = NextResponse.next({ request });
+          for (const { name, value, options } of cookiesToSet) {
+            response.cookies.set(name, value, options);
+          }
+        },
+      },
+    },
+  );
 
-  return NextResponse.next({
-    request: { headers: requestHeaders },
-  });
+  // Dispara el refresh de sesión si el access token venció; las cookies
+  // actualizadas quedan escritas en `response` vía el setAll de arriba.
+  await supabase.auth.getUser();
+
+  return response;
 }

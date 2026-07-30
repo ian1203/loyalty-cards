@@ -1,47 +1,36 @@
 import { NextRequest } from "next/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { middleware } from "./middleware";
 
-describe("middleware — resolución de tenant por header", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
+// El middleware de Fase 1 es deliberadamente delgado: su único trabajo es
+// refrescar la cookie de sesión de Supabase, nunca resolver tenant ni tomar
+// decisiones de autorización (eso vive en getVerifiedSession(), runtime
+// Node). La prueba real de que la sesión se refresca y de que los claims
+// llegan correctos es el test end-to-end (apps/web/tests/e2e-isolation) con
+// login real — aquí solo se confirma que el middleware es un passthrough
+// bien comportado, con y sin cookie de sesión.
+describe("middleware — refresco de sesión de Supabase (passthrough)", () => {
+  it("sin cookie de sesión, no revienta y devuelve una respuesta", async () => {
+    const request = new NextRequest("http://localhost/dashboard");
+    const response = await middleware(request);
+    expect(response).toBeDefined();
+    expect(response.status).toBeLessThan(500);
   });
 
-  it("fuera de producción, reenvía x-business-id como x-tenant-business-id", () => {
-    vi.stubEnv("NODE_ENV", "development");
+  it("con una cookie de sesión inválida/corrupta, no revienta", async () => {
+    const request = new NextRequest("http://localhost/dashboard", {
+      headers: { cookie: "sb-127-auth-token=not-a-real-session" },
+    });
+    const response = await middleware(request);
+    expect(response).toBeDefined();
+    expect(response.status).toBeLessThan(500);
+  });
 
-    const request = new NextRequest("http://localhost/api/example", {
+  it("ya no reenvía ningún header de tenant (el placeholder de Fase 0 se retiró)", async () => {
+    const request = new NextRequest("http://localhost/dashboard", {
       headers: { "x-business-id": "11111111-1111-1111-1111-111111111111" },
     });
-
-    const response = middleware(request);
-
-    expect(response.headers.get("x-middleware-request-x-tenant-business-id")).toBe(
-      "11111111-1111-1111-1111-111111111111",
-    );
-  });
-
-  it("en producción, ignora x-business-id (fail-closed, sin autenticación real todavía)", () => {
-    vi.stubEnv("NODE_ENV", "production");
-
-    const request = new NextRequest("http://localhost/api/example", {
-      headers: { "x-business-id": "11111111-1111-1111-1111-111111111111" },
-    });
-
-    const response = middleware(request);
-
-    expect(response.headers.get("x-middleware-request-x-tenant-business-id")).toBeNull();
-  });
-
-  it("en producción, despoja un x-tenant-business-id inyectado directamente por el cliente", () => {
-    vi.stubEnv("NODE_ENV", "production");
-
-    const request = new NextRequest("http://localhost/api/example", {
-      headers: { "x-tenant-business-id": "22222222-2222-2222-2222-222222222222" },
-    });
-
-    const response = middleware(request);
-
+    const response = await middleware(request);
     expect(response.headers.get("x-middleware-request-x-tenant-business-id")).toBeNull();
   });
 });
