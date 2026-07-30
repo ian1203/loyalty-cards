@@ -50,11 +50,48 @@ sin fuga cross-tenant, staff no edita el programa, alta+dedupe por tenant,
 y cero `@loyalty/db/admin` en rutas de feature (test permanente).
 Revisión `tenant-security-reviewer`: sin hallazgos críticos/altos.
 
+**FASE 3 — Scanner PWA + sellado + canje**: motor de lealtad puro en
+`packages/core/src/loyalty.ts` (evaluateStamp con cooldown de límite
+inclusivo, applyStamp sin tope, evaluateRedemption/applyRedemption —
+**el canje ARRASTRA el sobrante**, no resetea a 0: el balance puede superar
+`stamps_required` legítimamente y resetear descartaría visitas reales ya
+en el ledger de `transactions`). `apps/web/app/scanner/logic.ts` es el
+camino de escritura más sensible: `lookupCustomerByTokenForSession`
+resuelve el token del QR DENTRO del tenant (anti-IDOR + rate limiter en
+memoria anti-enumeración) y `registerStampForSession`/
+`redeemRewardForSession` usan `SELECT ... FOR UPDATE` sobre
+`customer_balances` (serializa por cliente+programa) + replay-check por
+`idempotency_key` bajo el lock + `UNIQUE(business_id, idempotency_key)`
+como backstop — probado con `Promise.all` real contra Postgres, no
+simulado. **Revocación en vivo implementada** (ver Arquitectura): sellar y
+canjear verifican `businesses.status`/`users.is_active`/`employees.is_active`
+frescos contra la DB en cada operación, y la sucursal la selecciona el
+empleado pero el server la valida contra `employees.primary_location_id`
+— el `location_id` del JWT nunca se usa. Alcance de esa revocación:
+deliberadamente solo sellar/canjear (las "operaciones sensibles" de la
+decisión original) — `/rewards` y el alta de cliente no la necesitan.
+PWA: manifest + service worker mínimo, sin cola offline (`ScannerClient`
+bloquea toda operación si `navigator.onLine` es false). Definición de
+"listo" cumplida: `apps/web/tests/fase3-scanner.test.ts` (18 tests, sesión
+real) prueba replay, concurrencia real (misma key y keys distintas),
+cooldown, canje insuficiente, canje concurrente, token cross-tenant,
+negocio suspendido, empleado inactivo, sucursal ajena/no-asignada, y
+auditoría con empleado+sucursal. Revisión `tenant-security-reviewer`
+(dos pasadas): la primera sobre los endpoints, sin hallazgos altos; la
+segunda encontró y se corrigió un **CRÍTICO** — el service worker
+cacheaba `/scanner` (HTML con datos del tenant: sucursales, programa) con
+estrategia cache-first sin invalidar por sesión, filtrando datos de un
+negocio a otro si el mismo dispositivo se reutilizaba. Regla permanente
+resultante: **un service worker de esta app nunca cachea HTML ni ninguna
+respuesta que dependa de sesión — solo assets verdaderamente estáticos y
+globales** (hoy: dos íconos).
+
 ## Fase actual: sin definir todavía
 FASE 2b (candidato principal: `/enroll` público para que el cliente final
-se dé de alta solo) no está acotada. Tampoco Fase 3 (scanner, sellado,
-canje — el motor en packages/core sigue stub). No las empieces sin pedir
-el alcance primero — misma regla que rigió Fase 0 → 1 → 2.
+se dé de alta solo, con su propio QR) no está acotada — sería el paso
+lógico antes de Fase 4 (Wallet, que necesita ese QR ya emitido). No las
+empieces sin pedir el alcance primero — misma regla que rigió Fase 0 → 1 →
+2 → 3.
 
 ## Arquitectura (decidida, no re-litigar)
 - Monorepo, TypeScript-first. Frontend: Next.js. DB: PostgreSQL (Supabase/Neon).
@@ -63,15 +100,17 @@ el alcance primero — misma regla que rigió Fase 0 → 1 → 2.
   (función Postgres), nunca calculados en la app a partir de datos sin
   verificar. Firma asimétrica (ES256, JWKS por proyecto); TTL del access
   token: 3600 s (`jwt_expiry` en supabase/config.toml).
-- Revocación (decidido; se implementa cuando existan las operaciones): la
-  verificación local del JWT NO revoca al instante — un usuario desactivado
-  o un negocio suspendido conserva su token hasta que expira (≤1 h) o se
-  refresca. Para el dashboard de solo-lectura eso es aceptable y nos
-  apoyamos en el TTL corto. Para operaciones sensibles (canje de recompensa,
-  suspensión de negocio, escaneo de sellos — Fase 3) se hará además un check
-  en vivo de `businesses.status`/`users.is_active` contra la DB en el
-  momento de la acción. No implementar ese check antes de que existan esas
-  operaciones.
+- Revocación: la verificación local del JWT NO revoca al instante — un
+  usuario desactivado o un negocio suspendido conserva su token hasta que
+  expira (≤1 h) o se refresca. Para el dashboard/config de solo-lectura o
+  edición no sensible (`/dashboard`, `/rewards`, alta de cliente) eso es
+  aceptable y nos apoyamos en el TTL corto. Para las operaciones sensibles
+  —sellar y canjear, `apps/web/app/scanner/logic.ts`— **implementado desde
+  Fase 3**: check en vivo de `businesses.status`/`users.is_active`/
+  `employees.is_active` contra la DB en el momento de cada operación,
+  dentro de la misma transacción. Al extender esta lista de operaciones
+  sensibles en fases futuras, replicar ese patrón (`requireOperationContext`
+  en `scanner/logic.ts` es la referencia), no inventar uno nuevo.
 - Motor de lealtad como paquete aislado y testeable (packages/core).
 - Modelo de lealtad: SELLOS por visita (no puntos ni saldo monetario).
   Programa define stamps_required; cada visita = +1 sello; al llegar al total
@@ -91,6 +130,10 @@ el alcance primero — misma regla que rigió Fase 0 → 1 → 2.
   (evita doble escaneo y sellos repetidos al mismo cliente).
 - Todo cambio sensible se registra en audit_logs (quién, cuándo, sucursal).
 - Las migraciones son la fuente de verdad del esquema.
+- Ningún service worker de esta app cachea HTML ni ninguna respuesta que
+  dependa de sesión/tenant — solo assets estáticos y globales (ver el
+  hallazgo crítico corregido en Fase 3: cachear una página con datos de
+  negocio filtra ese negocio a quien reutilice el dispositivo después).
 
 ## Convenciones
 - Pregunta antes de instalar dependencias nuevas.
