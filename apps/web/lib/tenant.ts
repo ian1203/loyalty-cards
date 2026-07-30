@@ -83,12 +83,17 @@ export type AuditEntry = {
   entityType: string;
   entityId: string;
   metadata?: Record<string, unknown>;
+  // Fase 3+: el scanner registra la fila de employees del operador y la
+  // sucursal SELECCIONADA Y VALIDADA contra la DB — nunca el location_id
+  // del JWT, que puede estar desactualizado (staleness documentada en
+  // CLAUDE.md). Sin override, se usa el claim (comportamiento de Fase 2).
+  actorEmployeeId?: string;
+  locationId?: string;
 };
 
 // Registra el cambio en audit_logs DENTRO de la misma transacción que lo
 // hizo (si el cambio se revierte, el log también). actor_user_id = fila de
-// users del actor; location_id viene del claim de la sesión (solo staff con
-// sucursal asignada lo tiene).
+// users del actor.
 export async function writeAuditLog(
   tx: TenantTransaction,
   session: TenantSession,
@@ -98,7 +103,8 @@ export async function writeAuditLog(
   await tx.insert(auditLogs).values({
     businessId: session.businessId,
     actorUserId,
-    locationId: session.locationId,
+    actorEmployeeId: entry.actorEmployeeId ?? null,
+    locationId: entry.locationId ?? session.locationId,
     action: entry.action,
     entityType: entry.entityType,
     entityId: entry.entityId,
