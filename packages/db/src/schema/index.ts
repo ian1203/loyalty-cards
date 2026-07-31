@@ -13,4 +13,5 @@ export * from "./rewards";
 export * from "./redemptions";
 export * from "./auditLogs";
 export * from "./walletPasses";
+export * from "./deviceRegistrations";
 export * from "./campaigns";

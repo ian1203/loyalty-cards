@@ -9,6 +9,7 @@ import {
   campaigns,
   customerBalances,
   customers,
+  deviceRegistrations,
   employees,
   locations,
   loyaltyPrograms,
@@ -51,6 +52,7 @@ type Fixture = {
   redemption: typeof redemptions.$inferSelect;
   auditLog: typeof auditLogs.$inferSelect;
   walletPass: typeof walletPasses.$inferSelect;
+  deviceRegistration: typeof deviceRegistrations.$inferSelect;
   campaign: typeof campaigns.$inferSelect;
 };
 
@@ -131,7 +133,21 @@ beforeAll(async () => {
     .returning();
   const [walletPass] = await adminDb
     .insert(walletPasses)
-    .values({ businessId, customerId: customer.id, platform: "apple" })
+    .values({
+      businessId,
+      customerId: customer.id,
+      platform: "apple",
+      authenticationToken: `wp-auth-${suffix}`,
+    })
+    .returning();
+  const [deviceRegistration] = await adminDb
+    .insert(deviceRegistrations)
+    .values({
+      businessId,
+      walletPassId: walletPass.id,
+      deviceLibraryIdentifier: `dev-${suffix}`,
+      pushToken: `push-${suffix}`,
+    })
     .returning();
   const [campaign] = await adminDb.insert(campaigns).values({ businessId, name: `Campaign ${suffix}` }).returning();
 
@@ -149,6 +165,7 @@ beforeAll(async () => {
     redemption,
     auditLog,
     walletPass,
+    deviceRegistration,
     campaign,
   };
 });
@@ -162,6 +179,7 @@ afterAll(async () => {
   await adminDb.delete(rewardRules).where(eq(rewardRules.businessId, owner.id));
   await adminDb.delete(loyaltyPrograms).where(eq(loyaltyPrograms.businessId, owner.id));
   await adminDb.delete(auditLogs).where(eq(auditLogs.businessId, owner.id));
+  await adminDb.delete(deviceRegistrations).where(eq(deviceRegistrations.businessId, owner.id));
   await adminDb.delete(walletPasses).where(eq(walletPasses.businessId, owner.id));
   await adminDb.delete(campaigns).where(eq(campaigns.businessId, owner.id));
   await adminDb.delete(employees).where(eq(employees.businessId, owner.id));
@@ -293,7 +311,23 @@ function specs(): TenantTableSpec[] {
       name: "wallet_passes",
       table: walletPasses as unknown as TenantTableSpec["table"],
       ownRowId: (f) => f.walletPass.id,
-      insertValues: (f, businessId) => ({ businessId, customerId: f.customer.id, platform: "apple" }),
+      insertValues: (f, businessId) => ({
+        businessId,
+        customerId: f.customer.id,
+        platform: "google",
+        authenticationToken: `insert-${randomUUID()}`,
+      }),
+    },
+    {
+      name: "device_registrations",
+      table: deviceRegistrations as unknown as TenantTableSpec["table"],
+      ownRowId: (f) => f.deviceRegistration.id,
+      insertValues: (f, businessId) => ({
+        businessId,
+        walletPassId: f.walletPass.id,
+        deviceLibraryIdentifier: `insert-${randomUUID()}`,
+        pushToken: `insert-${randomUUID()}`,
+      }),
     },
     {
       name: "campaigns",
