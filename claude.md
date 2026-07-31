@@ -86,12 +86,108 @@ resultante: **un service worker de esta app nunca cachea HTML ni ninguna
 respuesta que dependa de sesión — solo assets verdaderamente estáticos y
 globales** (hoy: dos íconos).
 
+**FASE 4 — Integración Wallet (Apple + Google), código completo**: toda
+dependencia de proveedor (firma de `.pkpass`, envío APNs, firma del JWT de
+Google) vive detrás de una interfaz con dos impls — REAL y FAKE — resueltas
+por `resolveWalletConfig()` (`packages/wallet/src/config.ts`), un guard
+todo-o-nada por proveedor: si faltan una o más de las variables
+`WALLET_APPLE_*`/`WALLET_GOOGLE_*`, cae a la fake y lo loguea (INFO si no
+hay ninguna — el estado esperado en dev/CI; WARN si hay una config
+parcial). Meter las credenciales reales después no cambia ninguna línea de
+lógica, solo activa la rama real — ver `docs/WALLET-SETUP.md` para el
+checklist exacto de qué conseguir y en qué variable va. `packages/wallet`
+(paquete aislado, sin Next.js/DB) trae el firmador PKCS#7 real
+(`node-forge`, nunca `openssl` en producción — `openssl` solo se usa como
+utilidad de TEST para generar un certificado autofirmado que ejercita el
+pipeline de firma real byte a byte), el cliente APNs real (JWT ES256 con
+llave `.p8`, payload vacío — Apple no manda datos por push, solo le dice al
+dispositivo que pida el pase de nuevo), y el cliente de Google Wallet real
+(JWT de cuenta de servicio vía `jose`, insert-o-patch contra la Wallet
+REST API, y el JWT firmado del link "Add to Google Wallet" — con
+`setExpirationTime("15m")`, porque ese link embebe el `wallet_token` del
+cliente en claro dentro del JWT firmado). El fake de Google reusa el 100%
+del código de firma/REST real — solo el transporte (`fetch`) está
+simulado, con una cuenta de servicio de prueba generada en memoria
+(`crypto.generateKeyPairSync`, sin `openssl`). Ambos fakes (Apple/Google)
+tienen una cota dura de 200 llamadas grabadas por proceso — la fake es el
+fallback por defecto también en un despliegue real sin credenciales
+todavía, así que un array sin cota sería una fuga de memoria de datos
+sensibles (`wallet_token`, `pushToken`) en un proceso long-running.
+
+Modelo (ver skill `wallet-integration`): un issuer de plataforma, una
+plantilla/clase por negocio, un pase individual por cliente — mismo
+`wallet_token` opaco que ya resuelve el scanner, nunca un token nuevo. El
+web service PÚBLICO de Apple PassKit (`apps/web/app/api/wallet/apple/`,
+protocolo fijo de 5 endpoints) no tiene sesión de Supabase: la identidad es
+100% el `authenticationToken` embebido en cada pase, verificado en
+`lib/wallet/passAuth.ts` — el SEGUNDO (y único otro) punto sancionado para
+producir un `VerifiedBusinessId`, con `adminDb` acotado a una sola fila
+(match por id + `crypto.timingSafeEqual` sobre el token) antes de pasar a
+`withTenantContext`/RLS para todo lo demás. `listUpdatedSerialsForDevice`
+es la única excepción documentada adicional a `adminDb` fuera de rutas
+confinadas: el protocolo de Apple no manda `authenticationToken` en ese
+endpoint (un dispositivo puede tener pases de varios negocios), así que se
+resuelve con una query acotada a solo `serialNumber`+`updatedAt` (ningún
+dato de negocio/cliente). El guard permanente de "cero `adminDb` fuera de
+`/admin`" (Fase 2) y el de casts a `VerifiedBusinessId` se extendieron para
+cubrir `lib/` (antes solo `app/`) con un allowlist explícito de estos dos
+archivos.
+
+La entrega autenticada (`/customers/{id}/wallet/apple`, sesión de tenant
+normal + `findInTenant`) y el botón de Google
+(`GoogleWalletButton`, Server Component que revalida su propio tenant, no
+confía en el prop del padre) comparten `lib/wallet/loyaltySnapshot.ts`
+(una sola fuente de negocio+cliente+programa+balance+recompensa, contenido
+mínimo — nunca apellido/teléfono/email, igual que Apple) y usan
+`ensureWalletPass()` para crear la fila de `wallet_passes` la primera vez
+que se pide un pase (antes de Fase 4, nada en producción creaba esa fila).
+El hook post-transacción (`lib/wallet/notify.ts`,
+`notifyWalletOfTransaction`) corre DESPUÉS de que la transacción de
+sello/canje ya confirmó (nunca en un replay, nunca si el commit no pasó) —
+best-effort real: Apple recibe un push vacío por dispositivo registrado
+(reintentos con backoff, cada dispositivo aislado en su propio `.catch()`);
+Google recibe un `upsertLoyaltyObject` (PATCH) solo si el cliente ya tiene
+un pase de esa plataforma. Se invoca envuelto en `scheduleAfterResponse()`
+(`after()` de `next/server`, con fallback a fire-and-forget fuera de una
+request real — necesario porque toda la suite de tests llama `logic.ts`
+directo, sin request real, mismo patrón que ya resolvió Fase 1 con
+`cookies()`). Definición de "listo" cumplida:
+`apps/web/tests/wallet-webservice.test.ts` (tenant-scoped por
+authenticationToken, token de B contra pase de A → 401 uniforme, idempotencia
+de registro, `passesUpdatedSince` respetado), `wallet-notify.test.ts`
+(un sello real encola exactamente un push/PATCH, replay no dispara nada,
+un push que falla no revierte el balance ya confirmado) y
+`wallet-delivery.test.ts` (`.pkpass` real no vacío, IDOR en la descarga,
+JWT de Google con classId/objectId/origin correctos) — más los tests
+propios de `packages/wallet` (config, firma real con cert autofirmado,
+JWT de APNs, `pass.json`/Loyalty Class-Object sin PII de más, bundle
+`.pkpass`). Revisión `tenant-security-reviewer` (dos pasadas, cubriendo
+código distinto cada vez): la primera sobre esquema/adaptadores/web
+service (3 MEDIUM + 6 LOW, todos corregidos o documentados); la segunda
+sobre el hook y la entrega (1 MEDIUM + 5 LOW) — el MEDIUM real: el pase de
+Google nunca quedaba registrado en `wallet_passes`, así que
+`notifyWalletOfTransaction` nunca encontraba a quién actualizarle tras un
+sello (corregido: `googleSaveLink.ts` ahora llama `ensureWalletPass` antes
+de armar el link). Cero hallazgos críticos/altos en ambas pasadas.
+
+**Residual de Fase 4** (no es código, son trámites externos — ver
+`docs/WALLET-SETUP.md` para el detalle completo): Apple Developer Program
+(de pago, ~$99/año, Pass Type ID + certificado de firma + llave APNs
+`.p8`), cuenta de servicio de Google Cloud + Wallet API + issuer ID
+(gratis, alcanza para modo demo `[TEST ONLY]`), y aprobación de
+publicación de Google (gratis, con revisión) para producción real sin esa
+marca. Sin esas credenciales, todo corre con las impls fake — válido
+estructuralmente, pero un iPhone real rechaza el certificado no confiable
+y Google Wallet mantiene la marca de prueba. Verificación en dispositivo
+real (instalar, sellar y ver la actualización en vivo) queda pendiente
+hasta que existan esas credenciales — ver la sección "Verificación
+pendiente" de `docs/WALLET-SETUP.md`.
+
 ## Fase actual: sin definir todavía
-FASE 2b (candidato principal: `/enroll` público para que el cliente final
-se dé de alta solo, con su propio QR) no está acotada — sería el paso
-lógico antes de Fase 4 (Wallet, que necesita ese QR ya emitido). No las
-empieces sin pedir el alcance primero — misma regla que rigió Fase 0 → 1 →
-2 → 3.
+FASE 2b (`/enroll` público para que el cliente final se dé de alta solo,
+con su propio QR) y reportes/analítica son los candidatos — ninguna de las
+dos está acotada. No las empieces sin pedir el alcance primero — misma
+regla que rigió Fase 0 → 1 → 2 → 3 → 4.
 
 ## Arquitectura (decidida, no re-litigar)
 - Monorepo, TypeScript-first. Frontend: Next.js. DB: PostgreSQL (Supabase/Neon).
