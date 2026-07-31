@@ -9,6 +9,10 @@ export default defineConfig({
     env: {
       DATABASE_URL: process.env.TEST_DATABASE_URL ?? "",
       APP_DATABASE_URL: process.env.TEST_APP_DATABASE_URL ?? "",
+      // Ver el comentario en src/client.ts: acota conexiones físicas por
+      // archivo de test para no exceder max_connections de Postgres
+      // cuando varios archivos corren en paralelo.
+      PG_POOL_MAX: "4",
     },
   },
 });
