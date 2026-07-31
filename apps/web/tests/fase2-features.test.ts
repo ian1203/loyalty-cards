@@ -349,10 +349,39 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
   });
 
   describe("cero adminDb en rutas de feature", () => {
-    it("ningún archivo bajo app/ importa @loyalty/db/admin salvo app/admin/", () => {
-      const appDir = join(__dirname, "..", "app");
-      const offenders: string[] = [];
+    // Único árbol exento por completo: app/admin/ (alta de negocios — no
+    // hay tenant todavía). Excepciones puntuales, cada una UN solo
+    // archivo con su propio comentario extenso in situ:
+    // - app/api/wallet/apple/logic.ts: el web service PÚBLICO de Apple
+    //   PassKit (Fase 4) no tiene sesión de Supabase — su endpoint
+    //   "listar seriales actualizados" tampoco recibe un
+    //   authenticationToken (lo define el protocolo de Apple, no
+    //   nosotros), así que no hay un solo negocio al que fijar contexto
+    //   de antemano. Query MUY acotada: solo wallet_passes.id + updated_at,
+    //   nunca datos de negocio. Ver el comentario en
+    //   listUpdatedSerialsForDevice.
+    // - lib/wallet/passAuth.ts: el segundo (y único otro) punto sancionado
+    //   para producir un VerifiedBusinessId, a partir de un
+    //   authenticationToken de PassKit en vez de una sesión — adminDb
+    //   toca EXCLUSIVAMENTE esa única fila de auth, nunca datos de
+    //   negocio. Ver verifyBusinessIdForPassToken.
+    const ALLOWED_ADMIN_DB_FILES = new Set([
+      "app/api/wallet/apple/logic.ts",
+      "lib/wallet/passAuth.ts",
+    ]);
 
+    // Mismo espíritu para el otro invariante de seguridad de esta fase: el
+    // cast `as VerifiedBusinessId` (packages/db/src/tenantContext.ts) solo
+    // debería existir en los DOS puntos sancionados — sesión de Supabase
+    // (lib/supabase/session.ts) y token de PassKit (lib/wallet/passAuth.ts).
+    // Cualquier otro sitio es exactamente lo que un review de seguridad
+    // debe auditar.
+    const ALLOWED_VERIFIED_BUSINESS_ID_CAST_FILES = new Set([
+      "lib/supabase/session.ts",
+      "lib/wallet/passAuth.ts",
+    ]);
+
+    function walkTsFiles(rootDir: string, onFile: (relPath: string, content: string) => void) {
       function walk(dir: string) {
         for (const entry of readdirSync(dir)) {
           const fullPath = join(dir, entry);
@@ -361,17 +390,43 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
             continue;
           }
           if (!/\.(ts|tsx)$/.test(entry)) continue;
-          const content = readFileSync(fullPath, "utf8");
-          if (content.includes("@loyalty/db/admin")) {
-            const rel = relative(appDir, fullPath);
-            if (!rel.startsWith("admin/")) {
-              offenders.push(rel);
-            }
-          }
+          if (fullPath.endsWith(".test.ts")) continue;
+          onFile(relative(rootDir, fullPath), readFileSync(fullPath, "utf8"));
         }
       }
+      walk(rootDir);
+    }
 
-      walk(appDir);
+    it("ningún archivo bajo app/ o lib/ importa @loyalty/db/admin salvo app/admin/ y las excepciones documentadas", () => {
+      const webDir = join(__dirname, "..");
+      const offenders: string[] = [];
+
+      for (const subdir of ["app", "lib"]) {
+        walkTsFiles(join(webDir, subdir), (relPath, content) => {
+          if (!content.includes("@loyalty/db/admin")) return;
+          const rel = `${subdir}/${relPath}`;
+          if (rel.startsWith("app/admin/")) return;
+          if (ALLOWED_ADMIN_DB_FILES.has(rel)) return;
+          offenders.push(rel);
+        });
+      }
+
+      expect(offenders).toEqual([]);
+    });
+
+    it("ningún archivo castea 'as VerifiedBusinessId' salvo los dos puntos sancionados", () => {
+      const webDir = join(__dirname, "..");
+      const offenders: string[] = [];
+
+      for (const subdir of ["app", "lib"]) {
+        walkTsFiles(join(webDir, subdir), (relPath, content) => {
+          if (!content.includes("as VerifiedBusinessId")) return;
+          const rel = `${subdir}/${relPath}`;
+          if (ALLOWED_VERIFIED_BUSINESS_ID_CAST_FILES.has(rel)) return;
+          offenders.push(rel);
+        });
+      }
+
       expect(offenders).toEqual([]);
     });
   });
