@@ -38,6 +38,8 @@ import {
   writeAuditLog,
   type TenantSession,
 } from "../../lib/tenant";
+import { notifyWalletOfTransaction } from "../../lib/wallet/notify";
+import { scheduleAfterResponse } from "../../lib/wallet/scheduleAfterResponse";
 
 // ---------------------------------------------------------------------------
 // Rate limiting del lookup (anti-enumeración de tokens)
@@ -454,7 +456,7 @@ export async function registerStampForSession(
   }
 
   try {
-    return await withTenantContext(session.businessId, async (tx) => {
+    const result = await withTenantContext(session.businessId, async (tx) => {
       const ctx = await requireOperationContext(tx, session, input.locationId);
 
       const customer = await findInTenant(tx, session, customers, input.customerId);
@@ -591,6 +593,17 @@ export async function registerStampForSession(
       const view = await buildCustomerView(tx, session, customer, program);
       return { ok: true as const, view, message: "Sello registrado." };
     });
+
+    // Hook post-transacción (paso g de Fase 4): fuera de withTenantContext
+    // — la transacción YA confirmó, así que un push que falle nunca puede
+    // revertir el sello. Nunca en un replay (no hubo cambio real que
+    // notificar) ni en un rechazo de regla de negocio. after() (next/server)
+    // garantiza que el proceso no mate el push antes de que termine, a
+    // diferencia de un fire-and-forget suelto.
+    if (result.ok && !result.replayed) {
+      scheduleAfterResponse(() => notifyWalletOfTransaction(session.businessId, input.customerId));
+    }
+    return result;
   } catch (error) {
     if (error instanceof OperationRejectedError) {
       return {
@@ -633,7 +646,7 @@ export async function redeemRewardForSession(
   }
 
   try {
-    return await withTenantContext(session.businessId, async (tx) => {
+    const result = await withTenantContext(session.businessId, async (tx) => {
       const ctx = await requireOperationContext(tx, session, input.locationId);
 
       const customer = await findInTenant(tx, session, customers, input.customerId);
@@ -780,6 +793,13 @@ export async function redeemRewardForSession(
         message: `Canjeado: ${rule.name}.`,
       };
     });
+
+    // Mismo hook que registerStampForSession (paso g de Fase 4) — fuera de
+    // la transacción, solo en un canje genuino (nunca en un replay).
+    if (result.ok && !result.replayed) {
+      scheduleAfterResponse(() => notifyWalletOfTransaction(session.businessId, input.customerId));
+    }
+    return result;
   } catch (error) {
     if (error instanceof ReplayDetectedError) {
       // La transacción se revirtió (incluida la fila de rewards); el estado

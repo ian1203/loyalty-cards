@@ -14,6 +14,7 @@ import {
 import { StampProgressBar } from "../../../components/StampProgressBar";
 import { requireTenantSession } from "../../../lib/supabase/session";
 import { findInTenant } from "../../../lib/tenant";
+import { GoogleWalletButton } from "./wallet/GoogleWalletButton";
 
 // Detalle de cliente. El [id] es input del cliente: findInTenant lo valida
 // como UUID y lo combina SIEMPRE con el business_id de la sesión — un id de
@@ -169,6 +170,26 @@ export default async function CustomerDetailPage({
               />
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Wallet</CardTitle>
+          <CardDescription>
+            Integración en construcción (Fase 4): pases sin credenciales
+            reales todavía, ver docs/WALLET-SETUP.md. Sirve para probar el
+            flujo completo antes de tener cuenta de Apple/Google.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <a
+            href={`/customers/${customer.id}/wallet/apple`}
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent"
+          >
+            Descargar pase de Apple (prueba)
+          </a>
+          <GoogleWalletButton customerId={customer.id} />
         </CardContent>
       </Card>
     </main>
