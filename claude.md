@@ -183,6 +183,42 @@ real (instalar, sellar y ver la actualización en vivo) queda pendiente
 hasta que existan esas credenciales — ver la sección "Verificación
 pendiente" de `docs/WALLET-SETUP.md`.
 
+## Superficie pública de marketing (paralela a las fases, no numerada)
+
+Landing pública en `apps/web/app/(marketing)/` (route group — no cambia
+las URLs): `/` (antes un stub de Fase 0, ahora la landing), `/precios`,
+`/privacidad`. Vende la plataforma bajo el nombre **IGA Analytics**; el
+producto en sí sigue siendo el mismo (`/dashboard`, `/scanner`, etc., sin
+tocar). Trabajo deliberadamente separado de las fases numeradas: sin
+datos de tenant, sin sesión, sin RLS que aplique — el copy sale de
+`wallet-bi-plans.md` (raíz del repo) traducido a
+`apps/web/lib/marketing/content.ts` (módulo tipado, nunca strings sueltos
+en JSX). Sin registro self-service (onboarding sigue siendo manual/demo).
+
+**Regla de caché — el OPUESTO exacto de la regla de Fase 3**: el service
+worker nunca cachea HTML de producto porque puede llevar datos de tenant
+(ver Reglas NO negociables). Las páginas de `(marketing)` son al revés:
+deben ser estáticas, cacheables e indexables por diseño — nunca llaman
+`cookies()`/`headers()`/`getVerifiedSession()`/`requireTenantSession()`,
+que es justo lo que las deja renderizar estáticas por defecto en Next
+(confirmado con `next build`: `/`, `/precios`, `/privacidad` salen ○
+Static, el resto del producto sale ƒ Dynamic). No hay conflicto con el
+service worker: su allowlist ya son solo los dos íconos, así que nunca
+intercepta estas rutas nuevas.
+
+El CTA de demo (WhatsApp + formulario) escribe en `marketing_leads`
+(`packages/db/src/schema/marketingLeads.ts`), una tabla deliberadamente
+FUERA del modelo tenant: sin `business_id`, sin RLS (un lead se captura
+ANTES de que exista ningún negocio). Escrita por `app_user` con GRANT
+`INSERT` únicamente (nunca `adminDb` — regla no negociable de "el rol de
+servicio nunca sirve una request normal" — ver `packages/db/src/marketing.ts`,
+superficie separada del mismo modo que `admin.ts`). `/sitemap.xml` y
+`/robots.txt` (App Router) listan solo estas tres rutas; todo lo demás
+(`/dashboard`, `/admin`, `/scanner`, `/customers`, `/rewards`, `/api`)
+está explícitamente en `disallow`. Aviso de privacidad (`/privacidad`)
+es un BORRADOR estructurado para LFPDPPP, marcado como tal en un
+comentario de código — pendiente de revisión legal antes de publicar.
+
 ## Fase actual: sin definir todavía
 FASE 2b (`/enroll` público para que el cliente final se dé de alta solo,
 con su propio QR) y reportes/analítica son los candidatos — ninguna de las
@@ -230,6 +266,10 @@ regla que rigió Fase 0 → 1 → 2 → 3 → 4.
   dependa de sesión/tenant — solo assets estáticos y globales (ver el
   hallazgo crítico corregido en Fase 3: cachear una página con datos de
   negocio filtra ese negocio a quien reutilice el dispositivo después).
+  Excepción, no contradicción: las páginas públicas de marketing
+  (`apps/web/app/(marketing)/`) no tienen datos de tenant, así que para
+  ellas la regla es la opuesta a propósito — deben ser estáticas y
+  cacheables (ver la sección "Superficie pública de marketing").
 
 ## Convenciones
 - Pregunta antes de instalar dependencias nuevas.
