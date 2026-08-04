@@ -38,8 +38,8 @@ export default function PrivacyPolicyPage() {
 
       <Section title="1. Responsable del tratamiento">
         <p>
-          [Razón social pendiente de completar], con domicilio en {CONTACT.location} ("
-          {BRAND.name}", "nosotros"), es responsable del tratamiento de los datos personales que recaba
+          [Razón social pendiente de completar], con domicilio en {CONTACT.location} (&quot;
+          {BRAND.name}&quot;, &quot;nosotros&quot;), es responsable del tratamiento de los datos personales que recaba
           directamente de: (a) representantes y personal de los negocios que contratan el servicio, y
           (b) personas que solicitan información o una demostración a través de este sitio.
         </p>
