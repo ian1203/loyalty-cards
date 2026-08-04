@@ -13,13 +13,17 @@
     "./admin": {
       "types": "./src/admin.ts",
       "default": "./src/admin.ts"
+    },
+    "./marketing": {
+      "types": "./src/marketing.ts",
+      "default": "./src/marketing.ts"
     }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "generate": "drizzle-kit generate",
-    "migrate": "node --env-file=../../.env --experimental-strip-types src/migrate.ts"
+    "migrate": "node --env-file-if-exists=../../.env --experimental-strip-types src/migrate.ts"
   },
   "dependencies": {
     "@loyalty/shared": "workspace:*",

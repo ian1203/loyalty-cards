@@ -26,19 +26,23 @@ jobs:
 
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test
+      APP_DATABASE_URL: postgres://app_user:app_user@localhost:5432/loyalty_test
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test
       TEST_APP_DATABASE_URL: postgres://app_user:app_user@localhost:5432/loyalty_test
 
     steps:
       - uses: actions/checkout@v4
 
+      # Tiene que ir ANTES de setup-node: cache: pnpm de ese paso invoca el
+      # binario `pnpm` para resolver rutas de caché, y sin corepack habilitado
+      # todavía no existe en el PATH del runner.
+      - name: Enable pnpm via Corepack
+        run: corepack enable
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-
-      - name: Enable pnpm via Corepack
-        run: corepack enable
 
       - name: Create test database
         run: psql "postgres://postgres:postgres@localhost:5432/postgres" -c "CREATE DATABASE loyalty_test;"
