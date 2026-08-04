@@ -3,6 +3,10 @@ import { downloadApplePassForSession } from "./logic";
 
 type Params = { id: string };
 
+// Ver el comentario en app/api/health/route.ts: toda ruta de esta app
+// corre en Node explícito, nunca Edge (Edge no soporta `pg`).
+export const runtime = "nodejs";
+
 // GET /customers/{id}/wallet/apple — descarga autenticada (sesión de
 // tenant normal), a diferencia de app/api/wallet/apple/v1/passes/... (el
 // web service PÚBLICO de Apple, sin sesión). Cache-Control: no-store
