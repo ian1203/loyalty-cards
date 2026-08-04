@@ -31,6 +31,12 @@ export default function SetPasswordPage() {
     const refreshToken = hashParams.get("refresh_token");
 
     if (!accessToken || !refreshToken) {
+      // Validación de un fragmento de URL solo disponible client-side (no se
+      // puede mover a un lazy initializer sin romper SSR); es un guard
+      // síncrono antes del flujo async de abajo, no estado derivable en
+      // render. Tocar este flujo de auth (invitación de dueño) está fuera de
+      // alcance de esta tarea.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError("El link de invitación no es válido o ya expiró.");
       return;
     }

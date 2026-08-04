@@ -51,6 +51,9 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      - name: Lint
+        run: pnpm --filter @loyalty/web lint
+
       - name: Run migrations
         run: pnpm --filter @loyalty/db migrate
 

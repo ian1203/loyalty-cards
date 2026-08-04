@@ -1,5 +1,9 @@
 import { registerDeviceForPass, unregisterDeviceForPass } from "../../../../../../logic";
 
+// Ver el comentario en app/api/health/route.ts: toda ruta de esta app
+// corre en Node explícito, nunca Edge (Edge no soporta `pg`).
+export const runtime = "nodejs";
+
 type Params = {
   deviceLibraryIdentifier: string;
   passTypeIdentifier: string;

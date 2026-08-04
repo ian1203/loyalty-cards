@@ -220,7 +220,7 @@ export async function getLatestPass(input: {
 // nadie pueda inyectar líneas de log falsas ni inflar el volumen con
 // bytes de control.
 function sanitizeForLog(value: string): string {
-  // eslint-disable-next-line no-control-regex -- a propósito: se borran.
+  // Caracteres de control a propósito: se borran, no se interpretan.
   return value.replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 2000);
 }
 

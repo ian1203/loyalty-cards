@@ -109,7 +109,7 @@ export default async function CustomerDetailPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* eslint-disable-next-line react/no-danger -- SVG generado server-side por la librería `qrcode`, no HTML de usuario */}
+          {/* SVG generado server-side por la librería `qrcode`, no HTML de usuario */}
           <div
             className="w-fit rounded-md bg-white p-3"
             dangerouslySetInnerHTML={{ __html: qrSvg }}
