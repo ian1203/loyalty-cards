@@ -13,6 +13,10 @@
     "./admin": {
       "types": "./src/admin.ts",
       "default": "./src/admin.ts"
+    },
+    "./marketing": {
+      "types": "./src/marketing.ts",
+      "default": "./src/marketing.ts"
     }
   },
   "scripts": {
