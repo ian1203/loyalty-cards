@@ -24,7 +24,7 @@ export function CreateBusinessForm() {
       {state.error ? <p role="alert">{state.error}</p> : null}
       {state.success ? (
         <p>
-          Negocio "{state.success.businessName}" creado. Se envió invitación a{" "}
+          Negocio &quot;{state.success.businessName}&quot; creado. Se envió invitación a{" "}
           {state.success.ownerEmail}.
         </p>
       ) : null}
