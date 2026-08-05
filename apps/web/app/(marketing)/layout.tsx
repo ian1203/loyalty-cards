@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { Logo } from "../../components/Logo";
 import { BRAND, CONTACT, SEO } from "../../lib/marketing/content";
 
 // Layout de la superficie PÚBLICA de marketing — separado a propósito del
@@ -35,8 +36,8 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen flex-col">
       <header className="border-b bg-background">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <Link href="/" className="whitespace-nowrap text-lg font-semibold tracking-tight">
-            {BRAND.name}
+          <Link href="/" className="whitespace-nowrap">
+            <Logo />
           </Link>
           <nav className="flex items-center gap-4 text-sm sm:gap-6">
             {NAV_LINKS.map((link) => (

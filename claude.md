@@ -187,7 +187,7 @@ pendiente" de `docs/WALLET-SETUP.md`.
 
 Landing pública en `apps/web/app/(marketing)/` (route group — no cambia
 las URLs): `/` (antes un stub de Fase 0, ahora la landing), `/precios`,
-`/privacidad`. Vende la plataforma bajo el nombre **IGA Analytics**; el
+`/privacidad`. Vende la plataforma bajo el nombre **Pragmia**; el
 producto en sí sigue siendo el mismo (`/dashboard`, `/scanner`, etc., sin
 tocar). Trabajo deliberadamente separado de las fases numeradas: sin
 datos de tenant, sin sesión, sin RLS que aplique — el copy sale de

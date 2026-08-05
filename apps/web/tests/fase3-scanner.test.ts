@@ -17,8 +17,8 @@ import {
   users,
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
-import { createCustomerForSession } from "../app/customers/logic";
-import { saveProgramForSession, saveRewardRuleForSession } from "../app/rewards/logic";
+import { createCustomerForSession } from "../app/(product)/customers/logic";
+import { saveProgramForSession, saveRewardRuleForSession } from "../app/(product)/rewards/logic";
 import {
   checkLookupRateLimit,
   lookupCustomerByTokenForSession,
@@ -26,7 +26,7 @@ import {
   redeemRewardForSession,
   registerStampForSession,
   resetLookupRateLimiter,
-} from "../app/scanner/logic";
+} from "../app/(product)/scanner/logic";
 import { requireTenantSession } from "../lib/supabase/session";
 import type { TenantSession } from "../lib/tenant";
 import {

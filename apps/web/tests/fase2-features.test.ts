@@ -15,12 +15,12 @@ import {
   withTenantContext,
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
-import { createCustomerForSession, searchCustomers } from "../app/customers/logic";
+import { createCustomerForSession, searchCustomers } from "../app/(product)/customers/logic";
 import {
   saveProgramForSession,
   saveRewardRuleForSession,
   toggleRewardRuleForSession,
-} from "../app/rewards/logic";
+} from "../app/(product)/rewards/logic";
 import { requireTenantSession } from "../lib/supabase/session";
 import { findInTenant, type TenantSession } from "../lib/tenant";
 import {

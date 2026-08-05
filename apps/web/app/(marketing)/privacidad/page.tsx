@@ -4,7 +4,7 @@ import { BRAND, CONTACT } from "../../../lib/marketing/content";
 // BORRADOR — pendiente de revisión legal antes de publicar. Estructurado
 // para alinear con la LFPDPPP (Ley Federal de Protección de Datos
 // Personales en Posesión de los Particulares): distingue el rol de
-// IGA Analytics como RESPONSABLE de los datos de sus propios usuarios
+// Pragmia como RESPONSABLE de los datos de sus propios usuarios
 // (dueños/staff de negocio, leads de la demo) frente a su rol de
 // ENCARGADO de los datos de los clientes finales de cada negocio (el
 // negocio tenant es el responsable de esos datos, no la plataforma) — ver

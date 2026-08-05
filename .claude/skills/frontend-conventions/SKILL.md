@@ -1,6 +1,6 @@
 ---
 name: frontend-conventions
-description: Convenciones de UI y reglas de acceso a datos para toda pantalla de feature en apps/web (dashboard, rewards, customers, scanner, etc.). Úsala SIEMPRE antes de escribir o modificar páginas, componentes o server actions de features — define los patrones de Next.js App Router/shadcn/Tailwind, las reglas NO negociables de datos tenant-scoped, y las convenciones de PWA/scanner (cámara, lector USB, instalabilidad).
+description: Convenciones de UI y reglas de acceso a datos para toda pantalla de feature en apps/web (dashboard, rewards, customers, scanner, etc.). Úsala SIEMPRE antes de escribir o modificar páginas, componentes o server actions de features — define los patrones de Next.js App Router/shadcn/Tailwind, las reglas NO negociables de datos tenant-scoped, las convenciones de PWA/scanner (cámara, lector USB, instalabilidad), y el sistema de diseño (tokens, componentes compartidos, gráficas) del rediseño de producto.
 ---
 
 # Convenciones de frontend — apps/web
@@ -171,6 +171,113 @@ export async function mutarAlgo(_prev: State, formData: FormData): Promise<State
   cliente POR ACCIÓN (no por sesión); un replay devuelve el resultado
   original, jamás un segundo movimiento.
 
+## Sistema de diseño (rediseño `feat/design-overhaul`)
+
+Dirección visual **"Sello"**: el objeto real detrás del producto es la
+tarjeta de sellos física. Marino + coral, un solo acento de marca, tono
+sobrio. Definido en `apps/web/app/globals.css` (`@theme inline`, Tailwind
+v4 CSS-first — no hay `tailwind.config.js` ni `components.json`).
+
+### Tokens
+
+- **Color** (hex, no oklch — a propósito, para fidelidad exacta con el
+  mockup aprobado; ver comentario en `globals.css`):
+  `--background` papel `#FBFAF7`, `--foreground` `#14181F`, `--primary`
+  marino `#14213D`, `--stamp` coral `#E8573F` (el ÚNICO acento de marca —
+  distinto de `--accent`, que sigue siendo el tinte neutral de hover de
+  shadcn), `--success`/`--warning`/`--destructive` semánticos separados
+  del acento de marca, `--border`/`--ring`. Cada uno tiene su par en
+  `.dark`. **Nunca** uses `--primary` ni `--stamp` como color de dato en
+  una gráfica — fallan el validador de la skill `dataviz` (ver abajo);
+  para eso existen `--chart-1`/`--chart-2`.
+- **Tipografía**: `Space Grotesk` (display, `font-display`, vía
+  `next/font/google` en `app/layout.tsx` — auto-hosted, cero request a
+  CDN) para títulos/números grandes; `Inter` (`font-sans`) para cuerpo.
+  Utilidad `.text-metric` para números grandes de dashboard.
+- **Radio de borde**: escala `--radius-sm/md/lg/xl/2xl` (base `1rem`, no
+  el `0.625rem` fijo de shadcn de fábrica).
+- **Sombra**: `--shadow-color` tintado de marino (no negro puro),
+  utilidades `.shadow-token-sm/md/lg`.
+
+### Componentes compartidos nuevos (`apps/web/components/`)
+
+- **`Logo.tsx`**: `LogoMark` (el ícono SVG solo — dos círculos
+  superpuestos, marino + coral) y `Logo` (ícono + wordmark "Pragmia").
+  Usa `LogoMark` suelto cuando el espacio es chico o el fondo no es
+  `--background` (ver `[&_circle:first-child]:stroke-white` en
+  `WalletCardMockup.tsx` para overrides de color sobre fondo oscuro).
+- **`AppShell.tsx`**: shell persistente de `/dashboard`, `/rewards`,
+  `/customers`, `/scanner` (vía route group `app/(product)/`). Sidebar
+  fija en desktop, `Sheet` (drawer) + top-bar en móvil. `NAV_ITEMS` es el
+  único lugar donde se agrega una sección nueva al nav — no dupliques la
+  lista en otro componente.
+- **`UserMenu.tsx`**: recibe `email`/`role` como strings (NUNCA el objeto
+  de sesión completo) — dropdown con iniciales + "Cerrar sesión".
+- **`PageHeader.tsx`**: `title` + `description?` + `actions?` (slot) +
+  `back?: {href, label}`. Reemplaza cualquier link suelto "← X" hecho a
+  mano — si una página nueva necesita breadcrumb, usa `back`, no
+  reinventes el patrón.
+- **`EmptyState.tsx`**: ilustración SVG propia (motivo de sello) +
+  `title` + `description` + `action?`. Es el único componente de estado
+  vacío — no escribas un `<p>` suelto para esto (ver regla de "Estados
+  obligatorios" arriba, ahora con implementación concreta).
+- **`RouteError.tsx`**: consolida el `Alert variant="destructive"` +
+  botón "Reintentar" que cada `error.tsx` de ruta necesita. Un `error.tsx`
+  nuevo es una línea: `<RouteError title="..." reset={reset} />`.
+- **`StampRow.tsx`**: el motivo de marca — sellos como fila de círculos
+  (no barra de progreso). Usa `stampProgress()` de `@loyalty/core`, nunca
+  reimplementes el cálculo de clamped/completed en la UI. Es el único
+  componente para mostrar progreso de sellos (`/dashboard`,
+  `/customers/[id]`, `/scanner`).
+- **`MetricCard.tsx`**: `{label, value, hint?, tone?, icon?}` — tarjeta de
+  métrica del dashboard.
+
+### Formularios y feedback
+
+- **`lib/useActionToast.ts`**: hook que traduce el `{error?, success?}` de
+  un `useActionState` a un toast (`sonner`, `<Toaster>` global en
+  `app/layout.tsx`). Reemplaza el patrón viejo
+  `<p role="alert">{state.error}</p>` — no vuelvas a ese patrón en
+  formularios nuevos, usa este hook.
+- Inputs booleanos de formulario van con el `Checkbox` real de
+  `components/ui/checkbox.tsx` (Radix, participa en `FormData` nativo vía
+  su `BubbleInput`) — no un `<input type="checkbox">` crudo.
+- Tras un submit exitoso que deba limpiar el form (alta de recurso), usa
+  un `formRef` + `.reset()` en un `useEffect` sobre el estado de éxito
+  (ver `CreateCustomerForm.tsx`) — no dejes el formulario lleno.
+
+### Gráficas (dashboard)
+
+- `recharts`, siempre coloreadas con `--chart-1`/`--chart-2` (nunca
+  `--primary`/`--stamp` — ver Tokens arriba). Antes de agregar una
+  gráfica nueva con una paleta categórica distinta, corre
+  `node scripts/validate_palette.js "<hex,hex>" --mode light|dark` (skill
+  `dataviz`) para light Y dark antes de escribir el componente.
+- Cada gráfica recibe `{data, hasData}` y renderiza su propio
+  `EmptyState` cuando `!hasData` — nunca una gráfica en cero sin
+  explicación (mismo principio que la regla de "Vacío" de arriba,
+  aplicado a series de tiempo).
+- Mark specs de la skill `dataviz`: líneas 2px, fills de área
+  ~10-18% opacidad, barras con esquina redondeada 4px, gridlines
+  recesivas, tooltip custom, leyenda solo con 2+ series.
+- Si una pantalla necesita varias queries agregadas sobre el mismo `tx`
+  de `withTenantContext`, **awaitéalas secuencialmente, nunca
+  `Promise.all`** — un `tx` es una sola conexión Postgres, no soporta
+  queries concurrentes (bug real ya cometido y corregido en
+  `dashboard/page.tsx`: ver el `DeprecationWarning` de `pg` como síntoma
+  si esto se reintroduce).
+
+### Estado online/offline
+
+- Para leer `navigator.onLine` (o cualquier API mutable solo del
+  navegador) desde un Server Component hidratado en cliente, usa
+  `useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)`
+  (`lib/useOnlineStatus.ts` es la referencia) — NUNCA un `useState` con
+  inicializador perezoso que lea `navigator` (mismatch de hidratación
+  garantizado: el server no tiene `navigator`) ni un `useState` +
+  `useEffect` que llama `setState` síncrono al montar (dispara el lint
+  `react-hooks/set-state-in-effect`).
+
 ## Qué NO hacer (errores ya cometidos o casi)
 
 - `process.env[nombre]` dinámico en código de navegador: Next.js solo
@@ -182,3 +289,11 @@ export async function mutarAlgo(_prev: State, formData: FormData): Promise<State
 - Gatear una Server Action solo desde la página que la renderiza.
 - Devolver 403/mensaje distinto para recursos de otro tenant (eso es un
   oráculo de existencia — usar `notFound()`).
+- `Promise.all([...])` sobre queries que comparten el mismo `tx` de
+  `withTenantContext` — un `tx` es una sola conexión, no soporta
+  concurrencia (awaitéalas secuencialmente).
+- `useState` con inicializador perezoso leyendo `navigator.*` — mismatch
+  de hidratación garantizado; usa `useSyncExternalStore`.
+- Usar `--primary`/`--stamp` como color de serie en una gráfica — son
+  tokens de marca, no pasan el validador de `dataviz`; usa
+  `--chart-1`/`--chart-2`.
