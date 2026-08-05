@@ -16,8 +16,8 @@ import {
   walletPasses,
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
-import { createCustomerForSession } from "../app/customers/logic";
-import { saveProgramForSession } from "../app/rewards/logic";
+import { createCustomerForSession } from "../app/(product)/customers/logic";
+import { saveProgramForSession } from "../app/(product)/rewards/logic";
 import {
   getLatestPass,
   listUpdatedSerialsForDevice,

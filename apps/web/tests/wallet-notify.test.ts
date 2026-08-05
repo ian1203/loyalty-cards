@@ -17,9 +17,9 @@ import {
   walletPasses,
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
-import { createCustomerForSession } from "../app/customers/logic";
-import { saveProgramForSession, saveRewardRuleForSession } from "../app/rewards/logic";
-import { registerStampForSession } from "../app/scanner/logic";
+import { createCustomerForSession } from "../app/(product)/customers/logic";
+import { saveProgramForSession, saveRewardRuleForSession } from "../app/(product)/rewards/logic";
+import { registerStampForSession } from "../app/(product)/scanner/logic";
 import { requireTenantSession } from "../lib/supabase/session";
 import type { TenantSession } from "../lib/tenant";
 import { getFakeApnsSentPushes, getFakeGoogleWalletCalls } from "../lib/wallet/adapters";

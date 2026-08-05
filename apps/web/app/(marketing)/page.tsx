@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { AppleIcon, SmartphoneIcon } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { ComingSoonBadge } from "./components/ComingSoonBadge";
 import { LeadForm } from "./components/LeadForm";
+import { WalletCardMockup } from "./components/WalletCardMockup";
 import {
   BENEFITS,
   BRAND,
@@ -19,22 +21,36 @@ export default function MarketingHomePage() {
   return (
     <>
       <section className="border-b bg-gradient-to-b from-muted/40 to-background">
-        <div className="mx-auto flex max-w-5xl flex-col items-start gap-6 px-6 py-20 sm:py-28">
-          <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            {BRAND.category}
-          </p>
-          <h1 className="max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">{HERO.headline}</h1>
-          <p className="max-w-2xl text-lg text-muted-foreground">{HERO.subhead}</p>
-          <div className="flex flex-wrap items-center gap-4">
-            <Button asChild size="lg">
-              <a href={demoLink} target="_blank" rel="noopener noreferrer">
-                {HERO.ctaDemoLabel}
-              </a>
-            </Button>
-            <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              {HERO.ctaLoginLabel}
-            </Link>
+        <div className="mx-auto grid max-w-5xl grid-cols-1 items-center gap-12 px-6 py-20 sm:py-28 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
+          <div className="flex flex-col items-start gap-6">
+            <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+              {BRAND.category}
+            </p>
+            <h1 className="max-w-xl text-4xl font-bold tracking-tight text-balance sm:text-5xl">
+              {HERO.headline}
+            </h1>
+            <p className="max-w-lg text-lg text-muted-foreground">{HERO.subhead}</p>
+            <div className="flex flex-wrap items-center gap-4">
+              <Button asChild size="lg">
+                <a href={demoLink} target="_blank" rel="noopener noreferrer">
+                  {HERO.ctaDemoLabel}
+                </a>
+              </Button>
+              <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+                {HERO.ctaLoginLabel}
+              </Link>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <AppleIcon className="size-4" /> Apple Wallet
+              </span>
+              <span className="flex items-center gap-1.5">
+                <SmartphoneIcon className="size-4" /> Google Wallet
+              </span>
+              <span>Hecho en {BRAND.location}</span>
+            </div>
           </div>
+          <WalletCardMockup />
         </div>
       </section>
 

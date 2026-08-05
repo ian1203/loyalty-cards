@@ -2,14 +2,14 @@
 // (apps/web/app/(marketing)/**). El contenido original vive en
 // /wallet-bi-plans.md (raíz del repo) — este módulo es su traducción a TS,
 // para que editar precios o texto no obligue a tocar JSX. Nombre de marca
-// ya actualizado a "IGA Analytics" (el .md fuente sigue diciendo
-// "Wallet BI", es el borrador original, no se edita).
+// ya actualizado a "Pragmia" (el .md fuente sigue diciendo "Wallet BI",
+// es el borrador original, no se edita).
 //
 // Nada de esto toca datos de tenant: es contenido estático, el mismo para
 // cualquier visitante.
 
 export const BRAND = {
-  name: "IGA Analytics",
+  name: "Pragmia",
   category: "Plataforma de lealtad e inteligencia de retención",
   location: "Veracruz, México",
 } as const;
@@ -47,7 +47,7 @@ export const HOW_IT_WORKS: HowItWorksStep[] = [
   {
     step: 6,
     title: "Recomendaciones",
-    description: "IGA Analytics recomienda la siguiente acción.",
+    description: "Pragmia recomienda la siguiente acción.",
     comingSoon: true,
   },
 ];
@@ -288,12 +288,11 @@ export const CAMPAIGN_EXAMPLES: string[] = [
   "Día de baja demanda: \"Este martes, puntos dobles presentando tu tarjeta Wallet.\"",
 ];
 
-// Placeholders explícitos — reemplazar antes de publicar. wa.me exige el
-// número en formato internacional sin "+" ni espacios.
+// wa.me exige el número en formato internacional sin "+" ni espacios.
 export const CONTACT = {
-  whatsappNumberDisplay: "+52 XXX XXX XXXX", // TODO: reemplazar con el número real antes de publicar
-  whatsappNumberDigits: "52XXXXXXXXXX", // TODO: mismo número, solo dígitos, para el link wa.me
-  email: "hola@igaanalytics.mx", // TODO: reemplazar con el correo real antes de publicar
+  whatsappNumberDisplay: "+52 229 482 8125",
+  whatsappNumberDigits: "522294828125",
+  email: "info@pragmia-data.com",
   location: "Veracruz, México",
   salesMessage:
     "Somos de Veracruz y desarrollamos un programa de lealtad para que tus clientes guarden su tarjeta en Apple Wallet o Google Wallet, sin descargar una app. Puedes actualizar promociones, enviar cupones personales y revisar cuántos clientes regresan. ¿Te enseño una demo de 10 minutos?",

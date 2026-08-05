@@ -15,7 +15,7 @@ import {
 
 export const metadata: Metadata = {
   title: "Precios",
-  description: "Planes y precios de IGA Analytics: Básico, Negocio e Intelligence. Activación aparte, oferta fundadora disponible.",
+  description: "Planes y precios de Pragmia: Básico, Negocio e Intelligence. Activación aparte, oferta fundadora disponible.",
 };
 
 const currency = new Intl.NumberFormat("es-MX", {
@@ -50,7 +50,7 @@ export default function PricingPage() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {PLANS.map((plan) => {
             const demoLink = buildWhatsappLink(
-              `Hola, me interesa el plan ${plan.name} de IGA Analytics. ¿Podemos agendar una demo de 10 minutos?`,
+              `Hola, me interesa el plan ${plan.name} de Pragmia. ¿Podemos agendar una demo de 10 minutos?`,
             );
             return (
               <Card

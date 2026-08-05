@@ -12,10 +12,10 @@ import {
   walletPasses,
 } from "@loyalty/db";
 import { eq } from "drizzle-orm";
-import { createCustomerForSession } from "../app/customers/logic";
-import { downloadApplePassForSession } from "../app/customers/[id]/wallet/apple/logic";
+import { createCustomerForSession } from "../app/(product)/customers/logic";
+import { downloadApplePassForSession } from "../app/(product)/customers/[id]/wallet/apple/logic";
 import { buildGoogleSaveLinkForCustomer } from "../lib/wallet/googleSaveLink";
-import { saveProgramForSession } from "../app/rewards/logic";
+import { saveProgramForSession } from "../app/(product)/rewards/logic";
 import { requireTenantSession } from "../lib/supabase/session";
 import { createBusinessWithRealOwner, createPlatformAdmin, form, signInAsCookieJar } from "./support/testAuth";
 
