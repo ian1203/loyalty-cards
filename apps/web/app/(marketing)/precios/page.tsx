@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CheckIcon } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -97,7 +98,7 @@ export default function PricingPage() {
         <ul className="mt-4 grid grid-cols-1 gap-2 text-sm text-muted-foreground sm:grid-cols-2">
           {ACTIVATION_INCLUDES.map((item) => (
             <li key={item} className="flex gap-2">
-              <span aria-hidden="true">—</span>
+              <CheckIcon className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
               <span>{item}</span>
             </li>
           ))}
