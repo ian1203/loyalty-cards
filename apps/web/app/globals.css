@@ -204,4 +204,44 @@
   .shadow-token-lg {
     box-shadow: var(--shadow-lg);
   }
+
+  /* Movimiento — solo landing pública (ver skill frontend-conventions).
+     CSS puro, sin framer-motion/GSAP: el único trabajo real es un fade +
+     translateY de entrada al hacer scroll y feedback de presión en
+     botones/tarjetas interactivas — no justifica una dependencia nueva.
+     Curvas "fuertes" (no las ease-* nativas de CSS, que se sienten
+     débiles) vía apple-design/emil-design-eng: ease-out marcado para
+     elementos que ENTRAN, feedback de botón bajo 160ms. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 550ms var(--ease-out-strong), transform 550ms var(--ease-out-strong);
+  }
+  .reveal[data-visible="true"] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .press {
+    transition: transform 140ms var(--ease-out-strong);
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+}
+
+:root {
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .press,
+  .press:active {
+    transform: none;
+    transition: none;
+  }
 }

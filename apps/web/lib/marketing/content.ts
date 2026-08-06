@@ -62,7 +62,8 @@ export const BENEFITS: Benefit[] = [
   },
   {
     title: "Mecánicas de lealtad",
-    description: "Sellos por visita.",
+    description:
+      "Sellos por visita: cada visita suma un sello a la tarjeta y, al llegar a la meta que definas, la recompensa se desbloquea sola.",
   },
   {
     title: "Mecánicas avanzadas",
@@ -305,7 +306,7 @@ export function buildWhatsappLink(customMessage?: string): string {
 
 export const SEO = {
   siteName: BRAND.name,
-  defaultTitle: `${BRAND.name} — Programa de lealtad en Apple Wallet y Google Wallet`,
+  defaultTitle: `${BRAND.name}: programa de lealtad en Apple Wallet y Google Wallet`,
   defaultDescription:
     "Crea tu programa de lealtad, registra cada visita en Apple Wallet y Google Wallet, y descubre qué acciones hacen que tus clientes regresen.",
   locale: "es_MX",

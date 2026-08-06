@@ -15,7 +15,7 @@ import { BRAND, CONTACT, SEO } from "../../lib/marketing/content";
 // proteger de cachearse.
 export const metadata: Metadata = {
   metadataBase: process.env.NEXT_PUBLIC_SITE_URL ? new URL(process.env.NEXT_PUBLIC_SITE_URL) : undefined,
-  title: { default: SEO.defaultTitle, template: `%s — ${SEO.siteName}` },
+  title: { default: SEO.defaultTitle, template: `%s | ${SEO.siteName}` },
   description: SEO.defaultDescription,
   openGraph: {
     siteName: SEO.siteName,
