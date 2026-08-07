@@ -237,6 +237,15 @@
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+/* Scroll suave para los anclajes de la landing (nav "Precios" ->
+   #precios) — en @media, no la utilidad scroll-smooth de Tailwind, para
+   respetar prefers-reduced-motion igual que .reveal/.press de abajo. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reveal {
     opacity: 1;

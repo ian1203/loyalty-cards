@@ -43,7 +43,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-muted/50 to-background px-4 py-12">
       <div className="flex w-full max-w-sm flex-col items-center gap-8">
-        <Logo className="justify-center" />
+        <Logo />
         <Card className="w-full shadow-token-md">
           <CardHeader>
             <CardTitle>Inicia sesión</CardTitle>

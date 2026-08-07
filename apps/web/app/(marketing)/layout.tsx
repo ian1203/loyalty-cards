@@ -26,8 +26,14 @@ export const metadata: Metadata = {
   },
 };
 
+// "Precios" ancla a la sección de la home (id="precios") en vez de
+// navegar a otra página — Next.js Link resuelve un href con hash como
+// navegación normal (va a "/" y salta al ancla) si no estás ahí, o como
+// scroll in-page si ya estás en "/". La página /precios standalone sigue
+// existiendo (comparativa completa + form de leads + está en el
+// sitemap), solo el link del nav cambia de destino.
 const NAV_LINKS = [
-  { href: "/precios", label: "Precios" },
+  { href: "/#precios", label: "Precios" },
   { href: "/privacidad", label: "Privacidad" },
 ] as const;
 

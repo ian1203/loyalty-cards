@@ -4,12 +4,13 @@ import { CardPreviewer } from "./components/CardPreviewer";
 import { ComponentsBento } from "./components/ComponentsBento";
 import { HowItWorksStamps } from "./components/HowItWorksStamps";
 import { LeadForm } from "./components/LeadForm";
+import { PricingPlans } from "./components/PricingPlans";
 import { ProblemSection } from "./components/ProblemSection";
 import { ProductShowcase } from "./components/ProductShowcase";
 import { RevealOnScroll } from "./components/RevealOnScroll";
 import { TrustBar } from "./components/TrustBar";
 import { WalletCardMockup } from "./components/WalletCardMockup";
-import { BRAND, HERO, IDEAL_FOR, buildWhatsappLink } from "../../lib/marketing/content";
+import { BRAND, HERO, IDEAL_FOR, IVA_LABEL, buildWhatsappLink } from "../../lib/marketing/content";
 
 export default function MarketingHomePage() {
   const demoLink = buildWhatsappLink();
@@ -46,6 +47,27 @@ export default function MarketingHomePage() {
       <HowItWorksStamps />
       <ComponentsBento />
       <CardPreviewer />
+
+      <section id="precios" className="scroll-mt-20 border-t bg-muted/10">
+        <div className="mx-auto max-w-5xl px-6 py-20 sm:py-28">
+          <RevealOnScroll>
+            <div className="mx-auto max-w-lg text-center">
+              <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Planes y precios</h2>
+              <p className="mt-4 text-muted-foreground">
+                Precios en pesos mexicanos ({IVA_LABEL}). La activación se cobra siempre por separado.
+              </p>
+            </div>
+            <div className="mt-12">
+              <PricingPlans />
+            </div>
+            <p className="mt-8 text-center text-sm text-muted-foreground">
+              <Link href="/precios" className="font-medium text-primary hover:underline">
+                Ver comparativa completa y qué incluye la activación
+              </Link>
+            </p>
+          </RevealOnScroll>
+        </div>
+      </section>
 
       <section className="border-t bg-muted/20">
         <div className="mx-auto max-w-5xl px-6 py-20 sm:py-28">

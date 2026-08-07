@@ -35,26 +35,25 @@ export function LogoMark({
   );
 }
 
-export function Logo({
-  className,
-  iconClassName,
-  wordmarkClassName,
-}: {
-  className?: string;
-  iconClassName?: string;
-  wordmarkClassName?: string;
-}) {
+// Logo principal de nav/chrome: el lockup completo (wordmark "PRAGMIA" +
+// ícono, ya integrados en el arte aprobado — pragmia-logo/logo.jpeg,
+// recortado a la fila del wordmark, sin la tagline) como UNA sola imagen.
+// A propósito NO se compone acá (LogoMark + texto por separado): eso
+// duplicaba el ícono con una relación de tamaño/espaciado distinta a la
+// del lockup real. LogoMark queda reservado para el favicon y el ícono
+// chico dentro de las tarjetas de muestra — nunca junto al wordmark.
+const WORDMARK_ASPECT = 1430 / 297;
+
+export function Logo({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-2", className)}>
-      <LogoMark className={cn("size-7", iconClassName)} />
-      <span
-        className={cn(
-          "font-display text-lg font-bold tracking-tight text-foreground whitespace-nowrap",
-          wordmarkClassName,
-        )}
-      >
-        PRAGMIA
-      </span>
-    </span>
+    <Image
+      src="/brand/pragmia-wordmark.png"
+      alt="Pragmia"
+      width={1430}
+      height={297}
+      priority
+      className={cn("h-7 w-auto", className)}
+      style={{ aspectRatio: WORDMARK_ASPECT }}
+    />
   );
 }

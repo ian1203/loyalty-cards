@@ -93,7 +93,7 @@ export function AppShell({
           >
             <MenuIcon className="size-5" />
           </button>
-          <Logo iconClassName="size-6" wordmarkClassName="text-base" />
+          <Logo className="h-6" />
         </header>
 
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
