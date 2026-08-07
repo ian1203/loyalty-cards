@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { CheckIcon } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { CardPreviewer } from "./components/CardPreviewer";
+import { ComparisonMatrix } from "./components/ComparisonMatrix";
 import { ComponentsBento } from "./components/ComponentsBento";
 import { HowItWorksStamps } from "./components/HowItWorksStamps";
 import { LeadForm } from "./components/LeadForm";
@@ -10,7 +12,7 @@ import { ProductShowcase } from "./components/ProductShowcase";
 import { RevealOnScroll } from "./components/RevealOnScroll";
 import { TrustBar } from "./components/TrustBar";
 import { WalletCardMockup } from "./components/WalletCardMockup";
-import { BRAND, HERO, IDEAL_FOR, IVA_LABEL, buildWhatsappLink } from "../../lib/marketing/content";
+import { ACTIVATION_INCLUDES, BRAND, HERO, IDEAL_FOR, IVA_LABEL, buildWhatsappLink } from "../../lib/marketing/content";
 
 export default function MarketingHomePage() {
   const demoLink = buildWhatsappLink();
@@ -60,11 +62,22 @@ export default function MarketingHomePage() {
             <div className="mt-12">
               <PricingPlans />
             </div>
-            <p className="mt-8 text-center text-sm text-muted-foreground">
-              <Link href="/precios" className="font-medium text-primary hover:underline">
-                Ver comparativa completa y qué incluye la activación
-              </Link>
-            </p>
+
+            <div className="mx-auto mt-12 max-w-3xl">
+              <h3 className="text-sm font-semibold">Qué incluye la activación</h3>
+              <ul className="mt-4 grid grid-cols-1 gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                {ACTIVATION_INCLUDES.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <CheckIcon className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mx-auto mt-8 max-w-5xl">
+              <ComparisonMatrix />
+            </div>
           </RevealOnScroll>
         </div>
       </section>
@@ -98,7 +111,7 @@ export default function MarketingHomePage() {
                 </a>
               </Button>
               <Button asChild variant="outline" size="lg" className="press">
-                <Link href="/precios">Ver precios</Link>
+                <Link href="/#precios">Ver precios</Link>
               </Button>
             </div>
             <div className="mt-10 text-left">

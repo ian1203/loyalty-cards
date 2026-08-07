@@ -186,8 +186,12 @@ pendiente" de `docs/WALLET-SETUP.md`.
 ## Superficie pública de marketing (paralela a las fases, no numerada)
 
 Landing pública en `apps/web/app/(marketing)/` (route group — no cambia
-las URLs): `/` (antes un stub de Fase 0, ahora la landing), `/precios`,
-`/privacidad`. Vende la plataforma bajo el nombre **Pragmia**; el
+las URLs): `/` (antes un stub de Fase 0, ahora la landing) y
+`/privacidad`. "Precios" ya NO es una ruta aparte — se eliminó `/precios`
+y su contenido (los 3 planes + la comparativa completa detrás de un
+`<details>` colapsado) vive inline en `/` como la sección ancla
+`id="precios"`; el nav superior solo ancla ahí o navega al footer, nunca
+a una página separada. Vende la plataforma bajo el nombre **Pragmia**; el
 producto en sí sigue siendo el mismo (`/dashboard`, `/scanner`, etc., sin
 tocar). Trabajo deliberadamente separado de las fases numeradas: sin
 datos de tenant, sin sesión, sin RLS que aplique — el copy sale de
@@ -201,8 +205,8 @@ worker nunca cachea HTML de producto porque puede llevar datos de tenant
 deben ser estáticas, cacheables e indexables por diseño — nunca llaman
 `cookies()`/`headers()`/`getVerifiedSession()`/`requireTenantSession()`,
 que es justo lo que las deja renderizar estáticas por defecto en Next
-(confirmado con `next build`: `/`, `/precios`, `/privacidad` salen ○
-Static, el resto del producto sale ƒ Dynamic). No hay conflicto con el
+(confirmado con `next build`: `/` y `/privacidad` salen ○ Static, el
+resto del producto sale ƒ Dynamic). No hay conflicto con el
 service worker: su allowlist ya son solo los dos íconos, así que nunca
 intercepta estas rutas nuevas.
 
