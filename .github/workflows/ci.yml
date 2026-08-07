@@ -49,6 +49,42 @@ jobs:
         env:
           PGPASSWORD: postgres
 
+      # El contenedor postgres:16 es Postgres puro — no es un proyecto
+      # Supabase real, así que no trae el schema `auth` ni el rol
+      # `supabase_auth_admin` que Supabase aprovisiona automáticamente en
+      # todo proyecto (ver el comentario de 0010_supabase_auth_bridge.sql:
+      # "auth.users, tabla que Supabase crea — nuestras migraciones nunca
+      # la tocan"). Esa migración asume que ambos ya existen — cierto en
+      # local (Supabase CLI) y en producción (Supabase hosted), falso en
+      # este contenedor pelón. Se stubea acá lo mínimo indispensable para
+      # que las migraciones corran (una tabla con la PK que la FK
+      # necesita, no una réplica de GoTrue) — nunca en los archivos de
+      # migración, que deben seguir asumiendo la realidad de un Supabase
+      # real, no la de este workaround de CI.
+      - name: Stub del schema auth de Supabase (solo CI, Postgres puro)
+        run: |
+          psql "postgres://postgres:postgres@localhost:5432/loyalty_test" <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS auth;
+          CREATE TABLE IF NOT EXISTS auth.users (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid()
+          );
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'supabase_auth_admin') THEN
+              CREATE ROLE supabase_auth_admin;
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN
+              CREATE ROLE anon;
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN
+              CREATE ROLE authenticated;
+            END IF;
+          END
+          $$;
+          SQL
+        env:
+          PGPASSWORD: postgres
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
