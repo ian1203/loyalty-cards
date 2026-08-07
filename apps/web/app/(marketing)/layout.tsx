@@ -26,17 +26,10 @@ export const metadata: Metadata = {
   },
 };
 
-// "Precios" ancla a la sección de la home (id="precios") en vez de
-// navegar a otra página — Next.js Link resuelve un href con hash como
-// navegación normal (va a "/" y salta al ancla) si no estás ahí, o como
-// scroll in-page si ya estás en "/". La página /precios standalone sigue
-// existiendo (comparativa completa + form de leads + está en el
-// sitemap), solo el link del nav cambia de destino.
-const NAV_LINKS = [
-  { href: "/#precios", label: "Precios" },
-  { href: "/privacidad", label: "Privacidad" },
-] as const;
-
+// Nav superior deliberadamente mínimo: solo el logo + "Iniciar sesión".
+// Ni "Precios" (ahora es una sección ancla dentro de esta misma página,
+// no una ruta aparte) ni "Aviso de privacidad" (tenerlo arriba se sentía
+// invasivo) — el aviso de privacidad sigue accesible desde el footer.
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
@@ -45,23 +38,12 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
           <Link href="/" className="whitespace-nowrap">
             <Logo />
           </Link>
-          <nav className="flex items-center gap-4 text-sm sm:gap-6">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="hidden text-muted-foreground hover:text-foreground sm:inline"
-              >
-                {link.label}
-              </Link>
-            ))}
-            <Link
-              href="/login"
-              className="whitespace-nowrap rounded-md border px-3 py-1.5 font-medium hover:bg-accent hover:text-accent-foreground"
-            >
-              Iniciar sesión
-            </Link>
-          </nav>
+          <Link
+            href="/login"
+            className="whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+          >
+            Iniciar sesión
+          </Link>
         </div>
       </header>
 
@@ -82,7 +64,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             </a>
           </div>
           <nav className="flex flex-col gap-1">
-            <Link href="/precios" className="hover:text-foreground">
+            <Link href="/#precios" className="hover:text-foreground">
               Precios
             </Link>
             <Link href="/privacidad" className="hover:text-foreground">

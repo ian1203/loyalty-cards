@@ -263,13 +263,6 @@ export const IDEAL_FOR: string[] = [
   "Negocios que hoy usan tarjetas físicas o promociones frecuentes",
 ];
 
-export const FOUNDER_OFFER = {
-  headline: "Precio fundador para los primeros 20 negocios",
-  description:
-    "Conserva tu tarifa durante 12 meses. En pago anual, recibe dos meses de servicio sin costo. Activación por separado.",
-  spotsAvailable: 20,
-} as const;
-
 export type DifferentiationPoint = { text: string; comingSoon?: boolean };
 
 export const DIFFERENTIATION: DifferentiationPoint[] = [
