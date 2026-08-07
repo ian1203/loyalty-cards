@@ -17,6 +17,10 @@
     "./marketing": {
       "types": "./src/marketing.ts",
       "default": "./src/marketing.ts"
+    },
+    "./enroll": {
+      "types": "./src/enroll.ts",
+      "default": "./src/enroll.ts"
     }
   },
   "scripts": {

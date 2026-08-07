@@ -18,6 +18,7 @@ export default function robots(): MetadataRoute.Robots {
         "/rewards",
         "/login",
         "/set-password",
+        "/enroll",
         "/api",
       ],
     },

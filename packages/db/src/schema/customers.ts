@@ -1,4 +1,14 @@
-import { index, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  date,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { businesses } from "./businesses";
 
 export const customers = pgTable(
@@ -13,6 +23,14 @@ export const customers = pgTable(
     phone: text("phone"),
     // Token opaco referenciado por el QR del cliente — nunca datos ni saldos.
     walletToken: text("wallet_token").notNull().unique(),
+    // Fecha real (no edad calculada) para poder correr campañas de
+    // cumpleaños después. Nullable: el alta manual (dueño/staff) no la pide.
+    dateOfBirth: date("date_of_birth"),
+    occupation: text("occupation"),
+    // now() solo cuando el cliente se auto-registra en /enroll y aceptó el
+    // checkbox de consentimiento LFPDPPP — NULL para altas manuales, que no
+    // pasan por ese consentimiento.
+    privacyConsentAt: timestamp("privacy_consent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -27,5 +45,12 @@ export const customers = pgTable(
     // Requerido para que otras tablas puedan tener una FK compuesta
     // (id, business_id) -> customers e impedir referencias cross-tenant.
     unique("customers_id_business_id_key").on(table.id, table.businessId),
+    // Dedupe de auto-registro público (/enroll): un mismo teléfono no puede
+    // registrarse dos veces dentro del mismo negocio. Parcial (WHERE phone
+    // IS NOT NULL) porque el alta manual existente permite dejar el
+    // teléfono vacío.
+    uniqueIndex("customers_business_id_phone_key")
+      .on(table.businessId, table.phone)
+      .where(sql`${table.phone} is not null`),
   ],
 );
