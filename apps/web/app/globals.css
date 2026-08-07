@@ -3,54 +3,58 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   Sistema de diseño — "Sello" (Fase A, feat/design-overhaul)
+   Sistema de diseño — Pragmia (reemplaza "Sello", feat/design-overhaul)
    ============================================================
-   El objeto real detrás del producto es la tarjeta de sellos física — el
-   sistema visual la digitaliza en vez de inventar un lenguaje nuevo desde
-   cero. Marino de "documento oficial" (confianza) + coral de tinta de
-   sello como ÚNICO acento de marca. Progreso se representa como sellos
-   (círculos), nunca como barra genérica — ver <StampRow> en components/.
+   Identidad final de marca (logo.jpeg/icon.jpeg/colores.jpeg en
+   pragmia-logo/, aprobada en el chat): azul primario para confianza y
+   estructura + celeste como acento de marca. Ya no hay un segundo hue
+   (antes marino+coral) — el sistema es monocromático-azul + negro, así
+   que --primary absorbe TODO el trabajo de texto/ícono/link/nav-activo
+   que antes se repartía entre --primary y --stamp (celeste falla
+   contraste como texto sobre fondo claro — ver nota junto a --stamp).
 
-   Valores en hex (no oklch como el resto del repo heredaba de shadcn):
-   son exactamente los aprobados en el comparativo visual, sin la deriva
-   de una conversión manual a oklch. CSS acepta cualquier sintaxis de
-   color en un custom property — no hay razón funcional para forzar un
-   formato sobre otro.
+   Valores en hex (no oklch), igual que el sistema anterior — fidelidad
+   exacta a los swatches aprobados, sin deriva de conversión manual.
 
-   `--accent` (shadcn) sigue siendo el tinte NEUTRAL de hover sutil
-   (hover:bg-accent ya está en uso en todo el código existente) — el
-   coral de marca vive en su propio token, `--stamp`, para no pisarle el
-   significado. Mismo criterio para `--success`/`--warning`: semántico,
-   separado del acento de marca (ver skill dataviz / artifact-design:
-   "semantic color is separate from the accent hue").
+   `--accent` (shadcn) sigue siendo el tinte NEUTRAL de hover sutil.
+   `--success`/`--warning`/`--destructive` NO son parte de la paleta de
+   marca — se quedan igual, deliberadamente separados del acento (ver
+   skill dataviz / artifact-design: "semantic color is separate from the
+   accent hue").
    ============================================================ */
 :root {
   --radius: 1rem;
 
-  --background: #FBFAF7;
-  --foreground: #14181F;
+  /* Neutro frío (no el "papel" cálido de "Sello", que estaba atado al
+     concepto de tarjeta física que este rebrand reemplaza). */
+  --background: #F5F8FC;
+  --foreground: #000000;
 
   --card: #FFFFFF;
-  --card-foreground: #14181F;
+  --card-foreground: #000000;
   --popover: #FFFFFF;
-  --popover-foreground: #14181F;
+  --popover-foreground: #000000;
 
-  --primary: #14213D;
-  --primary-foreground: #FBFAF7;
+  --primary: #085AB3;
+  --primary-foreground: #FFFFFF;
 
-  --secondary: #EEF0F4;
-  --secondary-foreground: #14213D;
+  --secondary: #EAF1FA;
+  --secondary-foreground: #085AB3;
 
-  --muted: #F1F0EC;
-  --muted-foreground: #6B7280;
+  --muted: #EEF2F6;
+  --muted-foreground: #5B6472;
 
-  --accent: #F1F0EC;
-  --accent-foreground: #14213D;
+  --accent: #EAF1FA;
+  --accent-foreground: #085AB3;
 
-  /* El acento de marca — "tinta de sello". Botones primarios de acción,
-     el relleno de los StampRow, links, estado activo de nav. */
-  --stamp: #E8573F;
-  --stamp-foreground: #FFFFFF;
+  /* El acento de marca — celeste. A propósito NO se usa como texto/ícono
+     suelto sobre fondo claro (contraste 1.9:1 contra --background, falla
+     WCAG feo) — solo como RELLENO con --stamp-foreground encima (círculos
+     de StampRow, timeline de "cómo funciona"). Los usos que antes eran
+     "texto/ícono con text-stamp" pasaron a --primary (azul), que sí tiene
+     contraste real sobre fondo claro. */
+  --stamp: #51CADE;
+  --stamp-foreground: #000000;
 
   --success: #2F9E5C;
   --success-foreground: #FFFFFF;
@@ -59,26 +63,23 @@
   --destructive: #C13B3B;
   --destructive-foreground: #FFFFFF;
 
-  --border: #E4E1D9;
-  --input: #E4E1D9;
-  --ring: #E8573F;
+  --border: #E2E8F0;
+  --input: #E2E8F0;
+  /* Azul, no celeste — un anillo de foco en celeste se ve lavado (mismo
+     motivo que --stamp no sirve como texto). */
+  --ring: #085AB3;
 
   /* Colores de MARCA de datos — deliberadamente distintos de --primary/
-     --stamp. --primary (marino) es demasiado oscuro/desaturado para leerse
-     como una marca categórica en una gráfica (falla el piso de luminosidad
-     y croma del validador de la skill dataviz); estos dos SÍ pasan las 6
-     validaciones (node scripts/validate_palette.js, skill dataviz) contra
-     esta superficie. --chart-1 = azul de la familia marino, más claro y
-     saturado; --chart-2 = el mismo coral de marca, family reutilizada.
-     Nunca usar --primary/--stamp directamente como color de trazo/relleno
-     de una gráfica. */
-  --chart-1: #3B5FA8;
-  --chart-2: #E8573F;
+     --stamp (nunca los reuses directo como trazo/relleno de gráfica).
+     Ya no derivan del azul de marca (antes sí, de la familia del marino
+     viejo) — son una pareja categórica azul/naranja independiente,
+     validada aparte (node scripts/validate_palette.js, skill dataviz)
+     contra esta superficie. */
+  --chart-1: #2E7FC9;
+  --chart-2: #EB6834;
 
-  /* Sombra tintada de marino, no negro puro — se lee como "diseñada", no
-     como el default del navegador (ver artifact-design: "a pure mid-grey
-     reads as unconsidered"). */
-  --shadow-color: 20 33 61;
+  /* Sombra tintada de azul primario, no negro puro. */
+  --shadow-color: 8 90 179;
   --shadow-sm: 0 1px 2px rgb(var(--shadow-color) / 0.06);
   --shadow-md: 0 1px 2px rgb(var(--shadow-color) / 0.06), 0 8px 24px -12px rgb(var(--shadow-color) / 0.18);
   --shadow-lg: 0 2px 4px rgb(var(--shadow-color) / 0.08), 0 16px 40px -16px rgb(var(--shadow-color) / 0.24);
@@ -93,23 +94,26 @@
   --popover: #191D26;
   --popover-foreground: #F3F1EC;
 
-  /* Tinte más claro que el marino de modo claro: el navy oscuro original
-     se pierde contra un fondo ya oscuro — necesita subir de valor para
-     seguir sirviendo como color de botón/superficie con contraste. */
-  --primary: #4A6FB0;
+  /* Más claro que el azul primario de modo claro: #085AB3 sin aclarar
+     cae a 2.72:1 contra el fondo oscuro (ver nota histórica del sistema
+     anterior — mismo motivo, valor nuevo). */
+  --primary: #4A9BDE;
   --primary-foreground: #0D1117;
 
-  --secondary: #202535;
-  --secondary-foreground: #E7EAF2;
+  --secondary: #1E2836;
+  --secondary-foreground: #DCE8F5;
 
   --muted: #1D212B;
   --muted-foreground: #9AA1AC;
 
-  --accent: #202535;
-  --accent-foreground: #E7EAF2;
+  --accent: #1E2836;
+  --accent-foreground: #DCE8F5;
 
-  --stamp: #F2704F;
-  --stamp-foreground: #12151C;
+  /* Celeste SÍ funciona como texto/ícono en dark (9.4:1 contra este
+     fondo) — la falla de contraste de --stamp es solo un problema de
+     modo claro, así que acá se queda igual que el swatch aprobado. */
+  --stamp: #51CADE;
+  --stamp-foreground: #0D1117;
 
   --success: #3FBE78;
   --success-foreground: #0D1117;
@@ -120,12 +124,12 @@
 
   --border: rgb(255 255 255 / 10%);
   --input: rgb(255 255 255 / 12%);
-  --ring: #F2704F;
+  --ring: #4A9BDE;
 
-  /* Validadas aparte contra la superficie oscura (skill dataviz,
+  /* Validado aparte contra la superficie oscura (skill dataviz,
      --mode dark) — no es el mismo par que en claro. */
-  --chart-1: #6E93DA;
-  --chart-2: #E8683F;
+  --chart-1: #3F8AD1;
+  --chart-2: #D9702E;
 
   --shadow-color: 0 0 0;
   --shadow-sm: 0 1px 2px rgb(var(--shadow-color) / 0.3);
@@ -168,8 +172,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-playfair-display), ui-serif, serif;
+  --font-sans: var(--font-comfortaa), ui-sans-serif, system-ui, sans-serif;
 
   --shadow-token-sm: var(--shadow-sm);
   --shadow-token-md: var(--shadow-md);

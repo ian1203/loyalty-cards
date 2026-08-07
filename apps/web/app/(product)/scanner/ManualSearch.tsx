@@ -47,8 +47,9 @@ export function ManualSearch({ onSelect, disabled }: Props) {
           onChange={(event) => setQuery(event.currentTarget.value)}
           placeholder="Nombre, teléfono o email…"
           disabled={disabled}
+          className="h-11 text-base"
         />
-        <Button type="submit" variant="outline" disabled={disabled || pending}>
+        <Button type="submit" variant="outline" className="h-11" disabled={disabled || pending}>
           {pending ? "Buscando…" : "Buscar"}
         </Button>
       </form>
@@ -60,7 +61,7 @@ export function ManualSearch({ onSelect, disabled }: Props) {
                 type="button"
                 disabled={disabled}
                 onClick={() => onSelect(row.id)}
-                className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full flex-col items-start gap-0.5 px-3 py-3 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="font-medium">{row.fullName ?? "(sin nombre)"}</span>
                 <span className="text-muted-foreground">

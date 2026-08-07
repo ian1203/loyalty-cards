@@ -1,5 +1,4 @@
-import { AppleIcon, MapPinIcon, SmartphoneIcon } from "lucide-react";
-import { BRAND } from "../../../lib/marketing/content";
+import { AppleIcon, SmartphoneIcon } from "lucide-react";
 
 // Franja de confianza, fuera del hero a propósito (el hero es para la
 // promesa y el CTA; una micro-franja de confianza dentro del hero compite
@@ -14,9 +13,6 @@ export function TrustBar() {
         </span>
         <span className="flex items-center gap-1.5">
           <SmartphoneIcon className="size-4" aria-hidden="true" /> Google Wallet
-        </span>
-        <span className="flex items-center gap-1.5">
-          <MapPinIcon className="size-4" aria-hidden="true" /> Hecho en {BRAND.location}
         </span>
       </div>
     </div>

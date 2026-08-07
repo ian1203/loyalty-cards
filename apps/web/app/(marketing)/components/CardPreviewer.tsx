@@ -166,7 +166,15 @@ export function CardPreviewer() {
             </div>
           </form>
 
-          <div className="mx-auto flex flex-col items-center gap-6 lg:mx-0">
+          {/* w-full (no mx-auto) + min-w-0: con mx-auto, un item de grid con
+              márgenes automáticos en los dos lados se dimensiona por
+              fit-content en vez de estirarse a la celda (spec de CSS Box
+              Alignment) — con el max-w-sm de WalletCardMockup como
+              fit-content, eso desborda la página en mobile. w-full fuerza el
+              stretch real; los hijos se siguen centrando con items-center.
+              Hallazgo real de esta revisión con Playwright mobile,
+              preexistente a este cambio. */}
+          <div className="flex w-full min-w-0 flex-col items-center gap-6">
             <WalletCardMockup
               businessName={businessName.trim() || "Tu negocio"}
               rewardLabel={rewardLabel.trim() || "Tu recompensa"}

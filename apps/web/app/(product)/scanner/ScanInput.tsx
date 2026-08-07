@@ -56,7 +56,7 @@ export function ScanInput({ onToken, disabled }: Props) {
         placeholder="Escanea con el lector o tipea el código…"
         onKeyDown={handleKeyDown}
         onBlur={refocus}
-        className="font-mono"
+        className="h-12 font-mono text-base"
       />
     </div>
   );

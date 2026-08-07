@@ -33,6 +33,11 @@ export type LoyaltyClassInput = {
   businessName: string;
   programName: string;
   backgroundRgb: RgbColor;
+  // URL pública HTTPS del logo del negocio — Google Wallet la va a buscar
+  // por su cuenta al renderizar la clase, no acepta un archivo local ni un
+  // data-URI. Opcional: sin ella, la clase queda sin logo (nunca un logo
+  // fantasma/placeholder que confunda con los sellos).
+  programLogoUri?: string;
 };
 
 export function buildLoyaltyClassPayload(input: LoyaltyClassInput): Record<string, unknown> {
@@ -42,6 +47,16 @@ export function buildLoyaltyClassPayload(input: LoyaltyClassInput): Record<strin
     programName: input.programName,
     reviewStatus: "underReview",
     hexBackgroundColor: toHex(input.backgroundRgb),
+    ...(input.programLogoUri
+      ? {
+          programLogo: {
+            sourceUri: { uri: input.programLogoUri },
+            contentDescription: {
+              defaultValue: { language: "es-MX", value: `Logo de ${input.businessName}` },
+            },
+          },
+        }
+      : {}),
   };
 }
 

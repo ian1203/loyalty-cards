@@ -63,11 +63,28 @@ export function CameraScanner({ onToken, disabled }: Props) {
         },
       );
       controlsRef.current = controls;
-    } catch {
+    } catch (err) {
       setActive(false);
-      setError(
-        "No se pudo acceder a la cámara. Revisa el permiso del navegador, o usa el lector USB / búsqueda manual.",
-      );
+      // Distingue las dos causas más comunes (permiso vs. sin cámara) —
+      // Android e iOS reportan ambas como DOMException con `name` estándar.
+      // El resto de errores (cámara en uso por otra app, restricciones no
+      // satisfacibles, etc.) cae al mensaje genérico — en los tres casos el
+      // fallback es el mismo: lector USB / búsqueda manual, siempre visible
+      // debajo, sin reintento automático en loop.
+      const name = err instanceof DOMException ? err.name : null;
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setError(
+          "Permiso de cámara denegado. Revísalo en los ajustes del navegador, o usa el lector USB / búsqueda manual.",
+        );
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        setError(
+          "No se encontró una cámara trasera en este dispositivo. Usa el lector USB / búsqueda manual.",
+        );
+      } else {
+        setError(
+          "No se pudo acceder a la cámara. Usa el lector USB / búsqueda manual.",
+        );
+      }
     } finally {
       setStarting(false);
     }
@@ -97,18 +114,30 @@ export function CameraScanner({ onToken, disabled }: Props) {
               </div>
             ) : null}
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={stop} disabled={disabled}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11"
+            onClick={stop}
+            disabled={disabled}
+          >
             Detener cámara
           </Button>
         </>
       ) : (
-        <Button type="button" variant="outline" onClick={start} disabled={disabled}>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-12 text-base"
+          onClick={start}
+          disabled={disabled}
+        >
           <CameraIcon />
           Escanear con cámara
         </Button>
       )}
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm font-medium text-destructive">
           {error}
         </p>
       ) : null}
