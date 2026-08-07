@@ -22,7 +22,11 @@ import { saveProgramForSession, saveRewardRuleForSession } from "../app/(product
 import { registerStampForSession } from "../app/(product)/scanner/logic";
 import { requireTenantSession } from "../lib/supabase/session";
 import type { TenantSession } from "../lib/tenant";
-import { getFakeApnsSentPushes, getFakeGoogleWalletCalls } from "../lib/wallet/adapters";
+import {
+  __resetWalletAdaptersForTests,
+  getFakeApnsSentPushes,
+  getFakeGoogleWalletCalls,
+} from "../lib/wallet/adapters";
 import {
   createBusinessWithRealOwner,
   createPlatformAdmin,
@@ -61,9 +65,35 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void
   }
 }
 
+// Este archivo exige las impls FAKE de Apple y Google — es lo único que
+// puede grabar llamadas (getFakeApnsSentPushes/getFakeGoogleWalletCalls).
+// resolveWalletConfig() (packages/wallet/src/config.ts) decide real-vs-fake
+// leyendo process.env directo, así que NO basta con que el entorno de CI no
+// tenga WALLET_GOOGLE_*/WALLET_APPLE_* — un .env.local de desarrollo con
+// credenciales reales de Google (necesarias para probar el link real de
+// "Agregar a Google Wallet" en otras partes de la app) activaría la impl
+// real acá también y getFakeGoogleWalletCalls() devolvería null. Por eso
+// este archivo borra esas variables del process.env SOLO durante su propia
+// ejecución y fuerza __resetWalletAdaptersForTests() (lib/wallet/adapters.ts
+// ya la expone para exactamente este caso: "los tests... cambian
+// process.env entre casos... sin esto los adaptadores memoizados
+// contaminarían") — nunca toca el archivo .env.local en sí.
+const WALLET_ENV_KEYS = [
+  "WALLET_APPLE_TEAM_ID",
+  "WALLET_APPLE_PASS_TYPE_IDENTIFIER",
+  "WALLET_APPLE_PASS_CERT_PEM",
+  "WALLET_APPLE_PASS_KEY_PEM",
+  "WALLET_APPLE_WWDR_CERT_PEM",
+  "WALLET_APPLE_APNS_KEY_ID",
+  "WALLET_APPLE_APNS_PRIVATE_KEY_PEM",
+  "WALLET_GOOGLE_ISSUER_ID",
+  "WALLET_GOOGLE_SERVICE_ACCOUNT_JSON",
+] as const;
+
 describe("notifyWalletOfTransaction — hook post-sello, Apple + Google, impls fake", () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const password = "wallet-notify-password-1";
+  const originalWalletEnv: Partial<Record<(typeof WALLET_ENV_KEYS)[number], string>> = {};
 
   let platformAdminAuthUserId: string;
   let businessId: string;
@@ -75,6 +105,15 @@ describe("notifyWalletOfTransaction — hook post-sello, Apple + Google, impls f
   let programId: string;
 
   beforeAll(async () => {
+    for (const key of WALLET_ENV_KEYS) {
+      const value = process.env[key];
+      if (value !== undefined) {
+        originalWalletEnv[key] = value;
+        delete process.env[key];
+      }
+    }
+    __resetWalletAdaptersForTests();
+
     platformAdminAuthUserId = await createPlatformAdmin(`wallet-notify-admin-${suffix}@test.dev`, password);
     const ownerEmail = `wallet-notify-owner-${suffix}@test.dev`;
     const biz = await createBusinessWithRealOwner({
@@ -139,6 +178,17 @@ describe("notifyWalletOfTransaction — hook post-sello, Apple + Google, impls f
     await admin.auth.admin.deleteUser(ownerAuthUserId);
     await admin.auth.admin.deleteUser(staffAuthUserId);
     await admin.auth.admin.deleteUser(platformAdminAuthUserId);
+
+    // Restaura el process.env real (p.ej. las credenciales de Google de
+    // .env.local) para que archivos de test que corran DESPUÉS de este en
+    // el mismo proceso (fileParallelism: false, ver vitest.config.ts) vean
+    // el entorno tal cual estaba — nunca dejar el override global filtrado.
+    for (const key of WALLET_ENV_KEYS) {
+      if (originalWalletEnv[key] !== undefined) {
+        process.env[key] = originalWalletEnv[key];
+      }
+    }
+    __resetWalletAdaptersForTests();
   });
 
   async function freshCustomer(name: string) {
