@@ -26,7 +26,11 @@ const comfortaa = Comfortaa({
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="es" className={`${playfairDisplay.variable} ${comfortaa.variable}`}>
+    <html
+      lang="es"
+      className={`${playfairDisplay.variable} ${comfortaa.variable}`}
+      data-scroll-behavior="smooth"
+    >
       <body className="min-h-screen antialiased">
         {children}
         <ServiceWorkerRegister />

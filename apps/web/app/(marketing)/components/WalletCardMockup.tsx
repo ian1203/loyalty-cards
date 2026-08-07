@@ -63,44 +63,50 @@ export function WalletCardMockup({
             <p className="text-xs text-primary-foreground/70">Tarjeta de sellos</p>
           </div>
         </div>
-        <div className="flex flex-col gap-4 p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-muted-foreground">Progreso</p>
-            <p className="text-sm font-medium">
+        <div className="flex flex-col gap-5 p-5">
+          {/* Zona de progreso — el "strip" del pase: la fila de sellos es el
+              contenido visual principal, no un dato más entre otros. Label
+              en versalitas trackeadas, mismo lenguaje que un campo real de
+              Apple/Google Wallet (etiqueta chica arriba, valor debajo). */}
+          <div className="flex flex-col items-center gap-3 rounded-xl bg-muted/60 py-4">
+            <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
               {filled} de {stampsRequired} sellos
             </p>
+            <div className="flex flex-wrap justify-center gap-2" aria-hidden="true">
+              {Array.from({ length: stampsRequired }, (_, i) => (
+                <span
+                  key={i}
+                  className={
+                    i < filled
+                      ? "flex size-7 items-center justify-center rounded-full border-2 border-stamp bg-stamp text-stamp-foreground"
+                      : "flex size-7 items-center justify-center rounded-full border-2 border-border"
+                  }
+                >
+                  {i < filled ? (
+                    <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth={3}>
+                      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : null}
+                </span>
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5" aria-hidden="true">
-            {Array.from({ length: stampsRequired }, (_, i) => (
-              <span
-                key={i}
-                className={
-                  i < filled
-                    ? "flex size-6 items-center justify-center rounded-full border-2 border-stamp bg-stamp text-stamp-foreground"
-                    : "flex size-6 items-center justify-center rounded-full border-2 border-border"
-                }
-              >
-                {i < filled ? (
-                  <svg viewBox="0 0 24 24" className="size-3" fill="none" stroke="currentColor" strokeWidth={3}>
-                    <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                ) : null}
-              </span>
-            ))}
+
+          {/* Franja de recompensa — campo único, mismo patrón label/valor
+              que un "secondary field" real de Wallet. */}
+          <div className="border-t pt-4">
+            <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
+              Próxima recompensa
+            </p>
+            <p className="truncate text-base font-medium text-foreground">{rewardLabel || "Recompensa"}</p>
           </div>
-          <div
-            className={
-              compact
-                ? "flex flex-col gap-0.5 rounded-lg bg-muted px-3 py-2.5"
-                : "flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2.5"
-            }
-          >
-            <p className="whitespace-nowrap text-xs text-muted-foreground">Próxima recompensa</p>
-            <p className="truncate text-sm font-medium">{rewardLabel || "Recompensa"}</p>
-          </div>
-          <div className="flex items-center justify-between gap-3 border-t pt-3">
-            <DemoQr className="size-10 shrink-0 text-foreground/70" />
-            <p className="text-[0.6875rem] text-muted-foreground">Hecho con Pragmia</p>
+
+          {/* Código de barras — grande y centrado al pie, como en un pase
+              real (nunca la esquina chica de antes). Sigue siendo un QR
+              placeholder de demo, sin datos reales. */}
+          <div className="flex flex-col items-center gap-2 border-t pt-5">
+            <DemoQr className="size-24 shrink-0 text-foreground/80" />
+            <p className="text-[0.6875rem] text-muted-foreground">Powered by Pragmia</p>
           </div>
         </div>
       </div>
