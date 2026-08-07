@@ -372,13 +372,19 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
 
     // Mismo espíritu para el otro invariante de seguridad de esta fase: el
     // cast `as VerifiedBusinessId` (packages/db/src/tenantContext.ts) solo
-    // debería existir en los DOS puntos sancionados — sesión de Supabase
-    // (lib/supabase/session.ts) y token de PassKit (lib/wallet/passAuth.ts).
+    // debería existir en los TRES puntos sancionados — sesión de Supabase
+    // (lib/supabase/session.ts), token de PassKit (lib/wallet/passAuth.ts),
+    // y el resultado de enroll_customer_public() (lib/wallet/publicEnrollWallet.ts,
+    // /enroll público) — esa función Postgres SECURITY DEFINER resuelve el
+    // negocio EXCLUSIVAMENTE por slug con status='active' (nunca recibe un
+    // business_id como parámetro, ver packages/db/src/enroll.ts), así que su
+    // resultado es tan confiable como una sesión o un token de pase.
     // Cualquier otro sitio es exactamente lo que un review de seguridad
     // debe auditar.
     const ALLOWED_VERIFIED_BUSINESS_ID_CAST_FILES = new Set([
       "lib/supabase/session.ts",
       "lib/wallet/passAuth.ts",
+      "lib/wallet/publicEnrollWallet.ts",
     ]);
 
     function walkTsFiles(rootDir: string, onFile: (relPath: string, content: string) => void) {
@@ -414,7 +420,7 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
       expect(offenders).toEqual([]);
     });
 
-    it("ningún archivo castea 'as VerifiedBusinessId' salvo los dos puntos sancionados", () => {
+    it("ningún archivo castea 'as VerifiedBusinessId' salvo los tres puntos sancionados", () => {
       const webDir = join(__dirname, "..");
       const offenders: string[] = [];
 
