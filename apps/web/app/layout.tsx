@@ -1,30 +1,32 @@
 import type { ReactNode } from "react";
-import { Inter, Space_Grotesk } from "next/font/google";
+import { Comfortaa, Playfair_Display } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 import { ServiceWorkerRegister } from "./ServiceWorkerRegister";
 
-// Auto-hosted por Next en build time (next/font/google descarga una vez al
-// compilar y sirve los archivos desde el propio dominio) — cero request a
-// Google Fonts en runtime, mismo criterio de "sin CDN de terceros" que ya
-// rige el resto del proyecto (ver skill artifact-design, que bloquea
-// exactamente esto para los Artifacts).
-const spaceGrotesk = Space_Grotesk({
+// Identidad Pragmia (reemplaza Space Grotesk/Inter de "Sello"): Playfair
+// Display para display/títulos (serif, el "TYPO 1" del kit de marca —
+// misma familia que el wordmark del logo) + Comfortaa para cuerpo (sans
+// geométrica redondeada, "typo 2"). Auto-hosted por Next en build time —
+// cero request a Google Fonts en runtime, mismo criterio de "sin CDN de
+// terceros" que ya rige el resto del proyecto.
+const playfairDisplay = Playfair_Display({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-space-grotesk",
+  weight: ["600", "700", "800"],
+  variable: "--font-playfair-display",
   display: "swap",
 });
 
-const inter = Inter({
+const comfortaa = Comfortaa({
   subsets: ["latin"],
-  variable: "--font-inter",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-comfortaa",
   display: "swap",
 });
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="es" className={`${spaceGrotesk.variable} ${inter.variable}`}>
+    <html lang="es" className={`${playfairDisplay.variable} ${comfortaa.variable}`}>
       <body className="min-h-screen antialiased">
         {children}
         <ServiceWorkerRegister />

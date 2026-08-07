@@ -16,7 +16,10 @@
 // negocio, nunca contienen datos de tenant. Un service worker registrado
 // con un fetch handler (aunque cachee poco) ya satisface el criterio de
 // instalabilidad del navegador — no hace falta cachear HTML para eso.
-const CACHE_NAME = "loyalty-scanner-shell-v2";
+// v3: contenido de los íconos cambió (rebrand Pragmia) — el nombre de
+// archivo es el mismo, así que sin bump de versión un SW ya instalado
+// seguiría sirviendo el ícono viejo cacheado indefinidamente.
+const CACHE_NAME = "loyalty-scanner-shell-v3";
 const STATIC_ASSET_URLS = ["/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {

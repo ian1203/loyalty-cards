@@ -22,7 +22,7 @@ export default function MarketingHomePage() {
             <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{BRAND.category}</p>
             <h1 className="max-w-xl text-4xl font-bold leading-[1.05] tracking-tight text-balance sm:text-5xl">
               Crea tu programa. Registra cada visita. Haz que tus clientes{" "}
-              <span className="text-stamp">regresen</span>.
+              <span className="text-primary">regresen</span>.
             </h1>
             <p className="max-w-lg text-lg text-muted-foreground">{HERO.subhead}</p>
             <div className="flex flex-wrap items-center gap-4">

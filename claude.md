@@ -219,6 +219,250 @@ está explícitamente en `disallow`. Aviso de privacidad (`/privacidad`)
 es un BORRADOR estructurado para LFPDPPP, marcado como tal en un
 comentario de código — pendiente de revisión legal antes de publicar.
 
+## Rediseño de producto — identidad visual, app shell, dashboard, landing (branch `feat/design-overhaul`, no numerado)
+
+Trabajo de PRESENTACIÓN puro, encima de los primitivos tenant-scoped ya
+existentes (`findInTenant`, `resolveActor`, `withTenantContext`,
+`requireTenantSession`) — ninguna query de tenant cambió de forma, ningún
+by-id dejó de ser anti-IDOR, RLS/auth/cache intactos. Verificado con
+`tenant-security-reviewer` (limpio, sin hallazgos críticos/altos/medios) y
+la suite completa (212 tests) corrida 3 veces seguidas sin flakiness antes
+de cada merge. Ya **mergeado a `main`** (rango `dd22735..3b6d61b`); la
+branch `feat/design-overhaul` sigue viva para trabajo de seguimiento.
+
+**Rebrand**: el producto se vendía como "IGA Analytics" (borrador
+original en `wallet-bi-plans.md`, raíz del repo — ese archivo NO se
+edita, sigue diciendo el nombre viejo a propósito, es la fuente de copy
+histórica). Ahora es **Pragmia** en toda la UI y el contenido
+(`apps/web/lib/marketing/content.ts`, módulo tipado — nunca strings
+sueltos en JSX). Contacto real: WhatsApp `+52 229 482 8125`
+(`CONTACT.whatsappNumberDigits`, wa.me), correo `info@pragmia-data.com`.
+Regla permanente: cero menciones a "Wallet BI"/"IGA Analytics" en
+cualquier archivo bajo `apps/web/app/` o `apps/web/lib/` — solo
+comentarios de código que referencian el nombre del `.md` fuente pueden
+mencionarlo.
+
+**Identidad visual — dirección "Sello"**: el objeto real detrás del
+producto es la tarjeta de sellos física; el sistema visual la digitaliza
+en vez de inventar un lenguaje nuevo. Tokens en `apps/web/app/globals.css`
+(Tailwind v4 CSS-first, `@theme inline` — sigue sin existir
+`tailwind.config.js` ni `components.json`): marino `#14213D` (`--primary`,
+confianza/documento oficial), coral `#E8573F` (`--stamp`, el ÚNICO acento
+de marca — separado de `--accent`, que sigue siendo el tinte neutral de
+hover de shadcn), papel `#FBFAF7` (`--background`), `--success`/
+`--warning`/`--destructive` semánticos separados del acento. Valores en
+hex, no oklch (fidelidad exacta al mockup aprobado, documentado en el
+propio CSS). Tipografía: `Space Grotesk` (display) + `Inter` (cuerpo) vía
+`next/font/google` en `app/layout.tsx` — auto-hosted, cero request a CDN
+de terceros. Radio de borde en escala `sm/md/lg/xl/2xl` (base 1rem,
+antes 0.625rem fijo de shadcn). Sombras tintadas de marino
+(`--shadow-color`), no negro puro. `apps/web/components/Logo.tsx`:
+`LogoMark` (ícono SVG, dos círculos superpuestos) + `Logo` (ícono +
+wordmark "Pragmia"). Para gráficas existen tokens SEPARADOS,
+`--chart-1`/`--chart-2` (validados con `node scripts/validate_palette.js`
+de la skill `dataviz`, luz y oscuro por separado) — **nunca uses
+`--primary`/`--stamp` como color de dato en una gráfica**, fallan el
+validador de contraste/croma categórico.
+
+**App shell**: route group nuevo `apps/web/app/(product)/` envolviendo
+`dashboard/`, `rewards/`, `customers/`, `scanner/` (mover, no recrear —
+mismo patrón que ya funcionó para `(marketing)`, no cambia ninguna URL).
+Cada `page.tsx` sigue llamando `requireTenantSession()`/
+`getVerifiedSession()` de forma independiente para su propio fetch —
+`app/(product)/layout.tsx` llama el mismo primitivo UNA vez más, solo
+para renderizar el shell (nombre del negocio, email, nav), defensa en
+profundidad deliberada, no un cambio de mecanismo. `AppShell.tsx`
+(sidebar fija desktop + `Sheet`/drawer móvil), `UserMenu.tsx` (recibe
+`email`/`role` como strings, nunca el objeto de sesión), `PageHeader.tsx`
+(título + descripción + acciones + breadcrumb `back`, reemplaza los
+links sueltos "← Dashboard" de antes). `/login` reconstruido con el
+sistema de diseño (mismo `signInWithPassword`, cero cambio de lógica).
+
+**Dashboard como overview real**: `apps/web/app/(product)/dashboard/logic.ts`
+trae las queries tenant-scoped nuevas (clientes activos/inactivos,
+nuevos del periodo, visitas, redenciones, próximos a recompensa) más 3
+series semanales para gráficas `recharts` (visitas, nuevos vs.
+recurrentes, tasa de canje) coloreadas con `--chart-1`/`--chart-2`. Regla
+permanente: si varias queries agregadas comparten el mismo `tx` de
+`withTenantContext`, awaitéalas SECUENCIALMENTE, nunca `Promise.all` — un
+`tx` es una sola conexión Postgres, no soporta queries concurrentes (bug
+real cometido y corregido: síntoma fue un `DeprecationWarning` de `pg` en
+consola durante verificación en vivo). `StampRow.tsx` (fila de círculos
+de sello, usa `stampProgress()` de `@loyalty/core`) reemplaza el viejo
+`StampProgressBar.tsx` (eliminado) en dashboard, `/customers/[id]` y
+`/scanner`. `EmptyState.tsx` (ilustración SVG propia) y `RouteError.tsx`
+son ahora los únicos componentes para estado vacío/error de toda pantalla
+de feature.
+
+**Motion — sin dependencia nueva**: todo el movimiento de la plataforma
+(landing y producto) es CSS puro — `useSyncExternalStore`/
+`IntersectionObserver`/`prefers-reduced-motion`, nunca framer-motion ni
+GSAP. Se evaluó explícitamente instalar alguna al elevar la landing y se
+decidió que no hacía falta (scroll-reveal sobrio + feedback de botón no
+lo justifican). Iconografía: `lucide-react` en toda la plataforma —
+establecido desde el app shell, no cambiar de librería a media
+implementación.
+
+**Landing pública elevada** (`apps/web/app/(marketing)/`, sigue sin
+sesión/RLS/datos de tenant, sigue ○ Static en `next build` — ver regla de
+caché arriba, no cambió): además del hero y tokens de marca, la home
+ahora rompe la monotonía de "reja de tarjetas blancas" con secciones de
+layout variado: `ProductShowcase.tsx` (teléfono CSS + `WalletCardMockup`
++ `DashboardGlance.tsx`, un vistazo estilizado SVG/CSS del dashboard real,
+NO una captura ni un fake de divs), `ProblemSection.tsx` (único bloque
+navy full-bleed de toda la página, rompe el fondo papel a propósito),
+`HowItWorksStamps.tsx` (línea de tiempo con el motivo real de sellos en
+vez de tarjetas numeradas genéricas), `ComponentsBento.tsx` (bento
+asimétrico 1+2, no 3 tarjetas idénticas). `WalletCardMockup.tsx` está
+parametrizado (`businessName`/`rewardLabel`/`stampsFilled`/
+`stampsRequired`/`accentColor`/`logoSrc`/`compact`) — antes tenía
+"Café Central" fijo a fuego.
+
+**Previsualizador de tarjeta** (`CardPreviewer.tsx`, sección "Previsualiza
+tu tarjeta" en la home): widget 100% client-side, reusa
+`WalletCardMockup`. El logo del prospecto se lee con
+`URL.createObjectURL` y JAMÁS sale del navegador — nada se sube ni se
+guarda, no hay Server Action ni fetch propio de por medio (`FileReader`/
+object URL, revocado al reemplazar o desmontar). Valida tipo
+(png/jpg/svg) y tamaño (2 MB) con error inline. El CTA final arma un
+mensaje de WhatsApp personalizado con el nombre capturado
+(`buildWhatsappLink(mensaje)`). Nota de a11y real encontrada y corregida:
+el trigger de "Subir logo" NO debe ser un segundo `<label htmlFor>`
+apuntando al mismo input que ya tiene su `<Label>` de campo — dos labels
+sobre un mismo control concatenan su texto en un solo nombre accesible
+confuso; el trigger dispara el click del input vía `ref`, no vía label.
+
+**Verificación de este rediseño**: `next build` confirma que ninguna
+página de marketing dejó de ser ○ Static pese a los componentes cliente
+nuevos (`RevealOnScroll`, `CardPreviewer` son islas aisladas). Revisado
+en vivo con Playwright en desktop y mobile — dos bugs reales de layout
+encontrados y corregidos ahí (no los hubiera visto typecheck/lint): texto
+de recompensa truncado dentro del marco de teléfono angosto, y el badge
+"Próximamente" desbordando el viewport en `HowItWorksStamps` en mobile.
+
+**Pendiente, explícitamente NO hecho todavía**: FASE 2b (`/enroll`
+público) y reportes/analítica siguen sin arrancar, ver abajo.
+
+## Pulido de UX del scanner (branch `feat/design-overhaul`, no numerado)
+
+Capa de UX del cliente sobre la lógica de Fase 3 ya existente — cero
+cambio de endpoints, idempotencia, cooldown o checks de tenant/revocación,
+la UI solo REFLEJA lo que `scanner/logic.ts` ya decidía.
+`ScanResultBanner.tsx` (nuevo): resultado grande a pantalla completa tras
+cada sello — verde/`--success` para sello registrado, ámbar/`--warning`
+para cooldown (nunca tratado como error), coral/`--stamp` con ícono en
+`--primary` para "¡Recompensa disponible!" (destacado especial, sin
+auto-reset — el panel con el botón Canjear debe seguir a la vista), rojo/
+`--destructive` para "Cliente no encontrado". Siempre ícono + color +
+texto, nunca solo color. Auto-reset a los 3.5s (cancelable con un botón
+grande "Siguiente cliente") vía **remount por `key`**, no por un efecto
+reaccionando a props — evita tanto un `setState` síncrono en el cuerpo de
+un efecto (lint `react-hooks/set-state-in-effect`) como depender de
+`onReset`, que el padre recrea en cada render.
+`apps/web/lib/scannerFeedback.ts`: vibración (`navigator.vibrate`, con
+guard — iOS no lo implementa, degrada en silencio) + tono corto por Web
+Audio (sin asset ni dependencia nueva), un patrón distinto por estado.
+Preferencia de sonido en `localStorage` vía `useSyncExternalStore` (mismo
+mecanismo que `useOnlineStatus`), nunca un `useState`+`useEffect` a mano.
+Táctil para mostrador: botones clave del scanner subidos a ≥44px.
+Cámara: distingue permiso denegado de "sin cámara trasera" con mensaje
+específico en cada caso, mismo fallback (USB/búsqueda manual) siempre
+visible debajo. Punto 4 original (confirmación de canje a prueba de
+errores) **no se implementó todavía** — quedó pendiente de una siguiente
+iteración.
+
+## Rebrand "Sello" → Pragmia (branch `feat/design-overhaul`, no numerado)
+
+La dirección visual "Sello" (marino/coral, Space Grotesk/Inter, papel
+cálido) descrita arriba quedó **reemplazada por completo** por la
+identidad final de Pragmia — la sección de arriba es historia, no el
+estado actual. Fuente de la marca: `pragmia-logo/` en la raíz del repo
+(logo.jpeg, icon.jpeg, tipografias.jpeg, colores.jpeg — no trackeado en
+git, son artes de referencia, no assets que la app cargue en runtime).
+
+**Paleta** (`apps/web/app/globals.css`): `--primary` azul `#085AB3`,
+`--stamp` celeste `#51CADE`, `--foreground` negro `#000000`, fondo neutro
+frío `#F5F8FC` (ya no el "papel" cálido, atado al concepto de tarjeta
+física que este rebrand reemplaza). Regla nueva importante: `--stamp`
+(celeste) es demasiado claro para leerse como texto/ícono/borde sobre
+fondo claro (1.9:1 de contraste, falla WCAG) — solo se usa como RELLENO
+con `--stamp-foreground` (negro en claro, casi-negro en oscuro) encima
+nunca como `text-stamp`/`border-stamp` sueltos sobre `--background`. Los
+usos que antes eran texto/ícono suelto en coral pasaron a `--primary`.
+`--chart-1`/`--chart-2` recalculados (`#2E7FC9`/`#EB6834` en claro,
+`#3F8AD1`/`#D9702E` en oscuro) y revalidados con
+`node scripts/validate_palette.js` de la skill `dataviz` — ALL CHECKS
+PASS en los dos modos.
+
+**Tipografía**: `Playfair Display` (display/títulos, reemplaza Space
+Grotesk) + `Comfortaa` (cuerpo, reemplaza Inter), identificadas por
+comparación visual directa contra `tipografias.jpeg` (no hay forma de
+extraer el nombre de fuente de un JPEG con certeza absoluta — se
+compararon candidatos de Google Fonts letra por letra antes de aplicar).
+Auto-hosted vía `next/font/google` en `app/layout.tsx`, mismo criterio de
+siempre.
+
+**Logo/favicon**: `components/Logo.tsx` — `LogoMark` ahora es un PNG
+(`public/brand/pragmia-icon.png`, fondo recortado a transparente vía
+flood-fill, más una variante `-white.png` para fondos `--primary`, ver
+`WalletCardMockup.tsx`), no un SVG a mano: el motivo de anillos
+concéntricos + diamante del ícono real es demasiado fino para vectorizar
+a ojo sin arriesgar desviarse del arte aprobado — a los tamaños reales de
+uso (ícono de sidebar, favicon) un PNG de alta resolución no pierde
+nitidez visible. El wordmark "PRAGMIA" sigue siendo texto real (nunca
+imagen), en `font-display`. Favicon nuevo en `app/icon.png`, íconos PWA
+maskable regenerados en `public/icons/` (blanco sobre azul primario,
+zona segura ~62%) — `apps/web/public/sw.js` con bump de `CACHE_NAME`
+(`v3`) para que un service worker ya instalado no siga sirviendo el
+ícono viejo cacheado indefinidamente (el nombre de archivo no cambió,
+solo el contenido).
+
+**Landing**: quitado "Hecho en {ciudad}" de `TrustBar.tsx`.
+`WalletCardMockup.tsx` (reusado por el hero, `ProductShowcase` y
+`CardPreviewer` — un solo componente) ahora incluye un QR de demo
+(`DemoQr`, SVG inline generado offline con la librería `qrcode` a partir
+de un string de marca fijo, **nunca** un `wallet_token` real) + una línea
+discreta "Hecho con Pragmia". Bug real de layout encontrado y corregido
+en el camino (Playwright mobile): `CardPreviewer.tsx` desbordaba
+horizontalmente en mobile — un item de grid con `mx-auto` en los dos
+lados se dimensiona por `fit-content` en vez de estirarse a la celda
+(spec de CSS Box Alignment), y el `max-w-sm` de `WalletCardMockup` como
+contenido no cabía en el viewport; el fix fue `w-full` en vez de
+`mx-auto` en ese wrapper.
+
+**Bug de plataforma encontrado y corregido, no relacionado al rebrand**:
+Next.js 16 bloquea por default el runtime de dev (`next dev`, incluida la
+hidratación del cliente) si el `Origin` de la request no está en
+`allowedDevOrigins` — ni `127.0.0.1` ni un túnel (`cloudflared`, para
+probar en teléfono real) cuentan como "localhost" automáticamente. Sin
+esto, el JS nunca hidrata: un `<form>` queda como HTML inerte y un submit
+real hace un GET nativo a la misma URL en vez de correr el `onSubmit` de
+React — así se manifestó (login que "no hace nada"). Fix permanente en
+`apps/web/next.config.mjs`: `allowedDevOrigins: ["127.0.0.1", "localhost",
+"*.trycloudflare.com"]`. Solo afecta `next dev`, un build de producción no
+tiene este runtime.
+
+**Verificado**: `next build` (marketing sigue ○ Static), lint/typecheck
+limpios, suite completa, revisado en vivo con Playwright en desktop
+(1440px), tablet (820px) y mobile (390px) — dashboard, scanner, clientes,
+programa, landing y el drawer de nav móvil. `tenant-security-reviewer`
+confirmó que el diff completo (colores, fuentes, logo, favicon,
+`WalletCardMockup`, `ScanResultBanner`, `sw.js`) es presentación pura —
+cero referencia a `business_id`/sesión/RLS/`adminDb` en los archivos
+tocados.
+
+**"Negocio de Prueba" (local, no hosted)**: con tu visto bueno explícito,
+se pobló con datos de demo de "Chilaquikes" — rebrand del negocio,
+programa "Club de la Gorrita" (6 sellos), recompensa "Orden de
+chilaquiles gratis", 2 sucursales, 1 empleado demo, 39 clientes con
+nombres realistas e historial de 8 semanas (transacciones/redenciones con
+fechas explícitas, no producido por `scanner/logic.ts` — esas funciones
+siempre usan `now()` a propósito). Ejecutado vía un script `.test.ts` de
+un solo uso (mismo patrón que corre dentro de Vitest para resolver los
+imports extensionless de `logic.ts`/`testAuth.ts`), borrado después de
+correrlo. Sigue siendo el mismo tenant local de siempre, no un negocio
+hosted nuevo.
+
 ## Fase actual: sin definir todavía
 FASE 2b (`/enroll` público para que el cliente final se dé de alta solo,
 con su propio QR) y reportes/analítica son los candidatos — ninguna de las

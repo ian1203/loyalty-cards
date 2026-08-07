@@ -7,3 +7,9 @@ build/
 *.tsbuildinfo
 .DS_Store
 .playwright-mcp/
+
+# Credenciales/activos de demo pegados sueltos en la raíz — nunca al repo
+# (ver docs/WALLET-SETUP.md: WALLET_GOOGLE_SERVICE_ACCOUNT_JSON va en env,
+# nunca committeado como archivo).
+pragmia-loyalty-platform-*.json
+chilaquikes-logo*.png

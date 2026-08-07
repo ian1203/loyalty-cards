@@ -28,7 +28,7 @@ export function LocationPicker({ locations, onSelect }: Props) {
             key={location.id}
             type="button"
             variant="outline"
-            className="justify-start"
+            className="h-12 justify-start text-base"
             onClick={() => onSelect(location.id)}
           >
             <MapPinIcon />

@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
+import { Volume2Icon, VolumeXIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
+import { Button } from "../../../components/ui/button";
 import { useOnlineStatus } from "../../../lib/useOnlineStatus";
+import { playFeedbackTone, triggerHapticFeedback, type ScanFeedbackKind } from "../../../lib/scannerFeedback";
 import { CameraScanner } from "./CameraScanner";
 import { CustomerPanel } from "./CustomerPanel";
 import { LocationPicker } from "./LocationPicker";
 import { ManualSearch } from "./ManualSearch";
 import { ScanInput } from "./ScanInput";
+import { ScanResultBanner, type ScanResultKind } from "./ScanResultBanner";
 import {
   lookupCustomerAction,
   lookupCustomerByIdAction,
@@ -17,6 +21,106 @@ import {
 import type { ScannerCustomerView, ScannerResult } from "./logic";
 
 type Location = { id: string; name: string };
+
+type ActionKind = "lookup" | "stamp" | "redeem";
+
+type Banner = {
+  kind: ScanResultKind;
+  title: string;
+  description?: string | null;
+  autoResetMs: number | null;
+};
+
+const AUTO_RESET_MS = 3500;
+const SOUND_PREF_KEY = "scanner-sound-enabled";
+const SOUND_PREF_EVENT = "scanner-sound-pref-changed";
+
+// Preferencia de sonido en localStorage vía useSyncExternalStore — mismo
+// mecanismo y mismo motivo que useOnlineStatus.ts (skill
+// frontend-conventions): evita el mismatch de hidratación por diseño
+// (getServerSnapshot fija "true" de antemano) y no dispara el lint de
+// "setState síncrono en un efecto" que sí dispara un useState+useEffect a
+// mano. localStorage no tiene evento propio en la MISMA pestaña que lo
+// escribe (el evento "storage" solo llega a otras pestañas) — por eso
+// toggleSound() dispara un Event propio además de escribir el valor.
+function subscribeSoundPref(callback: () => void): () => void {
+  window.addEventListener("storage", callback);
+  window.addEventListener(SOUND_PREF_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(SOUND_PREF_EVENT, callback);
+  };
+}
+
+function getSoundPrefSnapshot(): boolean {
+  return window.localStorage.getItem(SOUND_PREF_KEY) !== "false";
+}
+
+function getSoundPrefServerSnapshot(): boolean {
+  return true;
+}
+
+// Deriva el banner grande (punto 1 de la mejora de UX del scanner) a partir
+// del resultado crudo del server — la UI solo CLASIFICA visualmente lo que
+// logic.ts ya decidió (cooldown, sellos insuficientes, etc.), nunca
+// reinterpreta la regla de negocio. redeem se deja fuera a propósito: el
+// canje sigue con su Alert chico existente hasta la siguiente iteración
+// (confirmación de canje, punto 4 — explícitamente no tocado todavía).
+function buildBanner(action: ActionKind, result: ScannerResult): Banner | null {
+  if (result.ok) {
+    if (action !== "stamp") return null;
+
+    const availableReward = result.view.rewardOptions.find((option) => option.available);
+    if (availableReward) {
+      return {
+        kind: "reward",
+        title: "¡Recompensa disponible!",
+        description: `${result.view.customer.fullName ?? "Cliente"} — ${availableReward.name}`,
+        // Sin auto-reset: el panel (con el botón Canjear) debe seguir a la
+        // vista hasta que el empleado actúe, no puede desaparecer solo.
+        autoResetMs: null,
+      };
+    }
+
+    return {
+      kind: "success",
+      title: `Sello registrado — ${result.view.progress.currentStamps} de ${result.view.progress.stampsRequired}`,
+      description: result.view.customer.fullName ?? null,
+      autoResetMs: AUTO_RESET_MS,
+    };
+  }
+
+  if (action === "stamp" && result.code === "cooldown") {
+    const detail = result.error.split("—")[1]?.trim();
+    return {
+      kind: "cooldown",
+      title: "Sello reciente ya registrado",
+      description: detail ?? result.error,
+      autoResetMs: AUTO_RESET_MS,
+    };
+  }
+
+  if (action === "lookup") {
+    const notFound = /no encontrado/i.test(result.error);
+    return {
+      kind: "error",
+      title: notFound ? "Cliente no encontrado" : "No se pudo completar",
+      description: notFound ? null : result.error,
+      autoResetMs: AUTO_RESET_MS,
+    };
+  }
+
+  if (action === "stamp") {
+    return {
+      kind: "error",
+      title: "No se pudo registrar el sello",
+      description: result.error,
+      autoResetMs: AUTO_RESET_MS,
+    };
+  }
+
+  return null;
+}
 
 // Orquestador del scanner: sucursal → escaneo (cámara + USB al mismo
 // onToken) → tarjeta del cliente → sellar/canjear → búsqueda manual como
@@ -30,14 +134,37 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
   const [view, setView] = useState<ScannerCustomerView | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<Banner | null>(null);
+  // Fuerza un remount de <ScanResultBanner> por cada resultado nuevo (ver
+  // el comentario en ese archivo) — así su countdown se reinicia por key,
+  // nunca por un efecto reaccionando a props.
+  const [resultId, setResultId] = useState(0);
   const [pending, startTransition] = useTransition();
+  const soundEnabled = useSyncExternalStore(
+    subscribeSoundPref,
+    getSoundPrefSnapshot,
+    getSoundPrefServerSnapshot,
+  );
 
-  function applyResult(result: ScannerResult) {
+  function toggleSound() {
+    window.localStorage.setItem(SOUND_PREF_KEY, String(!soundEnabled));
+    window.dispatchEvent(new Event(SOUND_PREF_EVENT));
+  }
+
+  function fireFeedback(kind: ScanFeedbackKind) {
+    triggerHapticFeedback(kind);
+    if (soundEnabled) playFeedbackTone(kind);
+  }
+
+  function applyResult(action: ActionKind, result: ScannerResult) {
+    const nextBanner = buildBanner(action, result);
+    setBanner(nextBanner);
+    setResultId((id) => id + 1);
+    if (nextBanner) fireFeedback(nextBanner.kind);
+
     if (result.ok) {
       setView(result.view);
-      setError(null);
-      setMessage(result.message ?? null);
+      setMessage(action === "redeem" ? (result.message ?? null) : null);
       // Se regenera SOLO tras una respuesta ok (éxito o replay confirmado):
       // ante un rechazo de regla de negocio (cooldown, sellos insuficientes)
       // no se creó ninguna fila con esta key, así que reintentar con la
@@ -45,43 +172,52 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
       // fue, por ejemplo, un corte de red antes de recibir la respuesta.
       setIdempotencyKey(crypto.randomUUID());
     } else {
-      setError(result.error);
       setMessage(null);
+      // Solo lookup limpia el panel — un error al sellar/canjear no debe
+      // hacer desaparecer al cliente que sigue frente al mostrador.
+      if (action === "lookup") setView(null);
     }
   }
 
+  function resetToScan() {
+    setView(null);
+    setBanner(null);
+    setMessage(null);
+    setIdempotencyKey(crypto.randomUUID());
+  }
+
   function handleToken(token: string) {
-    setError(null);
+    setBanner(null);
     startTransition(async () => {
       const result = await lookupCustomerAction(token);
-      applyResult(result);
+      applyResult("lookup", result);
     });
   }
 
   function handleManualSelect(customerId: string) {
-    setError(null);
+    setBanner(null);
     startTransition(async () => {
       const result = await lookupCustomerByIdAction(customerId);
-      applyResult(result);
+      applyResult("lookup", result);
     });
   }
 
   function handleStamp() {
     if (!view || !locationId) return;
-    setError(null);
+    setBanner(null);
     startTransition(async () => {
       const result = await registerStampAction({
         customerId: view.customer.id,
         locationId,
         idempotencyKey,
       });
-      applyResult(result);
+      applyResult("stamp", result);
     });
   }
 
   function handleRedeem(ruleId: string) {
     if (!view || !locationId) return;
-    setError(null);
+    setBanner(null);
     startTransition(async () => {
       const result = await redeemRewardAction({
         customerId: view.customer.id,
@@ -89,15 +225,8 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
         locationId,
         idempotencyKey,
       });
-      applyResult(result);
+      applyResult("redeem", result);
     });
-  }
-
-  function handleClear() {
-    setView(null);
-    setError(null);
-    setMessage(null);
-    setIdempotencyKey(crypto.randomUUID());
   }
 
   if (!online) {
@@ -121,13 +250,32 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>No se pudo completar</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={toggleSound}
+          aria-pressed={soundEnabled}
+          className="text-muted-foreground"
+        >
+          {soundEnabled ? <Volume2Icon className="size-4" /> : <VolumeXIcon className="size-4" />}
+          {soundEnabled ? "Sonido activado" : "Sonido silenciado"}
+        </Button>
+      </div>
+
+      {banner ? (
+        <ScanResultBanner
+          key={resultId}
+          kind={banner.kind}
+          title={banner.title}
+          description={banner.description}
+          autoResetMs={banner.autoResetMs}
+          onReset={resetToScan}
+        />
       ) : null}
-      {message && !error ? (
+
+      {message ? (
         <Alert>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
@@ -138,10 +286,10 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
           view={view}
           onStamp={handleStamp}
           onRedeem={handleRedeem}
-          onClear={handleClear}
+          onClear={resetToScan}
           pending={pending}
         />
-      ) : (
+      ) : banner ? null : (
         <div className="flex flex-col gap-4">
           <ScanInput onToken={handleToken} disabled={pending} />
           <CameraScanner onToken={handleToken} disabled={pending} />

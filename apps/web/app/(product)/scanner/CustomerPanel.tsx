@@ -26,8 +26,8 @@ export function CustomerPanel({ view, onStamp, onRedeem, onClear, pending }: Pro
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>{customer.fullName ?? "(sin nombre)"}</CardTitle>
-          <Button type="button" variant="ghost" size="sm" onClick={onClear}>
+          <CardTitle className="text-xl">{customer.fullName ?? "(sin nombre)"}</CardTitle>
+          <Button type="button" variant="ghost" size="sm" className="h-9" onClick={onClear}>
             Otro cliente
           </Button>
         </div>
@@ -46,7 +46,16 @@ export function CustomerPanel({ view, onStamp, onRedeem, onClear, pending }: Pro
           <StampRow current={progress.currentStamps} required={progress.stampsRequired} />
         </div>
 
-        <Button type="button" onClick={onStamp} disabled={pending || !program.isActive}>
+        {/* Botón principal del mostrador: mín. 44px de alto (táctil, legible
+            a distancia de brazo en tablet) — deliberadamente más grande que
+            el resto de los controles de la pantalla. */}
+        <Button
+          type="button"
+          onClick={onStamp}
+          disabled={pending || !program.isActive}
+          size="lg"
+          className="h-14 text-base font-semibold"
+        >
           {pending ? "Procesando…" : "Registrar sello"}
         </Button>
 
@@ -67,9 +76,9 @@ export function CustomerPanel({ view, onStamp, onRedeem, onClear, pending }: Pro
                 <Button
                   type="button"
                   variant={option.available ? "default" : "outline"}
-                  size="sm"
                   disabled={pending || !option.available}
                   onClick={() => onRedeem(option.id)}
+                  className="h-11 px-5"
                 >
                   Canjear
                 </Button>

@@ -56,7 +56,7 @@ export function WalletCardMockup({
               className="size-6 shrink-0 rounded-full border border-white/40 bg-white object-contain"
             />
           ) : (
-            <LogoMark className="size-6 shrink-0 [&_circle:first-child]:stroke-white" />
+            <LogoMark className="size-6 shrink-0" tone="on-primary" />
           )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold leading-tight">{businessName}</p>
@@ -98,8 +98,29 @@ export function WalletCardMockup({
             <p className="whitespace-nowrap text-xs text-muted-foreground">Próxima recompensa</p>
             <p className="truncate text-sm font-medium">{rewardLabel || "Recompensa"}</p>
           </div>
+          <div className="flex items-center justify-between gap-3 border-t pt-3">
+            <DemoQr className="size-10 shrink-0 text-foreground/70" />
+            <p className="text-[0.6875rem] text-muted-foreground">Hecho con Pragmia</p>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// QR estático de demo — SVG pre-generado (librería `qrcode`, offline, una
+// sola vez) codificando un string de marca fijo, nunca datos reales ni un
+// wallet_token: esta tarjeta es un mockup de marketing, no un pase real.
+// Inline en vez de un <img>: cero request, cero asset que servir.
+function DemoQr({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 21 21" shapeRendering="crispEdges" className={className} aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+        d="M0 0.5h7m1 0h3m3 0h7M0 1.5h1m5 0h1m3 0h2m2 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m2 0h1m1 0h2m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h3m3 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m1 0h3m1 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h1m3 0h1m1 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h2M0 8.5h1m3 0h1m1 0h4m2 0h6m2 0h1M0 9.5h2m1 0h1m3 0h2m3 0h1m2 0h2m1 0h3M4 10.5h3m1 0h1m3 0h1m1 0h1m1 0h1m1 0h1M1 11.5h1m3 0h1m3 0h6m2 0h2M1 12.5h3m1 0h2m4 0h1m2 0h2m3 0h1M8 13.5h1m1 0h1m1 0h1m2 0h1m1 0h4M0 14.5h7m1 0h2m1 0h1m1 0h1m2 0h2m1 0h2M0 15.5h1m5 0h1m2 0h1m1 0h2m2 0h1m2 0h1M0 16.5h1m1 0h3m1 0h1m1 0h1m4 0h2m1 0h2m1 0h1M0 17.5h1m1 0h3m1 0h1m3 0h3m1 0h2m1 0h1m1 0h2M0 18.5h1m1 0h3m1 0h1m2 0h4m3 0h2M0 19.5h1m5 0h1m2 0h6m2 0h1m2 0h1M0 20.5h7m1 0h1m1 0h2m1 0h1m1 0h2m1 0h3"
+      />
+    </svg>
   );
 }

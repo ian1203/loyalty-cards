@@ -38,7 +38,7 @@ export function ComponentsBento() {
             <div className="flex h-full flex-col rounded-2xl border bg-card p-6">
               <div className="flex items-center gap-2">
                 <span className="flex size-9 items-center justify-center rounded-full bg-secondary">
-                  <SparklesIcon className="size-4 text-stamp" aria-hidden="true" />
+                  <SparklesIcon className="size-4 text-primary" aria-hidden="true" />
                 </span>
                 {benefit.comingSoon ? <ComingSoonBadge /> : null}
               </div>
