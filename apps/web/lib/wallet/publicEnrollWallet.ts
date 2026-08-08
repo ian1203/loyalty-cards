@@ -86,7 +86,13 @@ export async function downloadEnrollmentApplePass(
       return { ok: false };
     }
 
-    const result = await generateApplePkpassForCustomer(tx, auth.businessId, row.customerId);
+    let result;
+    try {
+      result = await generateApplePkpassForCustomer(tx, auth.businessId, row.customerId);
+    } catch (error) {
+      console.error("downloadEnrollmentApplePass:", error);
+      return { ok: false };
+    }
     if (!result.ok) {
       return { ok: false };
     }

@@ -1,4 +1,3 @@
-import sharp from "sharp";
 import type { RgbColor } from "./placeholderIcon";
 
 // strip.png de storeCard: banner que Wallet muestra debajo del header
@@ -25,7 +24,13 @@ export type StripImageInput = {
   scale: 1 | 2 | 3;
 };
 
+// import() dinámico a propósito — mismo motivo que logoImage.ts: un
+// import estático de sharp revienta /enroll y /scanner completos (500
+// duro) apenas algo importa este módulo, incluso para negocios sin hero
+// cargado. Con import() dentro de la función, un fallo del binario nativo
+// lo atrapa el try/catch best-effort de publicEnrollWallet.ts.
 export async function buildStripImage(input: StripImageInput): Promise<Buffer> {
+  const { default: sharp } = await import("sharp");
   const width = BASE_WIDTH * input.scale;
   const height = BASE_HEIGHT * input.scale;
   // La foto ocupa la porción de arriba; una banda sólida del color de

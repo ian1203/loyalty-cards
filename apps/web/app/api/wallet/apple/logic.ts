@@ -200,7 +200,13 @@ export async function getLatestPass(input: {
       return UNAUTHORIZED;
     }
 
-    const result = await generateApplePkpassForCustomer(tx, auth.businessId, row.customerId);
+    let result;
+    try {
+      result = await generateApplePkpassForCustomer(tx, auth.businessId, row.customerId);
+    } catch (error) {
+      console.error("getLatestPass:", error);
+      return { status: 404, headers: NO_STORE };
+    }
     if (!result.ok) {
       return { status: 404, headers: NO_STORE };
     }
