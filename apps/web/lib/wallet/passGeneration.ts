@@ -1,9 +1,10 @@
 import { and, eq } from "drizzle-orm";
-import { buildPassJson, buildPkpass } from "@loyalty/wallet";
+import { buildLogoImage, buildPassJson, buildPkpass, buildStripImage, type RgbColor } from "@loyalty/wallet";
 import { walletPasses, type TenantTransaction, type VerifiedBusinessId } from "@loyalty/db";
 import { getApplePassTypeIdentifier, getAppleTeamIdentifier, getPkpassSigner } from "./adapters";
-import { deriveBrandColor } from "./brandColor";
+import { deriveBrandColor, hexToRgb } from "./brandColor";
 import { loadCustomerLoyaltySnapshot } from "./loyaltySnapshot";
+import { resolveBusinessAssetBuffer } from "./businessAssets";
 
 export type GeneratePkpassResult =
   | { ok: true; pkpass: Buffer; walletPassId: string }
@@ -47,6 +48,60 @@ export async function generateApplePkpassForCustomer(
   if (!siteUrl) {
     throw new Error("NEXT_PUBLIC_SITE_URL no está configurado.");
   }
+
+  // Branding real (businesses.brand_color_hex) SOLO cambia la paleta —
+  // sin él, el pase se ve EXACTAMENTE como antes (fondo blanco, texto gris
+  // oscuro, ícono hash-derivado): cero cambio de comportamiento para
+  // negocios sin marca cargada todavía.
+  const brandColorHex = snapshot.businessBrandColorHex;
+  const backgroundRgb: RgbColor = brandColorHex ? hexToRgb(brandColorHex) : [255, 255, 255];
+  const foregroundRgb: RgbColor = brandColorHex ? [255, 244, 227] : [30, 30, 30];
+  const labelRgb: RgbColor = brandColorHex ? [255, 217, 179] : [110, 110, 110];
+  const iconRgb: RgbColor = brandColorHex ? backgroundRgb : deriveBrandColor(businessId);
+
+  // logo.png/strip.png son best-effort: un asset roto/ausente no debe
+  // tumbar la generación del pase (mismo criterio que
+  // notifyWalletOfTransaction) — sin ellos, el pase sigue siendo válido,
+  // solo sin esa pieza visual.
+  const [logoBuffer, heroBuffer] = await Promise.all([
+    resolveBusinessAssetBuffer(snapshot.businessWalletLogoUrl),
+    resolveBusinessAssetBuffer(snapshot.businessWalletHeroUrl),
+  ]);
+
+  const logoPng = logoBuffer
+    ? {
+        at1x: await buildLogoImage(logoBuffer, 1),
+        at2x: await buildLogoImage(logoBuffer, 2),
+        at3x: await buildLogoImage(logoBuffer, 3),
+      }
+    : undefined;
+
+  const stripPng = heroBuffer
+    ? {
+        at1x: await buildStripImage({
+          heroImageBuffer: heroBuffer,
+          bandRgb: backgroundRgb,
+          currentStamps: snapshot.currentStamps,
+          stampsRequired: snapshot.stampsRequired,
+          scale: 1,
+        }),
+        at2x: await buildStripImage({
+          heroImageBuffer: heroBuffer,
+          bandRgb: backgroundRgb,
+          currentStamps: snapshot.currentStamps,
+          stampsRequired: snapshot.stampsRequired,
+          scale: 2,
+        }),
+        at3x: await buildStripImage({
+          heroImageBuffer: heroBuffer,
+          bandRgb: backgroundRgb,
+          currentStamps: snapshot.currentStamps,
+          stampsRequired: snapshot.stampsRequired,
+          scale: 3,
+        }),
+      }
+    : undefined;
+
   const passJson = buildPassJson({
     serialNumber: walletPass.id,
     authenticationToken: walletPass.authenticationToken,
@@ -60,17 +115,15 @@ export async function generateApplePkpassForCustomer(
     stampsRequired: snapshot.stampsRequired,
     rewardName: snapshot.rewardName,
     walletToken: snapshot.walletToken,
-    colors: {
-      backgroundRgb: [255, 255, 255],
-      foregroundRgb: [30, 30, 30],
-      labelRgb: [110, 110, 110],
-    },
+    colors: { backgroundRgb, foregroundRgb, labelRgb },
   });
 
   const pkpass = await buildPkpass({
     passJson,
     signer: getPkpassSigner(),
-    iconRgb: deriveBrandColor(businessId),
+    iconRgb,
+    logoPng,
+    stripPng,
   });
 
   return { ok: true, pkpass, walletPassId: walletPass.id };

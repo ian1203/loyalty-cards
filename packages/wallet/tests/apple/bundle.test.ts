@@ -28,7 +28,7 @@ const passJsonInput: PassJsonInput = {
 };
 
 describe("buildPkpass — con firma FAKE (rápido, sin openssl)", () => {
-  it("produce un zip válido con las 5 entradas esperadas", async () => {
+  it("produce un zip válido con las 6 entradas esperadas (sin logo/strip, negocio sin branding real)", async () => {
     const pkpass = await buildPkpass({
       passJson: buildPassJson(passJsonInput),
       signer: createFakePkpassSigner(),
@@ -40,10 +40,46 @@ describe("buildPkpass — con firma FAKE (rápido, sin openssl)", () => {
     expect(names).toEqual([
       "icon.png",
       "icon@2x.png",
+      "icon@3x.png",
       "manifest.json",
       "pass.json",
       "signature",
     ]);
+  });
+
+  it("con logoPng/stripPng, agrega las 6 entradas de imagen extra al zip y al manifest", async () => {
+    const onePixelPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    );
+    const pkpass = await buildPkpass({
+      passJson: buildPassJson(passJsonInput),
+      signer: createFakePkpassSigner(),
+      iconRgb: [200, 50, 50],
+      logoPng: { at1x: onePixelPng, at2x: onePixelPng, at3x: onePixelPng },
+      stripPng: { at1x: onePixelPng, at2x: onePixelPng, at3x: onePixelPng },
+    });
+
+    const zip = new AdmZip(pkpass);
+    const names = zip.getEntries().map((e) => e.entryName).sort();
+    expect(names).toEqual([
+      "icon.png",
+      "icon@2x.png",
+      "icon@3x.png",
+      "logo.png",
+      "logo@2x.png",
+      "logo@3x.png",
+      "manifest.json",
+      "pass.json",
+      "signature",
+      "strip.png",
+      "strip@2x.png",
+      "strip@3x.png",
+    ]);
+
+    const manifestEntry = zip.getEntry("manifest.json");
+    const manifest = JSON.parse(manifestEntry!.getData().toString("utf8"));
+    expect(Object.keys(manifest).sort()).toEqual(names.filter((n) => n !== "manifest.json" && n !== "signature").sort());
   });
 
   it("pass.json dentro del zip es el mismo JSON que se le pasó", async () => {
