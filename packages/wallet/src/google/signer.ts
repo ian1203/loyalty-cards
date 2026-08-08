@@ -76,7 +76,8 @@ async function upsert(
   });
   if (insertRes.ok) return;
   if (insertRes.status !== 409) {
-    throw new Error(`Google Wallet API respondió ${insertRes.status} al crear ${resourceId}.`);
+    const body = await insertRes.text().catch(() => "");
+    throw new Error(`Google Wallet API respondió ${insertRes.status} al crear ${resourceId}: ${body}`);
   }
   const patchRes = await fetchImpl(`${collectionUrl}/${resourceId}`, {
     method: "PATCH",
@@ -84,7 +85,8 @@ async function upsert(
     body: JSON.stringify(payload),
   });
   if (!patchRes.ok) {
-    throw new Error(`Google Wallet API respondió ${patchRes.status} al actualizar ${resourceId}.`);
+    const body = await patchRes.text().catch(() => "");
+    throw new Error(`Google Wallet API respondió ${patchRes.status} al actualizar ${resourceId}: ${body}`);
   }
 }
 

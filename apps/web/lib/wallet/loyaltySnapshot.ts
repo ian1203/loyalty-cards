@@ -22,7 +22,16 @@ export type CustomerLoyaltySnapshot = {
   customerFirstName: string | null;
   currentStamps: number;
   stampsRequired: number;
+  // Recompensa YA desbloqueada al balance actual (o null) — lo que
+  // consume Apple (passJson.ts, "Recompensa disponible"): solo se anuncia
+  // una vez lista para canjear, nunca antes.
   rewardName: string | null;
+  // Recompensa hacia la que el cliente está avanzando, sin importar si ya
+  // la desbloqueó — lo que consume Google (loyaltyPayload.ts,
+  // buildProgressMessage): "4 de 6 sellos, a 2 de tu X" solo tiene sentido
+  // si X existe ANTES de llegar. `rules` ya viene ordenado por
+  // stampsRequired ascendente, así que el primero es el próximo hito.
+  nextRewardName: string | null;
   walletToken: string;
 };
 
@@ -96,6 +105,7 @@ export async function loadCustomerLoyaltySnapshot(
     currentStamps,
     stampsRequired: program.stampsRequired,
     rewardName: firstAvailable?.name ?? null,
+    nextRewardName: rules[0]?.name ?? null,
     walletToken: customer.walletToken,
   };
 }

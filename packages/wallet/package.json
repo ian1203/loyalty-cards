@@ -8,7 +8,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "demo:chilaquikes": "node --env-file-if-exists=../../apps/web/.env.local --experimental-strip-types scripts/generate-chilaquikes-demo.ts"
+    "demo:chilaquikes": "node --env-file-if-exists=../../apps/web/.env.local --experimental-strip-types scripts/generate-chilaquikes-demo.ts",
+    "prod-class:chilaquikes": "node --env-file-if-exists=../../apps/web/.env.local --experimental-strip-types scripts/create-chilaquikes-production-class.ts"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

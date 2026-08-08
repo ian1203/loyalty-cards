@@ -43,7 +43,12 @@ export async function buildGoogleSaveLinkForCustomer(
     customerFirstName: snapshot.customerFirstName,
     currentStamps: snapshot.currentStamps,
     stampsRequired: snapshot.stampsRequired,
-    rewardName: snapshot.rewardName,
+    // nextRewardName (no rewardName): Google no tiene rejilla gráfica de
+    // sellos, el texto motivador de buildProgressMessage es la única
+    // forma de comunicar avance — necesita el nombre de la recompensa
+    // DESDE el primer sello, no solo cuando ya está lista (eso sí aplica
+    // a Apple, ver rewardName/passGeneration.ts).
+    rewardName: snapshot.nextRewardName,
     walletToken: snapshot.walletToken,
   });
 
