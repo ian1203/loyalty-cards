@@ -5,3 +5,17 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+overrides:
+  # sharp 0.35.x no carga su binario libvips en las funciones serverless
+  # de Vercel (ERR_DLOPEN_FAILED — bug documentado: lovell/sharp #4543,
+  # #4567). next@16 trae su propio sharp interno para next/image, así que
+  # sin este override coexistían 2 versiones (0.34.5 de next, 0.35.3 de
+  # packages/wallet) y la nuestra era la rota.
+  sharp: 0.34.5
+supportedArchitectures:
+  os:
+    - current
+    - linux
+  cpu:
+    - current
+    - x64

@@ -29,6 +29,25 @@ const nextConfig = {
   // con hero/logo de Wallet cargado). serverExternalPackages deja que
   // Node lo resuelva con require() normal en vez de bundlearlo.
   serverExternalPackages: ["sharp"],
+  // Refuerzo explícito (además de serverExternalPackages) para las rutas
+  // que de verdad llaman generateApplePkpassForCustomer — fuerza incluir
+  // el binario nativo linux-x64 de sharp en el bundle de esas funciones
+  // serverless puntuales, sin depender solo de que el tracer automático
+  // lo siga bien.
+  outputFileTracingIncludes: {
+    "/api/wallet/apple/**": [
+      "./node_modules/.pnpm/@img+sharp-linux-x64@*/**/*",
+      "./node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/**/*",
+    ],
+    "/enroll/**": [
+      "./node_modules/.pnpm/@img+sharp-linux-x64@*/**/*",
+      "./node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/**/*",
+    ],
+    "/customers/**": [
+      "./node_modules/.pnpm/@img+sharp-linux-x64@*/**/*",
+      "./node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/**/*",
+    ],
+  },
 };
 
 export default nextConfig;
