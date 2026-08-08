@@ -9,16 +9,17 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "demo:chilaquikes": "node --env-file-if-exists=../../apps/web/.env.local --experimental-strip-types scripts/generate-chilaquikes-demo.ts",
-    "prod-class:chilaquikes": "node --env-file-if-exists=../../apps/web/.env.local --experimental-strip-types scripts/create-chilaquikes-production-class.ts"
+    "prod-class:chilaquikes": "node --env-file-if-exists=../../apps/web/.env.local --experimental-strip-types scripts/create-chilaquikes-production-class.ts",
+    "generate-pass-assets": "node --experimental-strip-types scripts/generate-pass-assets.ts"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
     "jose": "^6.2.0",
-    "node-forge": "^1.3.1",
-    "sharp": "0.34.5"
+    "node-forge": "^1.3.1"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
-    "@types/node-forge": "^1.3.14"
+    "@types/node-forge": "^1.3.14",
+    "sharp": "0.34.5"
   }
 }

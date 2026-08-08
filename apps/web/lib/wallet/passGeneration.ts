@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { buildLogoImage, buildPassJson, buildPkpass, buildStripImage, type RgbColor } from "@loyalty/wallet";
+import { buildPassJson, buildPkpass, type RgbColor } from "@loyalty/wallet";
 import { walletPasses, type TenantTransaction, type VerifiedBusinessId } from "@loyalty/db";
 import { getApplePassTypeIdentifier, getAppleTeamIdentifier, getPkpassSigner } from "./adapters";
 import { deriveBrandColor, hexToRgb } from "./brandColor";
@@ -9,6 +9,39 @@ import { resolveBusinessAssetBuffer } from "./businessAssets";
 export type GeneratePkpassResult =
   | { ok: true; pkpass: Buffer; walletPassId: string }
   | { ok: false; reason: "no_program" | "no_pass_row" };
+
+// logo.png/strip.png son assets ESTÁTICOS (apps/web/public/passes/{slug}/,
+// generados offline con packages/wallet/scripts/generate-pass-assets.ts) —
+// decisión de arquitectura tras varios intentos reales de hacer que sharp
+// cargue su binario nativo en el runtime serverless de Vercel (no lo
+// logramos: ERR_DLOPEN_FAILED persistente incluso con la versión "buena"
+// documentada). Cero compositing en este archivo — solo lectura de bytes
+// ya hechos, siguiendo la convención de nombre de Apple (logo.png,
+// logo@2x.png, logo@3x.png).
+function deriveScaledUrl(url: string, suffix: "@2x" | "@3x"): string {
+  const dotIndex = url.lastIndexOf(".");
+  if (dotIndex === -1) return `${url}${suffix}`;
+  return `${url.slice(0, dotIndex)}${suffix}${url.slice(dotIndex)}`;
+}
+
+async function loadStaticAssetSet(
+  baseUrl: string | null,
+): Promise<{ at1x: Buffer; at2x: Buffer; at3x: Buffer } | undefined> {
+  if (!baseUrl) return undefined;
+  const [at1x, at2x, at3x] = await Promise.all([
+    resolveBusinessAssetBuffer(baseUrl),
+    resolveBusinessAssetBuffer(deriveScaledUrl(baseUrl, "@2x")),
+    resolveBusinessAssetBuffer(deriveScaledUrl(baseUrl, "@3x")),
+  ]);
+  // Best-effort de verdad: si falta cualquiera de las 3 escalas, el pase
+  // sigue siendo válido sin esa pieza visual — nunca tumba el pase
+  // completo (mismo criterio que notifyWalletOfTransaction).
+  if (!at1x || !at2x || !at3x) {
+    console.error(`loadStaticAssetSet: falta alguna escala de ${baseUrl}`);
+    return undefined;
+  }
+  return { at1x, at2x, at3x };
+}
 
 // Genera el .pkpass más reciente para un cliente — usado tanto por el web
 // service público (GET /v1/passes/..., sirve la ACTUALIZACIÓN a un pase ya
@@ -59,64 +92,10 @@ export async function generateApplePkpassForCustomer(
   const labelRgb: RgbColor = brandColorHex ? [255, 217, 179] : [110, 110, 110];
   const iconRgb: RgbColor = brandColorHex ? backgroundRgb : deriveBrandColor(businessId);
 
-  // logo.png/strip.png son best-effort DE VERDAD (antes solo lo decía el
-  // comentario, el código no lo hacía): un asset roto/ausente, O sharp
-  // fallando a cargar su binario nativo en este runtime (bug real de
-  // producción, ver git log — ERR_DLOPEN_FAILED pese a varios intentos de
-  // arreglarlo a nivel de bundler), no debe tumbar el pase COMPLETO. Sin
-  // logo/strip el pase sigue siendo válido e instalable — QR, sellos y
-  // recompensa intactos — solo sin esa pieza visual. Antes de este fix,
-  // un fallo acá abortaba generateApplePkpassForCustomer entero: un
-  // cliente de un negocio con branding real (Chilaquikes) no recibía
-  // NINGÚN pase, ni siquiera el plano.
-  const [logoBuffer, heroBuffer] = await Promise.all([
-    resolveBusinessAssetBuffer(snapshot.businessWalletLogoUrl),
-    resolveBusinessAssetBuffer(snapshot.businessWalletHeroUrl),
+  const [logoPng, stripPng] = await Promise.all([
+    loadStaticAssetSet(snapshot.businessWalletLogoUrl),
+    loadStaticAssetSet(snapshot.businessWalletHeroUrl),
   ]);
-
-  let logoPng: { at1x: Buffer; at2x: Buffer; at3x: Buffer } | undefined;
-  if (logoBuffer) {
-    try {
-      logoPng = {
-        at1x: await buildLogoImage(logoBuffer, 1),
-        at2x: await buildLogoImage(logoBuffer, 2),
-        at3x: await buildLogoImage(logoBuffer, 3),
-      };
-    } catch (error) {
-      console.error("buildLogoImage:", error);
-    }
-  }
-
-  let stripPng: { at1x: Buffer; at2x: Buffer; at3x: Buffer } | undefined;
-  if (heroBuffer) {
-    try {
-      stripPng = {
-        at1x: await buildStripImage({
-          heroImageBuffer: heroBuffer,
-          bandRgb: backgroundRgb,
-          currentStamps: snapshot.currentStamps,
-          stampsRequired: snapshot.stampsRequired,
-          scale: 1,
-        }),
-        at2x: await buildStripImage({
-          heroImageBuffer: heroBuffer,
-          bandRgb: backgroundRgb,
-          currentStamps: snapshot.currentStamps,
-          stampsRequired: snapshot.stampsRequired,
-          scale: 2,
-        }),
-        at3x: await buildStripImage({
-          heroImageBuffer: heroBuffer,
-          bandRgb: backgroundRgb,
-          currentStamps: snapshot.currentStamps,
-          stampsRequired: snapshot.stampsRequired,
-          scale: 3,
-        }),
-      };
-    } catch (error) {
-      console.error("buildStripImage:", error);
-    }
-  }
 
   const passJson = buildPassJson({
     serialNumber: walletPass.id,

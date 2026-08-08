@@ -152,9 +152,6 @@ importers:
       node-forge:
         specifier: ^1.3.1
         version: 1.4.0
-      sharp:
-        specifier: 0.34.5
-        version: 0.34.5
     devDependencies:
       '@types/adm-zip':
         specifier: ^0.5.7
@@ -162,6 +159,9 @@ importers:
       '@types/node-forge':
         specifier: ^1.3.14
         version: 1.3.14
+      sharp:
+        specifier: 0.34.5
+        version: 0.34.5
 
 packages:
 

@@ -4,7 +4,5 @@ export * from "./apple/apns";
 export * from "./apple/passJson";
 export * from "./apple/bundle";
 export * from "./apple/placeholderIcon";
-export * from "./apple/stripImage";
-export * from "./apple/logoImage";
 export * from "./google/signer";
 export * from "./google/loyaltyPayload";

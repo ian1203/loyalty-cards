@@ -17,7 +17,10 @@ export type BuildPkpassInput = {
   // un negocio no tiene logo/hero cargados, estos vienen undefined y el
   // pase sigue con el layout plano de antes (icon.png sólido nada más),
   // nunca un placeholder inventado. Cada uno ya viene pre-renderizado en
-  // los 3 tamaños que Apple espera (logoImage.ts/stripImage.ts).
+  // los 3 tamaños que Apple espera — assets ESTÁTICOS leídos con
+  // readFileSync (apps/web/lib/wallet/passGeneration.ts), nunca
+  // compositados en este runtime (ver scripts/generate-pass-assets.ts,
+  // que sí usa sharp pero corre offline).
   logoPng?: { at1x: Buffer; at2x: Buffer; at3x: Buffer };
   stripPng?: { at1x: Buffer; at2x: Buffer; at3x: Buffer };
 };
