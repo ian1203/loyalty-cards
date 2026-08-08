@@ -23,7 +23,13 @@ export async function downloadApplePassForSession(
     }
 
     await ensureWalletPass(tx, session.businessId, customerId, "apple");
-    const result = await generateApplePkpassForCustomer(tx, session.businessId, customerId);
+    let result;
+    try {
+      result = await generateApplePkpassForCustomer(tx, session.businessId, customerId);
+    } catch (error) {
+      console.error("downloadApplePassForSession:", error);
+      return { ok: false };
+    }
     if (!result.ok) {
       return { ok: false };
     }
