@@ -4,6 +4,7 @@ import {
   buildLoyaltyClassPayload,
   buildLoyaltyObjectId,
   buildLoyaltyObjectPayload,
+  buildProgressMessage,
   type LoyaltyClassInput,
   type LoyaltyObjectInput,
 } from "../../src/google/loyaltyPayload";
@@ -48,9 +49,9 @@ describe("buildLoyaltyClassPayload — plantilla por negocio, sin datos de clien
     expect(cls.id).toBe(buildLoyaltyClassId(classInput.issuerId, classInput.businessId));
   });
 
-  it("reviewStatus queda en 'underReview' (estado esperado sin aprobación de publicación)", () => {
+  it("reviewStatus queda en 'UNDER_REVIEW' (SCREAMING_SNAKE_CASE — el issuer no puede autodeclararse 'APPROVED' vía la API, confirmado contra Google real: 400 'Invalid review status')", () => {
     const cls = buildLoyaltyClassPayload(classInput) as { reviewStatus: string };
-    expect(cls.reviewStatus).toBe("underReview");
+    expect(cls.reviewStatus).toBe("UNDER_REVIEW");
   });
 
   it("el color se serializa en hex", () => {
@@ -61,6 +62,45 @@ describe("buildLoyaltyClassPayload — plantilla por negocio, sin datos de clien
   it("nunca incluye datos de un cliente — es la plantilla del negocio", () => {
     const cls = buildLoyaltyClassPayload(classInput);
     expect(JSON.stringify(cls)).not.toContain("María");
+  });
+
+  it("sin programLogoUri/wideProgramLogoUri/heroImageUri, no manda esos campos (nunca un placeholder fantasma)", () => {
+    const cls = buildLoyaltyClassPayload(classInput);
+    expect(cls).not.toHaveProperty("programLogo");
+    expect(cls).not.toHaveProperty("wideProgramLogo");
+    expect(cls).not.toHaveProperty("heroImage");
+  });
+
+  it("con las 3 URIs, arma los 3 campos de imagen con sourceUri + contentDescription", () => {
+    const cls = buildLoyaltyClassPayload({
+      ...classInput,
+      programLogoUri: "https://example.com/logo.png",
+      wideProgramLogoUri: "https://example.com/logo-wide.png",
+      heroImageUri: "https://example.com/hero.jpg",
+    }) as {
+      programLogo: { sourceUri: { uri: string } };
+      wideProgramLogo: { sourceUri: { uri: string } };
+      heroImage: { sourceUri: { uri: string } };
+    };
+    expect(cls.programLogo.sourceUri.uri).toBe("https://example.com/logo.png");
+    expect(cls.wideProgramLogo.sourceUri.uri).toBe("https://example.com/logo-wide.png");
+    expect(cls.heroImage.sourceUri.uri).toBe("https://example.com/hero.jpg");
+  });
+});
+
+describe("buildProgressMessage — texto motivador (Google Wallet no soporta rejilla gráfica de sellos)", () => {
+  it("con sellos pendientes, incluye el conteo y cuántos faltan para la recompensa real", () => {
+    expect(buildProgressMessage(4, 6, "Orden de chilaquiles gratis")).toBe(
+      "4 de 6 sellos — ¡a 2 de tu Orden de chilaquiles gratis!",
+    );
+  });
+
+  it("con el total completo, cambia a mensaje de canje listo (no '0 de N')", () => {
+    expect(buildProgressMessage(6, 6, "Café gratis")).toBe("¡Ya puedes canjear tu Café gratis!");
+  });
+
+  it("con excedente (canje ya arrastró sobrante, ver @loyalty/core), sigue en mensaje de canje listo", () => {
+    expect(buildProgressMessage(8, 6, "Café gratis")).toBe("¡Ya puedes canjear tu Café gratis!");
   });
 });
 
@@ -77,7 +117,7 @@ describe("buildLoyaltyObjectPayload — contenido mínimo por cliente, sin PII d
     expect(obj.barcode.value).toBe("wallet-token-xyz");
   });
 
-  it("el progreso de sellos va en loyaltyPoints.balance.string", () => {
+  it("el progreso de sellos va en loyaltyPoints.balance.string (conteo compacto, siempre presente)", () => {
     const obj = buildLoyaltyObjectPayload(objectInput) as {
       loyaltyPoints: { balance: { string: string } };
     };
@@ -89,11 +129,13 @@ describe("buildLoyaltyObjectPayload — contenido mínimo por cliente, sin PII d
     expect(obj.textModulesData).toEqual([]);
   });
 
-  it("con recompensa disponible, aparece en textModulesData", () => {
+  it("con recompensa configurada, textModulesData lleva el mensaje motivador de buildProgressMessage", () => {
     const obj = buildLoyaltyObjectPayload({ ...objectInput, rewardName: "Café gratis" }) as {
       textModulesData: Array<{ header: string; body: string }>;
     };
-    expect(obj.textModulesData[0].body).toBe("Café gratis");
+    expect(obj.textModulesData[0].body).toBe(
+      buildProgressMessage(objectInput.currentStamps, objectInput.stampsRequired, "Café gratis"),
+    );
   });
 
   it("sin nombre de cliente (null), no incluye accountName — nunca 'undefined' ni placeholder", () => {
