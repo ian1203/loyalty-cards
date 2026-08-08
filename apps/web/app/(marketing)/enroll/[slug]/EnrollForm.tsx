@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { AppleWalletBadge } from "../../../../components/AppleWalletBadge";
 import { Button } from "../../../../components/ui/button";
 import { Checkbox } from "../../../../components/ui/checkbox";
@@ -42,6 +42,21 @@ export function EnrollForm({ businessSlug }: { businessSlug: string }) {
   const enrollForSlug = enrollCustomerAction.bind(null, businessSlug);
   const [state, formAction, pending] = useActionState(enrollForSlug, initialState);
 
+  // Inputs controlados a propósito: React resetea el <form> tras CADA
+  // envío de una form action, incluso cuando la action devuelve
+  // {error: ...} en vez de lanzar (para React, "no lanzó" = "se completó",
+  // y limpia los campos no controlados) — sin esto, un error de validación
+  // puntual (ej. teléfono mal) borraba todo lo demás que el cliente ya
+  // había escrito. Con value+onChange, React reafirma el valor en el
+  // siguiente render y el reset nativo del DOM queda sin efecto.
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [consent, setConsent] = useState(false);
+
   if (state.success) {
     return <EnrollConfirmation success={state.success} />;
   }
@@ -51,23 +66,62 @@ export function EnrollForm({ businessSlug }: { businessSlug: string }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-first-name">Nombre</Label>
-          <Input id="enroll-first-name" name="firstName" maxLength={80} placeholder="Tu nombre" required />
+          <Input
+            id="enroll-first-name"
+            name="firstName"
+            maxLength={80}
+            placeholder="Tu nombre"
+            required
+            value={firstName}
+            onChange={(e) => setFirstName(e.currentTarget.value)}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-last-name">Apellido</Label>
-          <Input id="enroll-last-name" name="lastName" maxLength={80} placeholder="Tu apellido" required />
+          <Input
+            id="enroll-last-name"
+            name="lastName"
+            maxLength={80}
+            placeholder="Tu apellido"
+            required
+            value={lastName}
+            onChange={(e) => setLastName(e.currentTarget.value)}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-dob">Fecha de nacimiento</Label>
-          <Input id="enroll-dob" name="dateOfBirth" type="date" required />
+          <Input
+            id="enroll-dob"
+            name="dateOfBirth"
+            type="date"
+            required
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.currentTarget.value)}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-occupation">Ocupación (opcional)</Label>
-          <Input id="enroll-occupation" name="occupation" maxLength={120} placeholder="Estudiante" />
+          <Input
+            id="enroll-occupation"
+            name="occupation"
+            maxLength={120}
+            placeholder="Estudiante"
+            value={occupation}
+            onChange={(e) => setOccupation(e.currentTarget.value)}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-email">Correo</Label>
-          <Input id="enroll-email" name="email" type="email" maxLength={254} placeholder="tu@correo.com" required />
+          <Input
+            id="enroll-email"
+            name="email"
+            type="email"
+            maxLength={254}
+            placeholder="tu@correo.com"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.currentTarget.value)}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-phone">Teléfono / WhatsApp</Label>
@@ -79,12 +133,21 @@ export function EnrollForm({ businessSlug }: { businessSlug: string }) {
             maxLength={20}
             placeholder="10 dígitos, ej. 2291234567"
             required
+            value={phone}
+            onChange={(e) => setPhone(e.currentTarget.value)}
           />
         </div>
       </div>
 
       <div className="flex items-start gap-2.5">
-        <Checkbox id="enroll-consent" name="consent" required className="mt-0.5" />
+        <Checkbox
+          id="enroll-consent"
+          name="consent"
+          required
+          className="mt-0.5"
+          checked={consent}
+          onCheckedChange={(checked) => setConsent(checked === true)}
+        />
         <Label htmlFor="enroll-consent" className="text-sm font-normal leading-snug text-muted-foreground">
           Acepto que este negocio use mis datos para operar mi tarjeta de lealtad, conforme a su{" "}
           <Link href="/privacidad" target="_blank" className="text-foreground underline">
