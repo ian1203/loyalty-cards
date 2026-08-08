@@ -12,9 +12,10 @@ import {
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
 import { enrollCustomerPublic } from "@loyalty/db/enroll";
-import { enrollCustomerForSlug } from "../app/(marketing)/enroll/[slug]/logic";
+import { enrollCustomerForSlug, normalizePhone } from "../app/(marketing)/enroll/[slug]/logic";
 import { saveProgramForSession } from "../app/(product)/rewards/logic";
 import { requireTenantSession } from "../lib/supabase/session";
+import { downloadEnrollmentApplePass } from "../lib/wallet/publicEnrollWallet";
 import { createBusinessWithRealOwner, createPlatformAdmin, form, signInAsCookieJar } from "./support/testAuth";
 
 // Definición de "listo" de /enroll: un visitante SIN sesión se registra
@@ -115,7 +116,7 @@ describe("/enroll — auto-registro público de clientes", () => {
     expect(result.error).toBeUndefined();
     expect(result.success?.businessName).toContain("Enroll A");
     expect(result.success?.programName).toBe("Programa Enroll A");
-    expect(result.success?.applePkpassBase64).toBeTruthy();
+    expect(result.success?.appleWalletDownloadUrl).toMatch(/\/api\/wallet\/apple\/download\/.+\?t=/);
     expect(result.success?.googleSaveLink).toMatch(/^https:\/\//);
 
     const [row] = await adminDb.select().from(customers).where(eq(customers.businessId, businessAId));
@@ -160,7 +161,7 @@ describe("/enroll — auto-registro público de clientes", () => {
     expect(result.error).toBeTruthy();
     expect(result.success).toBeUndefined();
 
-    const rows = await adminDb.select().from(customers).where(eq(customers.phone, phone));
+    const rows = await adminDb.select().from(customers).where(eq(customers.phone, normalizePhone(phone)!));
     expect(rows).toHaveLength(0);
   });
 
@@ -169,7 +170,7 @@ describe("/enroll — auto-registro público de clientes", () => {
     const result = await enrollCustomerForSlug(businessASlug, validFields({ consent: "off", phone }));
 
     expect(result.error).toBeTruthy();
-    const rows = await adminDb.select().from(customers).where(eq(customers.phone, phone));
+    const rows = await adminDb.select().from(customers).where(eq(customers.phone, normalizePhone(phone)!));
     expect(rows).toHaveLength(0);
   });
 
@@ -182,7 +183,7 @@ describe("/enroll — auto-registro público de clientes", () => {
     expect(second.error).toBeTruthy();
     expect(second.success).toBeUndefined();
 
-    const rows = await adminDb.select().from(customers).where(eq(customers.phone, phone));
+    const rows = await adminDb.select().from(customers).where(eq(customers.phone, normalizePhone(phone)!));
     expect(rows).toHaveLength(1);
   });
 
@@ -221,8 +222,64 @@ describe("/enroll — auto-registro público de clientes", () => {
     expect(first.success).toBeTruthy();
     expect(second.success).toBeTruthy();
 
-    const rows = await adminDb.select().from(customers).where(eq(customers.phone, phone));
+    const rows = await adminDb.select().from(customers).where(eq(customers.phone, normalizePhone(phone)!));
     expect(rows).toHaveLength(2);
     expect(new Set(rows.map((r) => r.businessId))).toEqual(new Set([businessAId, businessBId]));
+  });
+
+  // Bug real corregido: el botón de Apple entregaba el .pkpass como un
+  // data: URI con download, que iOS no reconoce como instalable (no pasa
+  // nada al tocarlo, sin error). El fix es un link navegable real
+  // (GET /api/wallet/apple/download/{serial}?t=...) que reusa
+  // verifyBusinessIdForPassToken — estas pruebas cubren esa nueva función,
+  // no solo el happy path que ya cubre el test de arriba.
+  describe("descarga pública del .pkpass tras auto-registro (appleWalletDownloadUrl)", () => {
+    // B se quedó sin programa activo en el setup de arriba a propósito
+    // (cubre "negocio activo sin programa") — pero sin programa,
+    // generateApplePkpassForCustomer devuelve ok:false (no_program) y
+    // appleWalletDownloadUrl queda null, así que el cruce entre negocios
+    // de abajo necesita que B también tenga uno.
+    beforeAll(async () => {
+      const jarB = await signInAsCookieJar(`enroll-owner-b-${suffix}@test.dev`, password);
+      const sessionB = await requireTenantSession(jarB);
+      if (!sessionB) throw new Error("sesión inválida en setup B (descarga)");
+      const programB = await saveProgramForSession(
+        sessionB,
+        form({ name: "Programa Enroll B", stampsRequired: "6", cooldownMinutes: "0", isActive: "on" }),
+      );
+      if (!programB.success) throw new Error(`setup programa B: ${programB.error}`);
+    });
+
+    it("el link devuelto sirve el .pkpass real con el token correcto", async () => {
+      const result = await enrollCustomerForSlug(businessASlug, validFields());
+      const url = new URL(result.success!.appleWalletDownloadUrl!);
+      const serial = url.pathname.split("/").pop()!;
+      const token = url.searchParams.get("t")!;
+
+      const download = await downloadEnrollmentApplePass(serial, token);
+      expect(download.ok).toBe(true);
+      if (download.ok) {
+        expect(download.pkpass.byteLength).toBeGreaterThan(0);
+      }
+    });
+
+    it("un token incorrecto para un serial real: ok:false, sin datos", async () => {
+      const result = await enrollCustomerForSlug(businessASlug, validFields());
+      const serial = new URL(result.success!.appleWalletDownloadUrl!).pathname.split("/").pop()!;
+
+      const download = await downloadEnrollmentApplePass(serial, "token-incorrecto-cualquiera");
+      expect(download.ok).toBe(false);
+    });
+
+    it("el token real de un pase de un negocio no autentica contra el serial de otro negocio", async () => {
+      const resultA = await enrollCustomerForSlug(businessASlug, validFields());
+      const resultB = await enrollCustomerForSlug(businessBSlug, validFields());
+
+      const tokenA = new URL(resultA.success!.appleWalletDownloadUrl!).searchParams.get("t")!;
+      const serialB = new URL(resultB.success!.appleWalletDownloadUrl!).pathname.split("/").pop()!;
+
+      const cross = await downloadEnrollmentApplePass(serialB, tokenA);
+      expect(cross.ok).toBe(false);
+    });
   });
 });

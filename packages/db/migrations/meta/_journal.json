@@ -113,6 +113,20 @@
       "when": 1786222800000,
       "tag": "0015_enroll_age_gate",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786196186468,
+      "tag": "0016_lively_wither",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786225200000,
+      "tag": "0017_enroll_business_logo",
+      "breakpoints": true
     }
   ]
 }

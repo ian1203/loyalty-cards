@@ -12,26 +12,28 @@ import { walletPasses, type TenantTransaction, type VerifiedBusinessId } from "@
 // wallet_passes por cliente por plataforma" que Apple, y es donde el
 // paso i (PATCH del Loyalty Object) va a leer "¿este cliente ya tiene un
 // pase de Google?" antes de notificar.
+//
+// El caller devuelve authenticationToken además de id desde
+// publicEnrollWallet.ts, para armar el link público de descarga del
+// .pkpass (apps/web/app/api/wallet/apple/download/[serial]) — es el MISMO
+// secreto que ya viaja embebido en pass.json dentro del .pkpass, así que
+// exponerlo acá no abre una superficie nueva. No se loguea en ningún caso.
 export async function ensureWalletPass(
   tx: TenantTransaction,
   businessId: VerifiedBusinessId,
   customerId: string,
   platform: "apple" | "google",
-): Promise<{ id: string }> {
+): Promise<{ id: string; authenticationToken: string }> {
   const existing = await selectWalletPass(tx, businessId, customerId, platform);
   if (existing) return existing;
 
+  const authenticationToken = randomBytes(24).toString("base64url");
   const [created] = await tx
     .insert(walletPasses)
-    .values({
-      businessId,
-      customerId,
-      platform,
-      authenticationToken: randomBytes(24).toString("base64url"),
-    })
+    .values({ businessId, customerId, platform, authenticationToken })
     .onConflictDoNothing({ target: [walletPasses.customerId, walletPasses.platform] })
     .returning({ id: walletPasses.id });
-  if (created) return created;
+  if (created) return { id: created.id, authenticationToken };
 
   // onConflictDoNothing sin retorno = otro request ganó la carrera entre
   // el SELECT de arriba y este INSERT (poco probable en este flujo
@@ -49,9 +51,9 @@ async function selectWalletPass(
   businessId: VerifiedBusinessId,
   customerId: string,
   platform: "apple" | "google",
-): Promise<{ id: string } | null> {
+): Promise<{ id: string; authenticationToken: string } | null> {
   const [row] = await tx
-    .select({ id: walletPasses.id })
+    .select({ id: walletPasses.id, authenticationToken: walletPasses.authenticationToken })
     .from(walletPasses)
     .where(
       and(

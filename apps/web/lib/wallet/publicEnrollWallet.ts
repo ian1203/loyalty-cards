@@ -1,7 +1,9 @@
-import { withTenantContext, type VerifiedBusinessId } from "@loyalty/db";
+import { and, eq } from "drizzle-orm";
+import { walletPasses, withTenantContext, type VerifiedBusinessId } from "@loyalty/db";
 import { buildGoogleSaveLinkForCustomer } from "./googleSaveLink";
 import { ensureWalletPass } from "./ensurePass";
 import { generateApplePkpassForCustomer } from "./passGeneration";
+import { verifyBusinessIdForPassToken } from "./passAuth";
 
 // Igual que getVerifiedSession() (lib/supabase/session.ts) y
 // verifyBusinessIdForPassToken() (lib/wallet/passAuth.ts), este es el
@@ -20,7 +22,12 @@ import { generateApplePkpassForCustomer } from "./passGeneration";
 // /customers/{id}/wallet — la única diferencia es de dónde sale el
 // VerifiedBusinessId.
 export type PublicEnrollWalletResult = {
-  applePkpassBase64: string | null;
+  // URL navegable real (GET /api/wallet/apple/download/{serial}?t=...),
+  // NUNCA un data: URI — Safari solo dispara la hoja nativa "Agregar a
+  // Wallet" sobre una respuesta HTTP con Content-Type
+  // application/vnd.apple.pkpass, no sobre un data: URI con download (bug
+  // real encontrado en producción: el botón no hacía nada, sin error).
+  appleWalletDownloadUrl: string | null;
   googleSaveLink: string | null;
 };
 
@@ -31,13 +38,58 @@ export async function buildWalletArtifactsForNewEnrollment(
   const businessId = rawBusinessId as VerifiedBusinessId;
 
   return withTenantContext(businessId, async (tx) => {
-    await ensureWalletPass(tx, businessId, customerId, "apple");
+    const applePass = await ensureWalletPass(tx, businessId, customerId, "apple");
+    // Solo para confirmar que ESTE cliente puede generar un pase real ahora
+    // mismo (programa activo, etc.) antes de ofrecer el botón — los bytes
+    // se descartan, downloadEnrollmentApplePass los vuelve a generar al
+    // tocar el botón (misma función, siempre el estado más fresco).
     const appleResult = await generateApplePkpassForCustomer(tx, businessId, customerId);
     const googleSaveLink = await buildGoogleSaveLinkForCustomer(tx, businessId, customerId);
 
-    return {
-      applePkpassBase64: appleResult.ok ? appleResult.pkpass.toString("base64") : null,
-      googleSaveLink,
-    };
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    const appleWalletDownloadUrl =
+      appleResult.ok && siteUrl
+        ? `${siteUrl}/api/wallet/apple/download/${applePass.id}?t=${encodeURIComponent(applePass.authenticationToken)}`
+        : null;
+
+    return { appleWalletDownloadUrl, googleSaveLink };
+  });
+}
+
+export type DownloadEnrollmentApplePassResult = { ok: true; pkpass: Buffer } | { ok: false };
+
+// GET público (apps/web/app/api/wallet/apple/download/[serial]/route.ts):
+// entrega el .pkpass generado arriba como una respuesta HTTP real, no como
+// el data: URI roto de antes. Reusa verifyBusinessIdForPassToken tal
+// cual — el SEGUNDO sitio sancionado de VerifiedBusinessId
+// (lib/wallet/passAuth.ts) — el token viaja en el query string en vez del
+// header Authorization porque este es un <a href> de navegador tocado por
+// un humano, no un cliente PassKit que pueda mandar headers custom; es el
+// MISMO secreto que ya viaja embebido en pass.json dentro del .pkpass, no
+// una superficie nueva.
+export async function downloadEnrollmentApplePass(
+  serialNumber: string,
+  token: string,
+): Promise<DownloadEnrollmentApplePassResult> {
+  const auth = await verifyBusinessIdForPassToken(serialNumber, token);
+  if (!auth) {
+    return { ok: false };
+  }
+
+  return withTenantContext(auth.businessId, async (tx) => {
+    const [row] = await tx
+      .select({ customerId: walletPasses.customerId })
+      .from(walletPasses)
+      .where(and(eq(walletPasses.id, auth.walletPassId), eq(walletPasses.businessId, auth.businessId)))
+      .limit(1);
+    if (!row) {
+      return { ok: false };
+    }
+
+    const result = await generateApplePkpassForCustomer(tx, auth.businessId, row.customerId);
+    if (!result.ok) {
+      return { ok: false };
+    }
+    return { ok: true, pkpass: result.pkpass };
   });
 }
