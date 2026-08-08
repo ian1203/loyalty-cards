@@ -34,9 +34,14 @@ function parseBoundedInt(
 
 // Config del programa y reglas: SOLO el dueño. Staff/admin de tenant ven
 // pero no editan (el gate corre acá, en cada invocación, no solo en la UI).
+// Nombre histórico (era literal "solo owner"); el modelo RBAC nuevo trata
+// admin igual que owner (acceso total) — solo staff queda excluido. No
+// renombrado a propósito para minimizar el diff de este fix de seguridad.
 function ownerGateError(session: TenantSession | null): string | null {
   if (!session) return "No autorizado.";
-  if (session.role !== "owner") return "Solo el dueño puede configurar el programa.";
+  if (session.role !== "owner" && session.role !== "admin") {
+    return "Solo el dueño puede configurar el programa.";
+  }
   return null;
 }
 

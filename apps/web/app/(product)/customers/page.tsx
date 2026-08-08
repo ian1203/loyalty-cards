@@ -34,6 +34,14 @@ export default async function CustomersPage({
     redirect("/login");
   }
 
+  // staff = solo /scanner — el directorio administrativo de clientes
+  // (nombre/teléfono/email de todo el negocio) no le corresponde. Real a
+  // nivel servidor: antes de este chequeo, la query de abajo ya corría
+  // para cualquier tenant_user.
+  if (session.role === "staff") {
+    redirect("/scanner");
+  }
+
   const rawQ = (await searchParams).q;
   const q = (typeof rawQ === "string" ? rawQ : "").trim().slice(0, 100);
 

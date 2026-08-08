@@ -18,6 +18,13 @@ export async function GET(_request: Request, { params }: { params: Promise<Param
     return new Response(null, { status: 302, headers: { location: "/login" } });
   }
 
+  // staff = solo /scanner — mismo gate que customers/[id]/page.tsx (esta
+  // ruta es consecuencia directa del mismo detalle de cliente, no una
+  // superficie nueva).
+  if (session.role === "staff") {
+    return new Response(null, { status: 403, headers: { "cache-control": "no-store" } });
+  }
+
   const { id } = await params;
   const result = await downloadApplePassForSession(session, id);
   if (!result.ok) {

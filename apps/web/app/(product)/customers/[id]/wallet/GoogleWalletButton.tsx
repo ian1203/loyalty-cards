@@ -16,6 +16,13 @@ export async function GoogleWalletButton({ customerId }: { customerId: string })
     return null;
   }
 
+  // staff = solo /scanner — mismo gate que customers/[id]/page.tsx,
+  // repetido acá por el mismo criterio de defensa en profundidad del
+  // comentario de arriba (no confiar en que el padre ya filtró).
+  if (session.role === "staff") {
+    return null;
+  }
+
   const saveLink = await withTenantContext(session.businessId, (tx) =>
     buildGoogleSaveLinkForCustomer(tx, session.businessId, customerId),
   );

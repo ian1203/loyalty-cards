@@ -33,6 +33,13 @@ export default async function CustomerDetailPage({
     redirect("/login");
   }
 
+  // staff = solo /scanner — la ficha individual (PII, QR/wallet_token vía
+  // los botones de Wallet, balance) no le corresponde. Ver el gate gemelo
+  // en customers/page.tsx.
+  if (session.role === "staff") {
+    redirect("/scanner");
+  }
+
   const { id } = await params;
 
   const data = await withTenantContext(session.businessId, async (tx) => {
