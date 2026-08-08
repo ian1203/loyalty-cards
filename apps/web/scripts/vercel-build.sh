@@ -25,4 +25,8 @@ else
   echo "[vercel-build] VERCEL_ENV=${VERCEL_ENV:-unset} — se salta la migración (solo corre en production)."
 fi
 
-next build
+# --webpack: Turbopack (default de Next 16) pierde el binario nativo de
+# sharp (packages/wallet, libvips) al tracear las funciones serverless —
+# ERR_DLOPEN_FAILED en runtime pese a build "exitoso" (bug real: /enroll
+# devolvía 500 en producción). webpack sí lo resuelve bien.
+next build --webpack
