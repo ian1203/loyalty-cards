@@ -97,6 +97,12 @@ export type LoyaltyObjectInput = {
 // "4 / 6" seco en loyaltyPoints.balance no motiva a volver; este mensaje
 // vive aparte, en textModulesData, con el nombre real de la recompensa y
 // cuánto falta (o la confirmación de que ya está lista).
+//
+// Deliberadamente NO repite "X de Y sellos": ese número YA lo muestra
+// loyaltyPoints.balance, siempre visible arriba de este texto en la
+// plantilla fija de Google Wallet (el orden de campos en el JSON no
+// controla el layout — Google decide esa jerarquía, no nosotros). Repetir
+// el conteo acá era la redundancia real que había que arreglar.
 export function buildProgressMessage(
   currentStamps: number,
   stampsRequired: number,
@@ -106,7 +112,10 @@ export function buildProgressMessage(
   if (remaining === 0) {
     return `¡Ya puedes canjear tu ${rewardName}!`;
   }
-  return `${currentStamps} de ${stampsRequired} sellos — ¡a ${remaining} de tu ${rewardName}!`;
+  if (remaining === 1) {
+    return `¡Solo te falta 1 sello para tu ${rewardName}!`;
+  }
+  return `¡Te faltan ${remaining} sellos para tu ${rewardName}!`;
 }
 
 export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<string, unknown> {

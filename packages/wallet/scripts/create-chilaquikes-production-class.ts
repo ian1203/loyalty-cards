@@ -8,11 +8,11 @@
 // classId con sufijo _prod, deliberadamente DISTINTO del que la app en
 // vivo calcula para el negocio real (buildLoyaltyClassId(issuerId,
 // businessId) con el UUID real de CHILAQUIKES en producción) — esta es
-// una clase de referencia/verificación creada a mano, no la que
-// automáticamente usan los clientes reales al inscribirse en /enroll
-// (esa la arma apps/web/lib/wallet/googleSaveLink.ts, hoy sin logo/hero y
-// con un color derivado por hash — ver el aviso que esto imprime al
-// final).
+// una clase de referencia/verificación creada a mano, para probar
+// campos/mensajes ANTES de que un cliente real los vea (el flujo real,
+// apps/web/lib/wallet/googleSaveLink.ts, ya lee la misma marca real desde
+// businesses.google_logo_uri/google_hero_uri/brand_color_hex — ver el
+// aviso que esto imprime al final).
 //
 // upsertLoyaltyClass es una llamada REST real y explícita (POST, o PATCH
 // si ya existe) — a diferencia del link "Add to Wallet" de
@@ -110,9 +110,10 @@ console.log(
 );
 console.log(saveLink);
 console.log(
-  "\n[aviso] Esta clase NO es la que usan los clientes reales al inscribirse en /enroll — esa\n" +
-    "sigue calculándose dinámicamente en apps/web/lib/wallet/googleSaveLink.ts a partir del\n" +
-    "business_id real, y hoy NO manda logo/heroImage y usa un color derivado por hash, no este\n" +
-    "rojo de marca. Si quieres que los clientes reales vean este mismo diseño, hace falta cablear\n" +
-    "eso aparte (o agregar una columna de config visual por negocio) — avísame si lo quieres.\n",
+  "\n[aviso] Esta clase sigue siendo solo de VERIFICACIÓN (classId chilaquikes_prod, objeto\n" +
+    "de prueba) — pero ya no es la única con marca real: apps/web/lib/wallet/googleSaveLink.ts\n" +
+    "(el flujo que SÍ usan los clientes al inscribirse en /enroll) ahora lee logo/hero/color desde\n" +
+    "businesses.google_logo_uri/google_hero_uri/brand_color_hex — mismas URLs de Cloudinary que acá.\n" +
+    "El classId real de cliente (biz_<business_id real>) es uno DISTINTO a este, y se crea la\n" +
+    "primera vez que alguien realmente toca 'Agregar a Google Wallet' en /enroll.\n",
 );

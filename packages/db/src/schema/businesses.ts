@@ -32,6 +32,17 @@ export const businesses = pgTable("businesses", {
   // mismo campo hubiera cambiado lo que ya se ve en /enroll, que quedó
   // aprobado y no debía tocarse.
   walletLogoUrl: text("wallet_logo_url"),
+  // URLs de Google Wallet — a diferencia de wallet_logo_url/
+  // wallet_hero_url (archivos LOCALES que el .pkpass empaqueta), Google
+  // exige URLs HTTPS públicas que su servidor pueda ir a buscar (hoy,
+  // Cloudinary). Nullable: sin ellas la Loyalty Class queda sin esa
+  // pieza, nunca un placeholder inventado.
+  googleLogoUri: text("google_logo_uri"),
+  googleHeroUri: text("google_hero_uri"),
+  // Wordmark horizontal (ratio 3:1) — nullable a propósito: el asset
+  // real todavía no existe (bloqueado en Narciso al momento de este
+  // commit). El código ya sabe usarla en cuanto tenga valor.
+  googleWideLogoUri: text("google_wide_logo_uri"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
