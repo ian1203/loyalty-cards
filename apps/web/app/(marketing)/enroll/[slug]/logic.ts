@@ -16,7 +16,7 @@ export type EnrollActionState = {
   success?: {
     businessName: string;
     programName: string | null;
-    applePkpassBase64: string | null;
+    appleWalletDownloadUrl: string | null;
     googleSaveLink: string | null;
   };
 };
@@ -24,8 +24,24 @@ export type EnrollActionState = {
 const MAX_NAME_LENGTH = 80;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_OCCUPATION_LENGTH = 120;
-const PHONE_RE = /^[+0-9][0-9 ()-]{4,19}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// TLD de al menos 2 caracteres, sin punto vacío antes/después — el regex
+// anterior (sin el {2,}) dejaba pasar cosas como "a@b.c" o "a@.com".
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const PHONE_DIGITS_RE = /^\d{10}$/;
+
+// El negocio opera con clientes en México — un teléfono real siempre es un
+// número local de 10 dígitos. Acepta espacios/guiones/paréntesis y un "52"
+// o "+52" de código de país opcional (el placeholder del form lo sugiere),
+// pero SIEMPRE normaliza a los 10 dígitos puros antes de guardar — mismo
+// criterio que walletToken: el dato que se persiste es el mínimo
+// consistente, no lo que el usuario tecleó tal cual.
+export function normalizePhone(raw: string): string | null {
+  let digits = raw.replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("52")) {
+    digits = digits.slice(2);
+  }
+  return PHONE_DIGITS_RE.test(digits) ? digits : null;
+}
 
 // Gate de mayoría de edad SOLO para este flujo de auto-registro: el
 // checkbox de consentimiento LFPDPPP lo firma el propio titular de los
@@ -82,12 +98,13 @@ export async function enrollCustomerForSlug(
     .trim()
     .toLowerCase();
   if (!email || email.length > MAX_EMAIL_LENGTH || !EMAIL_RE.test(email)) {
-    return { error: "Ingresa un correo válido." };
+    return { error: "Ingresa un correo electrónico válido (ejemplo: nombre@dominio.com)." };
   }
 
-  const phone = String(formData.get("phone") ?? "").trim();
-  if (!phone || !PHONE_RE.test(phone)) {
-    return { error: "Ingresa un teléfono/WhatsApp válido." };
+  const rawPhone = String(formData.get("phone") ?? "").trim();
+  const phone = normalizePhone(rawPhone);
+  if (!phone) {
+    return { error: "Ingresa tu teléfono a 10 dígitos (ejemplo: 2294821234)." };
   }
 
   const rawOccupation = String(formData.get("occupation") ?? "").trim();
@@ -131,8 +148,8 @@ export async function enrollCustomerForSlug(
   // Wallet no debe perderse ese alta ni mostrarse como error de registro:
   // mismo criterio best-effort que notifyWalletOfTransaction. El personal
   // puede entregar el pase después desde /customers/{id}/wallet.
-  let wallet: { applePkpassBase64: string | null; googleSaveLink: string | null } = {
-    applePkpassBase64: null,
+  let wallet: { appleWalletDownloadUrl: string | null; googleSaveLink: string | null } = {
+    appleWalletDownloadUrl: null,
     googleSaveLink: null,
   };
   try {
@@ -145,7 +162,7 @@ export async function enrollCustomerForSlug(
     success: {
       businessName: enrollResult.businessName,
       programName: enrollResult.programName,
-      applePkpassBase64: wallet.applePkpassBase64,
+      appleWalletDownloadUrl: wallet.appleWalletDownloadUrl,
       googleSaveLink: wallet.googleSaveLink,
     },
   };

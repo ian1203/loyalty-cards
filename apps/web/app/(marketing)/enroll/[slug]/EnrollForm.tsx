@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { AppleWalletBadge } from "../../../../components/AppleWalletBadge";
 import { Button } from "../../../../components/ui/button";
 import { Checkbox } from "../../../../components/ui/checkbox";
 import { Input } from "../../../../components/ui/input";
@@ -19,6 +20,24 @@ function detectWalletPlatform(): "apple" | "google" | "other" {
   return "other";
 }
 
+// Botón exclusivo por dispositivo: solo uno se muestra, nunca los dos
+// lado a lado. Si el wallet "nativo" del dispositivo detectado no está
+// disponible (ej. iPhone pero Apple falló al generarse) o el userAgent es
+// ambiguo, cae al que SÍ esté disponible — Google primero por default
+// (ya es el que funciona en prod) — para nunca dejar al cliente sin
+// ningún botón si al menos uno de los dos existe.
+function pickWalletButton(
+  platform: "apple" | "google" | "other",
+  hasApple: boolean,
+  hasGoogle: boolean,
+): "apple" | "google" | null {
+  if (platform === "apple" && hasApple) return "apple";
+  if (platform === "google" && hasGoogle) return "google";
+  if (hasGoogle) return "google";
+  if (hasApple) return "apple";
+  return null;
+}
+
 export function EnrollForm({ businessSlug }: { businessSlug: string }) {
   const enrollForSlug = enrollCustomerAction.bind(null, businessSlug);
   const [state, formAction, pending] = useActionState(enrollForSlug, initialState);
@@ -32,11 +51,11 @@ export function EnrollForm({ businessSlug }: { businessSlug: string }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-first-name">Nombre</Label>
-          <Input id="enroll-first-name" name="firstName" maxLength={80} placeholder="Enrique" required />
+          <Input id="enroll-first-name" name="firstName" maxLength={80} placeholder="Tu nombre" required />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-last-name">Apellido</Label>
-          <Input id="enroll-last-name" name="lastName" maxLength={80} placeholder="Hernández" required />
+          <Input id="enroll-last-name" name="lastName" maxLength={80} placeholder="Tu apellido" required />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-dob">Fecha de nacimiento</Label>
@@ -52,7 +71,15 @@ export function EnrollForm({ businessSlug }: { businessSlug: string }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-phone">Teléfono / WhatsApp</Label>
-          <Input id="enroll-phone" name="phone" type="tel" maxLength={20} placeholder="+52 229 000 0000" required />
+          <Input
+            id="enroll-phone"
+            name="phone"
+            type="tel"
+            inputMode="numeric"
+            maxLength={20}
+            placeholder="10 dígitos, ej. 2291234567"
+            required
+          />
         </div>
       </div>
 
@@ -84,12 +111,13 @@ export function EnrollForm({ businessSlug }: { businessSlug: string }) {
 
 function EnrollConfirmation({ success }: { success: NonNullable<EnrollActionState["success"]> }) {
   const platform = detectWalletPlatform();
-  const hasApple = Boolean(success.applePkpassBase64);
+  const hasApple = Boolean(success.appleWalletDownloadUrl);
   const hasGoogle = Boolean(success.googleSaveLink);
+  const walletToShow = pickWalletButton(platform, hasApple, hasGoogle);
 
   return (
     <div className="flex flex-col items-center gap-4 rounded-xl border bg-card p-8 text-center shadow-token-sm">
-      <p className="text-lg font-semibold">¡Listo! Ya eres parte de {success.businessName}</p>
+      <p className="text-lg font-semibold">¡Gracias por unirte a {success.businessName}!</p>
       {success.programName ? (
         <p className="text-sm text-muted-foreground">
           Tu tarjeta &quot;{success.programName}&quot; empieza en 0 sellos — agrégala a tu celular para no
@@ -97,35 +125,20 @@ function EnrollConfirmation({ success }: { success: NonNullable<EnrollActionStat
         </p>
       ) : null}
 
-      {!hasApple && !hasGoogle ? (
+      {!walletToShow ? (
         <p className="text-sm text-muted-foreground" role="status">
           Tu registro quedó guardado. Pide al personal que te ayude a agregar tu tarjeta a Wallet.
         </p>
       ) : (
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
-          {hasApple ? (
-            <Button
-              asChild
-              variant={platform === "apple" ? "default" : "outline"}
-              className="w-full sm:w-auto"
-            >
-              <a
-                href={`data:application/vnd.apple.pkpass;base64,${success.applePkpassBase64}`}
-                download="tarjeta.pkpass"
-              >
-                Agregar a Apple Wallet
-              </a>
-            </Button>
-          ) : null}
-          {hasGoogle ? (
-            <Button
-              asChild
-              variant={platform === "google" ? "default" : "outline"}
-              className="w-full sm:w-auto"
-            >
+        <div className="flex w-full flex-col items-center gap-3">
+          <p className="text-sm font-medium">Agrega tu tarjeta a tu wallet 👇</p>
+          {walletToShow === "apple" ? (
+            <AppleWalletBadge href={success.appleWalletDownloadUrl!} />
+          ) : (
+            <Button asChild className="w-full sm:w-auto">
               <a href={success.googleSaveLink!}>Agregar a Google Wallet</a>
             </Button>
-          ) : null}
+          )}
         </div>
       )}
     </div>
