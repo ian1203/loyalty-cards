@@ -33,6 +33,14 @@ export type CustomerLoyaltySnapshot = {
   // stampsRequired ascendente, así que el primero es el próximo hito.
   nextRewardName: string | null;
   walletToken: string;
+  // Branding real del negocio (nullable — sin logo/hero cargados, el
+  // .pkpass sigue el layout plano de siempre, nunca un placeholder
+  // inventado). businessWalletLogoUrl es DISTINTO de logoUrl (el de
+  // /enroll, un crop circular ya aprobado) — deliberadamente separado
+  // para no cambiar lo que /enroll ya muestra.
+  businessWalletLogoUrl: string | null;
+  businessBrandColorHex: string | null;
+  businessWalletHeroUrl: string | null;
 };
 
 export async function loadCustomerLoyaltySnapshot(
@@ -50,7 +58,12 @@ export async function loadCustomerLoyaltySnapshot(
   }
 
   const [business] = await tx
-    .select({ name: businesses.name })
+    .select({
+      name: businesses.name,
+      walletLogoUrl: businesses.walletLogoUrl,
+      brandColorHex: businesses.brandColorHex,
+      walletHeroUrl: businesses.walletHeroUrl,
+    })
     .from(businesses)
     .where(eq(businesses.id, businessId))
     .limit(1);
@@ -107,5 +120,8 @@ export async function loadCustomerLoyaltySnapshot(
     rewardName: firstAvailable?.name ?? null,
     nextRewardName: rules[0]?.name ?? null,
     walletToken: customer.walletToken,
+    businessWalletLogoUrl: business.walletLogoUrl,
+    businessBrandColorHex: business.brandColorHex,
+    businessWalletHeroUrl: business.walletHeroUrl,
   };
 }

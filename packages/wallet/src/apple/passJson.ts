@@ -61,6 +61,18 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
       primaryFields,
       secondaryFields,
       auxiliaryFields,
+      // "Powered by Pragmia" como backField (visible al tocar el ícono de
+      // info, back del pase) en vez de horneado en el strip — es texto
+      // real renderizado por Wallet (accesible, VoiceOver, sin depender
+      // de que el runtime serverless tenga una fuente instalada para
+      // rasterizar vía SVG).
+      backFields: [
+        {
+          key: "poweredBy",
+          label: "",
+          value: "Powered by Pragmia",
+        },
+      ],
     },
     barcodes: [
       {

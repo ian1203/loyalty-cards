@@ -13,6 +13,13 @@ export type BuildPkpassInput = {
   passJson: Record<string, unknown>;
   signer: PkpassSigner;
   iconRgb: RgbColor;
+  // Branding real opcional (Fase de rediseño visual del .pkpass) — cuando
+  // un negocio no tiene logo/hero cargados, estos vienen undefined y el
+  // pase sigue con el layout plano de antes (icon.png sólido nada más),
+  // nunca un placeholder inventado. Cada uno ya viene pre-renderizado en
+  // los 3 tamaños que Apple espera (logoImage.ts/stripImage.ts).
+  logoPng?: { at1x: Buffer; at2x: Buffer; at3x: Buffer };
+  stripPng?: { at1x: Buffer; at2x: Buffer; at3x: Buffer };
 };
 
 function sha1(buf: Buffer): string {
@@ -23,12 +30,25 @@ export async function buildPkpass(input: BuildPkpassInput): Promise<Buffer> {
   const passJsonBuffer = Buffer.from(JSON.stringify(input.passJson), "utf8");
   const icon = buildSolidSquarePng(29, input.iconRgb);
   const icon2x = buildSolidSquarePng(58, input.iconRgb);
+  const icon3x = buildSolidSquarePng(87, input.iconRgb);
 
   const files: Record<string, Buffer> = {
     "pass.json": passJsonBuffer,
     "icon.png": icon,
     "icon@2x.png": icon2x,
+    "icon@3x.png": icon3x,
   };
+
+  if (input.logoPng) {
+    files["logo.png"] = input.logoPng.at1x;
+    files["logo@2x.png"] = input.logoPng.at2x;
+    files["logo@3x.png"] = input.logoPng.at3x;
+  }
+  if (input.stripPng) {
+    files["strip.png"] = input.stripPng.at1x;
+    files["strip@2x.png"] = input.stripPng.at2x;
+    files["strip@3x.png"] = input.stripPng.at3x;
+  }
 
   const manifest: Record<string, string> = {};
   for (const [name, buf] of Object.entries(files)) {
