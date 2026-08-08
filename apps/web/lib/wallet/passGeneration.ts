@@ -59,25 +59,38 @@ export async function generateApplePkpassForCustomer(
   const labelRgb: RgbColor = brandColorHex ? [255, 217, 179] : [110, 110, 110];
   const iconRgb: RgbColor = brandColorHex ? backgroundRgb : deriveBrandColor(businessId);
 
-  // logo.png/strip.png son best-effort: un asset roto/ausente no debe
-  // tumbar la generación del pase (mismo criterio que
-  // notifyWalletOfTransaction) — sin ellos, el pase sigue siendo válido,
-  // solo sin esa pieza visual.
+  // logo.png/strip.png son best-effort DE VERDAD (antes solo lo decía el
+  // comentario, el código no lo hacía): un asset roto/ausente, O sharp
+  // fallando a cargar su binario nativo en este runtime (bug real de
+  // producción, ver git log — ERR_DLOPEN_FAILED pese a varios intentos de
+  // arreglarlo a nivel de bundler), no debe tumbar el pase COMPLETO. Sin
+  // logo/strip el pase sigue siendo válido e instalable — QR, sellos y
+  // recompensa intactos — solo sin esa pieza visual. Antes de este fix,
+  // un fallo acá abortaba generateApplePkpassForCustomer entero: un
+  // cliente de un negocio con branding real (Chilaquikes) no recibía
+  // NINGÚN pase, ni siquiera el plano.
   const [logoBuffer, heroBuffer] = await Promise.all([
     resolveBusinessAssetBuffer(snapshot.businessWalletLogoUrl),
     resolveBusinessAssetBuffer(snapshot.businessWalletHeroUrl),
   ]);
 
-  const logoPng = logoBuffer
-    ? {
+  let logoPng: { at1x: Buffer; at2x: Buffer; at3x: Buffer } | undefined;
+  if (logoBuffer) {
+    try {
+      logoPng = {
         at1x: await buildLogoImage(logoBuffer, 1),
         at2x: await buildLogoImage(logoBuffer, 2),
         at3x: await buildLogoImage(logoBuffer, 3),
-      }
-    : undefined;
+      };
+    } catch (error) {
+      console.error("buildLogoImage:", error);
+    }
+  }
 
-  const stripPng = heroBuffer
-    ? {
+  let stripPng: { at1x: Buffer; at2x: Buffer; at3x: Buffer } | undefined;
+  if (heroBuffer) {
+    try {
+      stripPng = {
         at1x: await buildStripImage({
           heroImageBuffer: heroBuffer,
           bandRgb: backgroundRgb,
@@ -99,8 +112,11 @@ export async function generateApplePkpassForCustomer(
           stampsRequired: snapshot.stampsRequired,
           scale: 3,
         }),
-      }
-    : undefined;
+      };
+    } catch (error) {
+      console.error("buildStripImage:", error);
+    }
+  }
 
   const passJson = buildPassJson({
     serialNumber: walletPass.id,
