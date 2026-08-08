@@ -1,5 +1,17 @@
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Monorepo pnpm: sharp vive en node_modules/.pnpm (virtual store),
+  // symlinkeado. Sin esto, el file-tracer de Next solo mira dentro de
+  // apps/web y puede no seguir el symlink hasta el binario nativo real —
+  // gotcha documentado de Next+pnpm+binarios nativos en Vercel. Apunta a
+  // la raíz del monorepo para que el tracer resuelva la ubicación física
+  // real de @img/sharp-linux-x64.
+  outputFileTracingRoot: path.join(__dirname, "../.."),
   // Next 16 bloquea por default los recursos de dev (HMR, y con eso la
   // hidratación del cliente en dev) si el Origin no está en esta lista —
   // "127.0.0.1" NO cuenta como "localhost" automáticamente, y un túnel
