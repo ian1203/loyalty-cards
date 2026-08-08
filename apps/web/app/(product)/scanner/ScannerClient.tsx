@@ -186,19 +186,48 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
     setIdempotencyKey(crypto.randomUUID());
   }
 
+  // Una Server Action puede LANZAR en vez de devolver {ok:false} — el caso
+  // real encontrado en producción es "Failed to find Server Action" (el
+  // navegador sigue con el bundle de un deploy viejo mientras el servidor
+  // ya sirve uno nuevo: el id de la action ya no existe del lado del
+  // servidor). Sin este catch, la excepción no llegaba a applyResult() —
+  // subía sin capturar y el error boundary de la ruta (error.tsx, "No se
+  // pudo cargar el scanner") se quedaba pegado hasta que el empleado
+  // recargara a mano. Mismo tratamiento para cualquier otra excepción real
+  // (corte de red a medio request): recargar es lo único que reconecta el
+  // bundle del cliente con lo que el servidor espera.
+  function handleActionError() {
+    setBanner({
+      kind: "error",
+      title: "La app se actualizó",
+      description: "Recargando para seguir escaneando…",
+      autoResetMs: null,
+    });
+    setResultId((id) => id + 1);
+    window.setTimeout(() => window.location.reload(), 1200);
+  }
+
   function handleToken(token: string) {
     setBanner(null);
     startTransition(async () => {
-      const result = await lookupCustomerAction(token);
-      applyResult("lookup", result);
+      try {
+        const result = await lookupCustomerAction(token);
+        applyResult("lookup", result);
+      } catch {
+        handleActionError();
+      }
     });
   }
 
   function handleManualSelect(customerId: string) {
     setBanner(null);
     startTransition(async () => {
-      const result = await lookupCustomerByIdAction(customerId);
-      applyResult("lookup", result);
+      try {
+        const result = await lookupCustomerByIdAction(customerId);
+        applyResult("lookup", result);
+      } catch {
+        handleActionError();
+      }
     });
   }
 
@@ -206,12 +235,16 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
     if (!view || !locationId) return;
     setBanner(null);
     startTransition(async () => {
-      const result = await registerStampAction({
-        customerId: view.customer.id,
-        locationId,
-        idempotencyKey,
-      });
-      applyResult("stamp", result);
+      try {
+        const result = await registerStampAction({
+          customerId: view.customer.id,
+          locationId,
+          idempotencyKey,
+        });
+        applyResult("stamp", result);
+      } catch {
+        handleActionError();
+      }
     });
   }
 
@@ -219,13 +252,17 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
     if (!view || !locationId) return;
     setBanner(null);
     startTransition(async () => {
-      const result = await redeemRewardAction({
-        customerId: view.customer.id,
-        ruleId,
-        locationId,
-        idempotencyKey,
-      });
-      applyResult("redeem", result);
+      try {
+        const result = await redeemRewardAction({
+          customerId: view.customer.id,
+          ruleId,
+          locationId,
+          idempotencyKey,
+        });
+        applyResult("redeem", result);
+      } catch {
+        handleActionError();
+      }
     });
   }
 
