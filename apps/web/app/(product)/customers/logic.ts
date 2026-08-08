@@ -76,15 +76,19 @@ class DuplicateCustomerError extends Error {
   }
 }
 
-// Alta manual de cliente: la hacen tanto el dueño como el staff (cualquier
-// sesión de tenant válida). Crea el cliente + su balance inicial de sellos
-// (0, contra el programa activo si existe) + audit log, todo en la misma
-// transacción tenant-scoped.
+// Alta manual de cliente: la hace el dueño/admin — staff quedó rebotado de
+// TODO /customers (directorio administrativo, ver customers/page.tsx),
+// consistente con el modelo "staff = solo /scanner" (auditoría RBAC).
+// Crea el cliente + su balance inicial de sellos (0, contra el programa
+// activo si existe) + audit log, todo en la misma transacción tenant-scoped.
 export async function createCustomerForSession(
   session: TenantSession | null,
   formData: FormData,
 ): Promise<CustomerActionState> {
   if (!session) {
+    return { error: "No autorizado." };
+  }
+  if (session.role === "staff") {
     return { error: "No autorizado." };
   }
 

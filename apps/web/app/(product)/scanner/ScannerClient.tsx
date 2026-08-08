@@ -229,27 +229,39 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
     });
   }
 
-  if (!online) {
-    // Bloqueo total, no solo deshabilitar botones: el MVP exige conexión
-    // real al registrar — no hay cola offline que "sincronice después" (ver
-    // skill frontend-conventions). Ningún panel interactivo se renderiza.
-    return (
-      <Alert variant="destructive">
-        <AlertTitle>Sin conexión</AlertTitle>
-        <AlertDescription>
-          El scanner necesita internet para operar — los sellos y canjes se
-          validan en el momento. Reconéctate para continuar.
-        </AlertDescription>
-      </Alert>
-    );
-  }
+  // Aviso, no bloqueo: navigator.onLine es notoriamente poco confiable en
+  // Safari/Chrome de iOS (WebKit) — reporta "false" con conexión real,
+  // especialmente cambiando de red. Un bloqueo total sobre esa señal dejaba
+  // el scanner completo inoperable (ni cámara ni búsqueda manual) en un
+  // dispositivo con internet de verdad — bug real encontrado en producción.
+  // La seguridad de fondo no depende de esto: si de verdad no hay red, la
+  // Server Action de sellar/canjear falla y el error normal de
+  // applyResult() ya lo comunica — no hay cola offline que "sincronice
+  // después" (ver skill frontend-conventions), pero tampoco hace falta
+  // adivinar la conectividad del lado del cliente para eso.
+  const offlineWarning = !online ? (
+    <Alert variant="destructive">
+      <AlertTitle>Podrías estar sin conexión</AlertTitle>
+      <AlertDescription>
+        Tu navegador reporta que no hay internet — puede ser un falso
+        positivo. Si un sello o canje no se registra, revisa tu conexión e
+        intenta de nuevo.
+      </AlertDescription>
+    </Alert>
+  ) : null;
 
   if (!locationId) {
-    return <LocationPicker locations={locations} onSelect={setLocationId} />;
+    return (
+      <div className="flex flex-col gap-4">
+        {offlineWarning}
+        <LocationPicker locations={locations} onSelect={setLocationId} />
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {offlineWarning}
       <div className="flex justify-end">
         <Button
           type="button"

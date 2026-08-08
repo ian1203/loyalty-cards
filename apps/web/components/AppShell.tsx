@@ -21,10 +21,25 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+// Filtro cosmético — nunca el control real (eso vive server-side en cada
+// page.tsx/route.ts, ver la auditoría RBAC). Solo evita que un staff vea
+// links a pantallas de las que igual lo rebota el servidor.
+function navItemsForRole(role: string) {
+  return role === "staff" ? NAV_ITEMS.filter((item) => item.href === "/scanner") : NAV_ITEMS;
+}
+
+function NavLinks({
+  pathname,
+  items,
+  onNavigate,
+}: {
+  pathname: string;
+  items: readonly (typeof NAV_ITEMS)[number][];
+  onNavigate?: () => void;
+}) {
   return (
     <nav className="flex flex-col gap-1">
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
         return (
@@ -62,6 +77,7 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navItems = navItemsForRole(role);
 
   return (
     <div className="min-h-screen bg-background lg:flex">
@@ -74,7 +90,7 @@ export function AppShell({
           <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {businessName}
           </p>
-          <NavLinks pathname={pathname} />
+          <NavLinks pathname={pathname} items={navItems} />
         </div>
         <Separator />
         <div className="p-2">
@@ -107,7 +123,7 @@ export function AppShell({
                 <p className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {businessName}
                 </p>
-                <NavLinks pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+                <NavLinks pathname={pathname} items={navItems} onNavigate={() => setMobileOpen(false)} />
               </div>
               <div className="border-t pt-2">
                 <UserMenu email={email} role={role} />

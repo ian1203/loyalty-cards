@@ -41,6 +41,14 @@ export default async function DashboardPage() {
     redirect("/admin");
   }
 
+  // staff = solo /scanner (rol operativo, sin acceso al overview de negocio)
+  // — real a nivel servidor, no solo oculto en el nav. Hallazgo CRÍTICO de
+  // la auditoría RBAC: antes de este chequeo, cualquier staff autenticado
+  // atravesaba intacto y veía métricas agregadas del negocio completo.
+  if (session.role === "staff") {
+    redirect("/scanner");
+  }
+
   const { businessName, metrics, visits, newVsReturning, redemptionRate } = await withTenantContext(
     session.businessId,
     async (tx) => {

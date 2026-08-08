@@ -294,12 +294,37 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
   });
 
   describe("alta de cliente", () => {
-    it("staff da de alta un cliente: balance inicial 0 contra el programa activo + audit", async () => {
+    // Modelo RBAC nuevo (post-auditoría): staff = SOLO /scanner. El
+    // directorio administrativo de clientes — incluida el alta — ya no es
+    // suyo (antes sí lo era: "cualquier sesión de tenant válida" — ver el
+    // git log de este test). El dueño SÍ da de alta (siguiente test cubre
+    // ese camino como parte de la propia prueba de dedupe).
+    it("staff NO puede dar de alta un cliente: rechazado server-side, sin fila creada", async () => {
       const result = await createCustomerForSession(
         sessionStaffA,
-        form({ fullName: "Cliente de Staff A", phone: "+52 555 000 0002" }),
+        form({ fullName: "Cliente de Staff A", phone: "+52 555 000 0003" }),
       );
-      expect(result.success).toBeDefined();
+      expect(result.error).toBeDefined();
+      expect(result.success).toBeUndefined();
+
+      const rows = await adminDb
+        .select()
+        .from(customers)
+        .where(
+          and(
+            eq(customers.businessId, businessAId),
+            eq(customers.phone, "+52 555 000 0003"),
+          ),
+        );
+      expect(rows).toHaveLength(0);
+    });
+
+    it("owner da de alta un cliente (balance inicial 0 + audit) y el dedupe de teléfono rechaza un segundo alta", async () => {
+      const created = await createCustomerForSession(
+        sessionOwnerA,
+        form({ fullName: "Cliente de Owner A", phone: "+52 555 000 0002" }),
+      );
+      expect(created.success).toBeDefined();
 
       const [customerRow] = await adminDb
         .select()
@@ -329,14 +354,12 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
           ),
         );
       expect(log?.actorUserId).not.toBeNull();
-    });
 
-    it("dedupe: mismo teléfono dentro del tenant rechaza con mensaje claro", async () => {
-      const result = await createCustomerForSession(
+      const duplicate = await createCustomerForSession(
         sessionOwnerA,
         form({ fullName: "Duplicado", phone: "+52 555 000 0002" }),
       );
-      expect(result.error).toBe("Ya existe un cliente con ese teléfono en tu negocio.");
+      expect(duplicate.error).toBe("Ya existe un cliente con ese teléfono en tu negocio.");
     });
 
     it("el MISMO teléfono en OTRO negocio sí se permite (el dedupe es por tenant, no global)", async () => {

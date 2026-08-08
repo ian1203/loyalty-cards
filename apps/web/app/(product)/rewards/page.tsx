@@ -16,15 +16,21 @@ import { NewRuleForm, RuleRow } from "./RuleForms";
 
 // Config del programa de SELLOS + reglas de recompensa. Tenant-scoped:
 // business_id sale de la sesión verificada; toda query filtra explícito por
-// business_id además de RLS. Solo el dueño edita — staff ve read-only y las
-// actions rechazan server-side de todos modos.
+// business_id además de RLS. staff = solo /scanner (modelo nuevo, auditoría
+// RBAC) — rebotado server-side de esta página completa, ni siquiera
+// lectura (antes solo tenía vista read-only, lo cual dejaba leer la config
+// del negocio sin necesidad). Entre quienes SÍ llegan, owner/admin editan
+// por igual — ambos son "acceso total" en el modelo nuevo.
 export default async function RewardsPage() {
   const session = await requireTenantSession();
   if (!session) {
     redirect("/login");
   }
+  if (session.role === "staff") {
+    redirect("/scanner");
+  }
 
-  const canEdit = session.role === "owner";
+  const canEdit = session.role === "owner" || session.role === "admin";
 
   const { program, rules } = await withTenantContext(session.businessId, async (tx) => {
     const [program] = await tx
