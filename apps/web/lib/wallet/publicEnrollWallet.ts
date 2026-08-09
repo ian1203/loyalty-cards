@@ -47,7 +47,6 @@ export async function buildWalletArtifactsForNewEnrollment(
     let googleSaveLink: string | null = null;
     try {
       googleSaveLink = await buildGoogleSaveLinkForCustomer(tx, businessId, customerId);
-      console.error("DIAGNOSTIC googleSaveLink result:", typeof googleSaveLink, googleSaveLink === null ? "null" : googleSaveLink?.length);
     } catch (error) {
       console.error("buildGoogleSaveLinkForCustomer DIAGNOSTIC:", error);
     }
