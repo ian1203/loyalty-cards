@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { AppleWalletBadge } from "../../../../components/AppleWalletBadge";
+import { GoogleWalletBadge } from "../../../../components/GoogleWalletBadge";
 import { Button } from "../../../../components/ui/button";
 import { Checkbox } from "../../../../components/ui/checkbox";
 import { Input } from "../../../../components/ui/input";
@@ -198,9 +199,7 @@ function EnrollConfirmation({ success }: { success: NonNullable<EnrollActionStat
           {walletToShow === "apple" ? (
             <AppleWalletBadge href={success.appleWalletDownloadUrl!} />
           ) : (
-            <Button asChild className="w-full sm:w-auto">
-              <a href={success.googleSaveLink!}>Agregar a Google Wallet</a>
-            </Button>
+            <GoogleWalletBadge href={success.googleSaveLink!} />
           )}
         </div>
       )}

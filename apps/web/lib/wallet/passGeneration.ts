@@ -24,6 +24,19 @@ function deriveScaledUrl(url: string, suffix: "@2x" | "@3x"): string {
   return `${url.slice(0, dotIndex)}${suffix}${url.slice(dotIndex)}`;
 }
 
+// businessWalletHeroUrl sigue apuntando a la base sin cambios en la DB
+// (".../strip.png") — generate-pass-assets.ts (Sección A2) ya no produce
+// ESE archivo como el que se usa, sino un archivo POR conteo de sellos
+// (strip-0.png..strip-N.png). Insertar "-{n}" antes de la extensión, del
+// mismo modo que deriveScaledUrl inserta "@2x"/"@3x", evita una columna
+// nueva en businesses: el conteo clamped se resuelve acá, con el balance
+// real del cliente en el momento de generar el .pkpass.
+function deriveStampCountUrl(url: string, stampCount: number): string {
+  const dotIndex = url.lastIndexOf(".");
+  if (dotIndex === -1) return `${url}-${stampCount}`;
+  return `${url.slice(0, dotIndex)}-${stampCount}${url.slice(dotIndex)}`;
+}
+
 async function loadStaticAssetSet(
   baseUrl: string | null,
 ): Promise<{ at1x: Buffer; at2x: Buffer; at3x: Buffer } | undefined> {
@@ -92,9 +105,19 @@ export async function generateApplePkpassForCustomer(
   const labelRgb: RgbColor = brandColorHex ? [255, 217, 179] : [110, 110, 110];
   const iconRgb: RgbColor = brandColorHex ? backgroundRgb : deriveBrandColor(businessId);
 
+  // El canje ARRASTRA el sobrante (ver @loyalty/core) — currentStamps
+  // puede superar stampsRequired legítimamente. Solo existe un strip
+  // pre-generado por cada valor 0..stampsRequired (Sección A2), así que
+  // el conteo se clampea acá antes de derivar el nombre de archivo —
+  // igual que ya hacía el mensaje "X de Y" en el resto del pase.
+  const clampedStamps = Math.min(snapshot.currentStamps, snapshot.stampsRequired);
+  const stripUrl = snapshot.businessWalletHeroUrl
+    ? deriveStampCountUrl(snapshot.businessWalletHeroUrl, clampedStamps)
+    : null;
+
   const [logoPng, stripPng] = await Promise.all([
     loadStaticAssetSet(snapshot.businessWalletLogoUrl),
-    loadStaticAssetSet(snapshot.businessWalletHeroUrl),
+    loadStaticAssetSet(stripUrl),
   ]);
 
   const passJson = buildPassJson({

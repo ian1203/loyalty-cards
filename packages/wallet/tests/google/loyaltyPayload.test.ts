@@ -41,6 +41,11 @@ describe("buildLoyaltyClassId / buildLoyaltyObjectId — derivados, no guardados
   it("dos negocios distintos producen classId distintos", () => {
     expect(buildLoyaltyClassId("issuer1", "biz1")).not.toBe(buildLoyaltyClassId("issuer1", "biz2"));
   });
+
+  it("con versión, agrega el sufijo — sin versión, el id sale igual que siempre (compatibilidad hacia atrás)", () => {
+    expect(buildLoyaltyClassId("issuer1", "biz1", "v2")).toBe("issuer1.biz_biz1_v2");
+    expect(buildLoyaltyClassId("issuer1", "biz1")).toBe("issuer1.biz_biz1");
+  });
 });
 
 describe("buildLoyaltyClassPayload — plantilla por negocio, sin datos de cliente", () => {
@@ -130,18 +135,19 @@ describe("buildLoyaltyObjectPayload — contenido mínimo por cliente, sin PII d
     expect(obj.loyaltyPoints.balance.string).toBe("4 / 6");
   });
 
-  it("sin recompensa disponible, textModulesData queda vacío", () => {
-    const obj = buildLoyaltyObjectPayload(objectInput) as { textModulesData: unknown[] };
-    expect(obj.textModulesData).toEqual([]);
+  it("sin recompensa disponible, textModulesData lleva solo 'Powered by Pragmia' (sin mensaje de progreso)", () => {
+    const obj = buildLoyaltyObjectPayload(objectInput) as { textModulesData: Array<{ id: string; body: string }> };
+    expect(obj.textModulesData).toEqual([{ id: "poweredBy", header: "", body: "Powered by Pragmia" }]);
   });
 
-  it("con recompensa configurada, textModulesData lleva el mensaje motivador de buildProgressMessage", () => {
+  it("con recompensa configurada, textModulesData lleva el mensaje motivador de buildProgressMessage además de 'Powered by Pragmia'", () => {
     const obj = buildLoyaltyObjectPayload({ ...objectInput, rewardName: "Café gratis" }) as {
-      textModulesData: Array<{ header: string; body: string }>;
+      textModulesData: Array<{ id: string; header: string; body: string }>;
     };
     expect(obj.textModulesData[0].body).toBe(
       buildProgressMessage(objectInput.currentStamps, objectInput.stampsRequired, "Café gratis"),
     );
+    expect(obj.textModulesData[1]).toEqual({ id: "poweredBy", header: "", body: "Powered by Pragmia" });
   });
 
   it("sin nombre de cliente (null), no incluye accountName — nunca 'undefined' ni placeholder", () => {
