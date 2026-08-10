@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore, useTransition } from "react";
-import { Volume2Icon, VolumeXIcon } from "lucide-react";
+import { MapPinIcon, Volume2Icon, VolumeXIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { useOnlineStatus } from "../../../lib/useOnlineStatus";
@@ -128,9 +128,23 @@ function buildBanner(action: ActionKind, result: ScannerResult): Banner | null {
 // (no un <form>: son varias acciones con argumentos propios, no un solo
 // submit) — el gate de sesión/rol/estado vive en la Server Action, esto
 // solo maneja estado de UI.
-export function ScannerClient({ locations }: { locations: Location[] }) {
+//
+// autoSelectedLocationId (page.tsx la resuelve fresca contra la DB, nunca
+// del JWT — ver el comentario ahí) salta el paso de LocationPicker para un
+// empleado con exactamente una sucursal asignada: SOLO fija el estado
+// inicial de este componente, es cortesía de UI, no seguridad — cada
+// sello/canje sigue re-validando la sucursal server-side en
+// requireOperationContext exactamente igual que si el operador la hubiera
+// elegido a mano.
+export function ScannerClient({
+  locations,
+  autoSelectedLocationId,
+}: {
+  locations: Location[];
+  autoSelectedLocationId: string | null;
+}) {
   const online = useOnlineStatus();
-  const [locationId, setLocationId] = useState<string | null>(null);
+  const [locationId, setLocationId] = useState<string | null>(autoSelectedLocationId);
   const [view, setView] = useState<ScannerCustomerView | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
   const [message, setMessage] = useState<string | null>(null);
@@ -296,10 +310,23 @@ export function ScannerClient({ locations }: { locations: Location[] }) {
     );
   }
 
+  // Confirmación visual de dónde queda cada sello/canje — sobre todo para
+  // el caso de auto-selección (el empleado nunca la eligió a mano), pero se
+  // muestra siempre que hay una sucursal activa, elegida o asignada.
+  const activeLocationName = locations.find((l) => l.id === locationId)?.name ?? null;
+
   return (
     <div className="flex flex-col gap-4">
       {offlineWarning}
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3">
+        {activeLocationName ? (
+          <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+            <MapPinIcon className="size-4 shrink-0" />
+            Sellando en: <span className="text-foreground">{activeLocationName}</span>
+          </p>
+        ) : (
+          <span />
+        )}
         <Button
           type="button"
           variant="ghost"
