@@ -13,11 +13,15 @@
 // mascota está entrelazado con el wordmark en la misma capa (una mano
 // agarra la "A", el cuerpo se mete detrás del contorno negro de
 // "QUIKES") — ningún recorte rectangular lo aísla sin arrastrar
-// fragmentos de letra. Fallback automático, sin bloquear: fila de
-// círculos (rellenos = color de marca sólido, vacíos = contorno gris)
-// sobre una banda de fondo sólida elegida por CONTRASTE con el color de
-// marca — nunca sello y fondo del mismo color ("nada de sello rojo sobre
-// rojo"). passGeneration.ts elige el archivo correcto según
+// fragmentos de letra. Fallback SIN --hero: fila de círculos (rellenos =
+// color de marca sólido, vacíos = contorno gris) sobre una banda de fondo
+// sólida elegida por CONTRASTE con el color de marca — nunca sello y
+// fondo del mismo color ("nada de sello rojo sobre rojo"). CON --hero
+// (Sección A3): el mismo lockup transparente se compone en grande sobre
+// un fondo de marca (patrón tileado, ver buildTiledHeroCanvas) con los
+// sellos en una franja dedicada abajo — ver el porqué en el comentario de
+// esa función, un "cover crop" directo del hero no deja margen para los
+// sellos sin taparlos. passGeneration.ts elige el archivo correcto según
 // min(currentStamps, stampsRequired) — ver deriveStampCountUrl ahí.
 //
 // Dimensiones storeCard (validadas visualmente en una ronda anterior,
@@ -25,11 +29,15 @@
 // coupon/eventTicket): logo se ajusta por ALTURA (50/100/150pt),
 // strip 312x123pt @1x (624x246 @2x, 936x369 @3x).
 //
-// Uso: pnpm --filter @loyalty/wallet generate-pass-assets -- \
-//   --slug chilaquikes \
-//   --logo ../../chilaquikes-logo-pass.png \
-//   --stamps-required 6 \
-//   --brand-color DB0A00
+// Uso (fallback, círculos sobre blanco):
+//   pnpm --filter @loyalty/wallet generate-pass-assets -- \
+//     --slug chilaquikes --logo ../../chilaquikes-logo-pass.png \
+//     --stamps-required 6 --brand-color DB0A00
+// Uso (hero compuesto, Sección A3):
+//   pnpm --filter @loyalty/wallet generate-pass-assets -- \
+//     --slug chilaquikes --logo ../../chilaquikes-logo-pass.png \
+//     --stamps-required 6 --brand-color DB0A00 \
+//     --hero ../../chilaquikes/logo-wordmark.png
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,7 +63,27 @@ const STRIP_PADDING_X = 20;
 const STAMP_GAP_RATIO = 0.32; // gap = diámetro * ratio
 const MAX_STAMP_DIAMETER = 60;
 
-type Args = { slug: string; logo: string; stampsRequired: number; brandColor: string };
+// --- Sección A3: modo --hero (logo compuesto + franja de sellos dedicada) ---
+// Elegidas en una ronda de verificación visual con renders reales
+// (3 variantes de contraste, 2 variantes de layout) — ver la sesión que
+// las aprobó. HERO_LOGO_HEIGHT_RATIO prioriza que la franja de sellos se
+// lea sin esfuerzo por encima de maximizar el tamaño del logo (Variante 2
+// elegida sobre la Variante 1, que dejaba menos aire a los sellos).
+const HERO_LOGO_HEIGHT_RATIO = 0.62; // proporción de STRIP_BASE_HEIGHT
+const HERO_LOGO_TOP_PT = 14 / 3; // ~4.67pt @1x (14px medidos @3x)
+const HERO_BAND_HEIGHT_PT = 150 / 3; // 50pt @1x (150px medidos @3x)
+const HERO_STAMP_BACKING_FILL = "#FFFFFF"; // disco blanco detrás de cada sello — mismo lenguaje visual que el fondo blanco liso de siempre, solo que individual
+const HERO_PATCH_SIZE = 300; // px, muestreado del source del hero a resolución nativa
+
+type Args = {
+  slug: string;
+  logo: string;
+  stampsRequired: number;
+  brandColor: string;
+  hero?: string;
+  heroPatchX: number;
+  heroPatchY: number;
+};
 
 function parseArgs(argv: string[]): Args {
   const get = (flag: string): string | undefined => {
@@ -66,9 +94,21 @@ function parseArgs(argv: string[]): Args {
   const logo = get("--logo");
   const stampsRequiredRaw = get("--stamps-required");
   const brandColorRaw = get("--brand-color");
+  const hero = get("--hero");
+  // El origen del parche de patrón es específico de CADA imagen de hero —
+  // (0,0) funcionó para chilaquikes/logo-wordmark.png (confirmado limpio
+  // de logo con un probe visual antes de usarlo) pero no hay garantía de
+  // que sirva para el hero de otro negocio; por eso es un flag, no una
+  // constante. Verificar visualmente el parche elegido ANTES de generar
+  // (ver seam-check en la sesión que validó esto — a este tamaño de patch
+  // la costura del tile es visible en zoom aunque no salte a la vista en
+  // la composición final; ver ese hallazgo antes de asumir que un patch
+  // nuevo sale limpio).
+  const heroPatchX = Number.parseInt(get("--hero-patch-x") ?? "0", 10);
+  const heroPatchY = Number.parseInt(get("--hero-patch-y") ?? "0", 10);
   if (!slug || !logo || !stampsRequiredRaw) {
     throw new Error(
-      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>]",
+      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>]",
     );
   }
   const stampsRequired = Number.parseInt(stampsRequiredRaw, 10);
@@ -78,7 +118,7 @@ function parseArgs(argv: string[]): Args {
   // Gris oscuro por default — nunca invisible sobre el fondo blanco del
   // strip si un negocio corre este script sin marca cargada todavía.
   const brandColor = `#${(brandColorRaw ?? "1F1F1F").replace(/^#/, "")}`;
-  return { slug, logo, stampsRequired, brandColor };
+  return { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY };
 }
 
 function computeStampLayout(stampsRequired: number): { diameter: number; centersX: number[]; centerY: number } {
@@ -111,8 +151,91 @@ function buildStripSvg(filledCount: number, stampsRequired: number, brandColor: 
   </svg>`;
 }
 
+// Un "cover crop" directo del hero no deja margen para los sellos: con el
+// ratio real de Apple (312x123 = 2.54:1) contra un source típico ~2.667:1,
+// el crop usa ~100% de la altura del source, así que la fila de sellos
+// centrada cae encima del lockup del logo sin importar dónde se recorte
+// (confirmado con el cálculo y el render real en la sesión que aprobó
+// esto). En vez de recortar, se COMPONE: un parche de patrón puro
+// (muestreado de una zona SIN el lockup del hero, ver --hero-patch-x/y)
+// se tilea para armar un lienzo del tamaño exacto que se necesita, y el
+// lockup transparente (el mismo --logo, no el --hero) se compone encima
+// a tamaño grande — dejando una franja limpia reservada abajo para los
+// sellos en vez de competir por el mismo espacio.
+//
+// Se arma UNA vez a la resolución más alta (@3x) y se re-escala hacia
+// abajo para @2x/@1x — más simple y consistente entre escalas que
+// recalcular la composición 3 veces, y un downscale desde una imagen de
+// mayor resolución no pierde nitidez perceptible a estos tamaños.
+async function buildHeroStripAt3x(
+  heroPath: string,
+  logoPath: string,
+  patchX: number,
+  patchY: number,
+  filledCount: number,
+  stampsRequired: number,
+  brandColor: string,
+): Promise<Buffer> {
+  const scale = 3;
+  const width = STRIP_BASE_WIDTH * scale;
+  const height = STRIP_BASE_HEIGHT * scale;
+
+  const patch = await sharp(heroPath)
+    .extract({ left: patchX, top: patchY, width: HERO_PATCH_SIZE, height: HERO_PATCH_SIZE })
+    .toBuffer();
+  const tilesX = Math.ceil(width / HERO_PATCH_SIZE) + 1;
+  const tilesY = Math.ceil(height / HERO_PATCH_SIZE) + 1;
+  const tileComposites: sharp.OverlayOptions[] = [];
+  for (let y = 0; y < tilesY; y++) {
+    for (let x = 0; x < tilesX; x++) {
+      tileComposites.push({ input: patch, left: x * HERO_PATCH_SIZE, top: y * HERO_PATCH_SIZE });
+    }
+  }
+  const background = await sharp({
+    create: { width, height, channels: 3, background: brandColor },
+  })
+    .composite(tileComposites)
+    .png()
+    .toBuffer();
+
+  const logoTargetHeight = Math.round(height * HERO_LOGO_HEIGHT_RATIO);
+  const logoResized = await sharp(logoPath)
+    .resize({ height: logoTargetHeight, fit: "inside" })
+    .toBuffer();
+  const logoMeta = await sharp(logoResized).metadata();
+  const logoLeft = Math.round((width - (logoMeta.width ?? 0)) / 2);
+  const logoTop = Math.round(HERO_LOGO_TOP_PT * scale);
+
+  const { diameter, centersX } = computeStampLayout(stampsRequired);
+  const r = (diameter / 2) * scale;
+  const bandHeightPx = HERO_BAND_HEIGHT_PT * scale;
+  const bandCenterY = height - bandHeightPx / 2;
+  const stampParts = centersX.map((cx, i) => {
+    const cxS = cx * scale;
+    const backing = `<circle cx="${cxS}" cy="${bandCenterY}" r="${r}" fill="${HERO_STAMP_BACKING_FILL}" />`;
+    const foreground =
+      i < filledCount
+        ? `<circle cx="${cxS}" cy="${bandCenterY}" r="${r - 3 * scale}" fill="${brandColor}" />`
+        : `<circle cx="${cxS}" cy="${bandCenterY}" r="${r - 3 * scale}" fill="none" stroke="${EMPTY_STAMP_STROKE}" stroke-width="${2 * scale}" />`;
+    return backing + foreground;
+  });
+  const stampSvg = Buffer.from(
+    `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${stampParts.join("")}</svg>`,
+  );
+
+  return sharp(background)
+    .composite([
+      { input: logoResized, left: logoLeft, top: logoTop },
+      { input: stampSvg, left: 0, top: 0 },
+    ])
+    .png()
+    .toBuffer();
+}
+
 async function main() {
-  const { slug, logo, stampsRequired, brandColor } = parseArgs(process.argv.slice(2));
+  const { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY } = parseArgs(
+    process.argv.slice(2),
+  );
   const outDir = path.join(PUBLIC_PASSES_DIR, slug);
   await mkdir(outDir, { recursive: true });
 
@@ -131,7 +254,27 @@ async function main() {
   // Strip: un archivo por cada conteo posible de sellos (0..stampsRequired,
   // inclusive) — passGeneration.ts elige el correcto en tiempo de
   // generación del .pkpass según el balance real del cliente.
+  const heroPath = hero ? path.resolve(process.cwd(), hero) : null;
   for (let filledCount = 0; filledCount <= stampsRequired; filledCount++) {
+    if (heroPath) {
+      const at3x = await buildHeroStripAt3x(
+        heroPath,
+        logoPath,
+        heroPatchX,
+        heroPatchY,
+        filledCount,
+        stampsRequired,
+        brandColor,
+      );
+      await sharp(at3x).toFile(path.join(outDir, `strip-${filledCount}@3x.png`));
+      await sharp(at3x)
+        .resize(STRIP_BASE_WIDTH * 2, STRIP_BASE_HEIGHT * 2)
+        .toFile(path.join(outDir, `strip-${filledCount}@2x.png`));
+      await sharp(at3x)
+        .resize(STRIP_BASE_WIDTH, STRIP_BASE_HEIGHT)
+        .toFile(path.join(outDir, `strip-${filledCount}.png`));
+      continue;
+    }
     for (const [suffix, scale] of [["", 1], ["@2x", 2], ["@3x", 3]] as const) {
       const svg = buildStripSvg(filledCount, stampsRequired, brandColor, scale);
       await sharp(Buffer.from(svg))
@@ -143,7 +286,7 @@ async function main() {
   console.log(`[generate-pass-assets] Listo: ${outDir}`);
   console.log("  logo.png, logo@2x.png, logo@3x.png");
   console.log(
-    `  strip-0.png..strip-${stampsRequired}.png (+ @2x/@3x) — ${(stampsRequired + 1) * 3} archivos de strip`,
+    `  strip-0.png..strip-${stampsRequired}.png (+ @2x/@3x) — ${(stampsRequired + 1) * 3} archivos de strip${heroPath ? " (modo --hero)" : ""}`,
   );
 }
 
