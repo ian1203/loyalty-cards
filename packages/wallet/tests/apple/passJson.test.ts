@@ -31,6 +31,36 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     expect(pass.storeCard.secondaryFields[0].value).toBe("María");
   });
 
+  it("headerFields lleva 'SELLOS X/Y' siempre visible (vista apilada de Wallet), un solo campo", () => {
+    const pass = buildPassJson(baseInput) as {
+      storeCard: { headerFields: Array<{ key: string; label: string; value: string }> };
+    };
+    expect(pass.storeCard.headerFields).toEqual([
+      { key: "stampsHeader", label: "SELLOS", value: "4/6" },
+    ]);
+  });
+
+  it("sin availableRewardsCount (o con 1), secondaryFields NO agrega 'Recompensas disponibles' — sería redundante con auxiliaryFields.reward", () => {
+    const passNoCount = buildPassJson(baseInput) as { storeCard: { secondaryFields: Array<{ key: string }> } };
+    expect(passNoCount.storeCard.secondaryFields.map((f) => f.key)).not.toContain("rewardsAvailable");
+
+    const passOne = buildPassJson({ ...baseInput, availableRewardsCount: 1 }) as {
+      storeCard: { secondaryFields: Array<{ key: string }> };
+    };
+    expect(passOne.storeCard.secondaryFields.map((f) => f.key)).not.toContain("rewardsAvailable");
+  });
+
+  it("con availableRewardsCount > 1, secondaryFields SÍ agrega el conteo — ahí sí aporta información nueva", () => {
+    const pass = buildPassJson({ ...baseInput, availableRewardsCount: 3 }) as {
+      storeCard: { secondaryFields: Array<{ key: string; label: string; value: string }> };
+    };
+    expect(pass.storeCard.secondaryFields).toContainEqual({
+      key: "rewardsAvailable",
+      label: "Recompensas disponibles",
+      value: "3",
+    });
+  });
+
   it("el barcode lleva EXACTAMENTE el wallet_token opaco, formato QR — nunca datos del cliente codificados ahí", () => {
     const pass = buildPassJson(baseInput) as {
       barcodes: Array<{ message: string; format: string }>;

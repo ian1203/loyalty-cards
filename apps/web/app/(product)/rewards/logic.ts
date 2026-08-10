@@ -48,6 +48,30 @@ function ownerGateError(session: TenantSession | null): string | null {
 class RuleNotFoundError extends Error {}
 class ProgramMissingError extends Error {}
 
+// PROPAGACIÓN A WALLET — comportamiento actual, documentado tras una
+// auditoría explícita (no es un bug, es el diseño de hoy): tanto
+// saveProgramForSession (stampsRequired) como saveRewardRuleForSession
+// (nombre/descripción de una recompensa) escriben en DB de inmediato y
+// quedan disponibles para lectura en el momento — loadCustomerLoyaltySnapshot
+// (apps/web/lib/wallet/loyaltySnapshot.ts) siempre lee estas tablas en
+// vivo, nunca desde una copia cacheada.
+//
+// PERO ninguna de las dos funciones dispara notifyWalletOfTransaction
+// (apps/web/lib/wallet/notify.ts) — ese hook solo corre después de un
+// sello/canje real (scanner/logic.ts). Así que un cambio acá NO empuja de
+// inmediato a los pases YA INSTALADOS: se refleja recién en el pase de un
+// cliente específico la PRÓXIMA VEZ que ese cliente reciba un sello o
+// canje. Un cliente inactivo puede quedarse con datos viejos en su pase
+// (stamps_required u el texto de una recompensa) indefinidamente, hasta
+// su siguiente visita.
+//
+// Deliberadamente NO implementado: un job que notifique a TODOS los
+// pases de un negocio en cada edición de /rewards — tiene costo real de
+// rate-limit contra las APIs de Apple/Google (un negocio con cientos de
+// clientes dispararía cientos de pushes/PATCHes por cada guardado) y no
+// se ha pedido. Si se decide construirlo, replicar el criterio
+// best-effort de notifyWalletOfTransaction (nunca bloquear el guardado
+// esperando la propagación, cada pase aislado en su propio catch).
 export async function saveProgramForSession(
   session: TenantSession | null,
   formData: FormData,

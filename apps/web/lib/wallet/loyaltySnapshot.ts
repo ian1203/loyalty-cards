@@ -32,6 +32,11 @@ export type CustomerLoyaltySnapshot = {
   // si X existe ANTES de llegar. `rules` ya viene ordenado por
   // stampsRequired ascendente, así que el primero es el próximo hito.
   nextRewardName: string | null;
+  // Cuántas reglas ACTIVAS están desbloqueadas ahora mismo (0, 1, o más si
+  // el negocio define varios tiers y el cliente ya pasó más de uno) —
+  // reusa `rules`/`availableRewards()`, ya calculados abajo para
+  // `rewardName`, cero query nueva.
+  availableRewardsCount: number;
   walletToken: string;
   // Branding real del negocio (nullable — sin logo/hero cargados, el
   // .pkpass sigue el layout plano de siempre, nunca un placeholder
@@ -118,7 +123,8 @@ export async function loadCustomerLoyaltySnapshot(
       ),
     )
     .orderBy(asc(rewardRules.stampsRequired));
-  const [firstAvailable] = availableRewards(currentStamps, rules);
+  const unlockedRewards = availableRewards(currentStamps, rules);
+  const [firstAvailable] = unlockedRewards;
 
   return {
     businessName: business.name,
@@ -128,6 +134,7 @@ export async function loadCustomerLoyaltySnapshot(
     stampsRequired: program.stampsRequired,
     rewardName: firstAvailable?.name ?? null,
     nextRewardName: rules[0]?.name ?? null,
+    availableRewardsCount: unlockedRewards.length,
     walletToken: customer.walletToken,
     businessWalletLogoUrl: business.walletLogoUrl,
     businessBrandColorHex: business.brandColorHex,

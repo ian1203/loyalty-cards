@@ -40,13 +40,26 @@ export async function buildGoogleSaveLinkForCustomer(
     // cuando existe, cae al hash solo para negocios sin branding cargado.
     backgroundRgb: resolveBrandColorRgb(businessId, snapshot.businessBrandColorHex),
     programLogoUri: snapshot.businessGoogleLogoUri ?? undefined,
-    // heroImageUri: quitado a propósito (_v2) — la foto de producto se
-    // veía fuera de lugar en el banner ancho y competía con el mensaje
-    // "Powered by Pragmia"; ver CURRENT_GOOGLE_LOYALTY_CLASS_VERSION.
-    // wideProgramLogoUri: bloqueado — el asset horizontal (1280x400,
-    // transparente) de Narciso todavía no existe. En cuanto
-    // businessGoogleWideLogoUri tenga valor, se manda solo, sin tocar
-    // este archivo de nuevo.
+    // heroImageUri: re-agregado en _v3 — el hero de _v2 (foto de producto
+    // suelta) se veía fuera de lugar y competía con "Powered by Pragmia";
+    // este es un asset DISTINTO (mismo lockup wordmark+mascot que ya se
+    // ve en programLogo, sobre un patrón de marca, no una foto de comida
+    // suelta) generado offline en
+    // apps/web/public/passes/chilaquikes/hero-v3.jpg (ver
+    // packages/wallet/scripts/generate-pass-assets.ts para el criterio de
+    // pre-generación — este resize puntual se hizo a mano porque es un
+    // asset de UN negocio, no parte del pipeline por-conteo-de-sellos).
+    // businessGoogleHeroUri es null para cualquier negocio sin ese asset
+    // cargado — mismo criterio nullable que el resto de la marca.
+    heroImageUri: snapshot.businessGoogleHeroUri ?? undefined,
+    // wideProgramLogoUri: sigue bloqueado. El asset que Ian mandó
+    // (logo-wordmark.png, 2048x768) es para heroImageUri arriba, NO para
+    // este campo — wideProgramLogo espera un wordmark limpio/transparente
+    // sin fondo decorativo (reemplaza el logo circular pequeño del header
+    // por una versión ancha), y este asset trae fondo rojo sólido +
+    // patrón de mini-mascots de borde a borde: se vería como un rectángulo
+    // rojo intruso en el header de Google, no un logotipo. Sigue
+    // pendiente el asset transparente dedicado de Narciso.
     wideProgramLogoUri: snapshot.businessGoogleWideLogoUri ?? undefined,
     classVersion: CURRENT_GOOGLE_LOYALTY_CLASS_VERSION,
   });
@@ -64,6 +77,7 @@ export async function buildGoogleSaveLinkForCustomer(
     // DESDE el primer sello, no solo cuando ya está lista (eso sí aplica
     // a Apple, ver rewardName/passGeneration.ts).
     rewardName: snapshot.nextRewardName,
+    availableRewardsCount: snapshot.availableRewardsCount,
     walletToken: snapshot.walletToken,
     classVersion: CURRENT_GOOGLE_LOYALTY_CLASS_VERSION,
   });

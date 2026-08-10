@@ -132,6 +132,7 @@ export async function generateApplePkpassForCustomer(
     currentStamps: snapshot.currentStamps,
     stampsRequired: snapshot.stampsRequired,
     rewardName: snapshot.rewardName,
+    availableRewardsCount: snapshot.availableRewardsCount,
     walletToken: snapshot.walletToken,
     colors: { backgroundRgb, foregroundRgb, labelRgb },
   });
