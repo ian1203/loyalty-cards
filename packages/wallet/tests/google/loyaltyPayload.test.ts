@@ -89,9 +89,15 @@ describe("buildLoyaltyClassPayload — plantilla por negocio, sin datos de clien
 });
 
 describe("buildProgressMessage — texto motivador (Google Wallet no soporta rejilla gráfica de sellos)", () => {
-  it("con sellos pendientes, incluye el conteo y cuántos faltan para la recompensa real", () => {
+  it("con sellos pendientes, dice cuántos faltan SIN repetir el conteo (ya lo muestra loyaltyPoints.balance)", () => {
     expect(buildProgressMessage(4, 6, "Orden de chilaquiles gratis")).toBe(
-      "4 de 6 sellos — ¡a 2 de tu Orden de chilaquiles gratis!",
+      "¡Te faltan 2 sellos para tu Orden de chilaquiles gratis!",
+    );
+  });
+
+  it("con exactamente 1 sello restante, usa singular", () => {
+    expect(buildProgressMessage(5, 6, "Orden de chilaquiles gratis")).toBe(
+      "¡Solo te falta 1 sello para tu Orden de chilaquiles gratis!",
     );
   });
 

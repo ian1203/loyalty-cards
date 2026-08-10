@@ -41,6 +41,12 @@ export type CustomerLoyaltySnapshot = {
   businessWalletLogoUrl: string | null;
   businessBrandColorHex: string | null;
   businessWalletHeroUrl: string | null;
+  // URLs de Google Wallet — HTTPS públicas (Cloudinary hoy), a diferencia
+  // de las de Apple arriba, que son archivos locales. googleWideLogoUri
+  // queda en null hasta que exista el asset del wordmark horizontal.
+  businessGoogleLogoUri: string | null;
+  businessGoogleHeroUri: string | null;
+  businessGoogleWideLogoUri: string | null;
 };
 
 export async function loadCustomerLoyaltySnapshot(
@@ -63,6 +69,9 @@ export async function loadCustomerLoyaltySnapshot(
       walletLogoUrl: businesses.walletLogoUrl,
       brandColorHex: businesses.brandColorHex,
       walletHeroUrl: businesses.walletHeroUrl,
+      googleLogoUri: businesses.googleLogoUri,
+      googleHeroUri: businesses.googleHeroUri,
+      googleWideLogoUri: businesses.googleWideLogoUri,
     })
     .from(businesses)
     .where(eq(businesses.id, businessId))
@@ -123,5 +132,8 @@ export async function loadCustomerLoyaltySnapshot(
     businessWalletLogoUrl: business.walletLogoUrl,
     businessBrandColorHex: business.brandColorHex,
     businessWalletHeroUrl: business.walletHeroUrl,
+    businessGoogleLogoUri: business.googleLogoUri,
+    businessGoogleHeroUri: business.googleHeroUri,
+    businessGoogleWideLogoUri: business.googleWideLogoUri,
   };
 }

@@ -1,7 +1,7 @@
 import { buildLoyaltyClassPayload, buildLoyaltyObjectPayload } from "@loyalty/wallet";
 import type { TenantTransaction, VerifiedBusinessId } from "@loyalty/db";
 import { getGoogleIssuerId, getGoogleWalletClient } from "./adapters";
-import { deriveBrandColor } from "./brandColor";
+import { resolveBrandColorRgb } from "./brandColor";
 import { ensureWalletPass } from "./ensurePass";
 import { loadCustomerLoyaltySnapshot } from "./loyaltySnapshot";
 
@@ -33,7 +33,18 @@ export async function buildGoogleSaveLinkForCustomer(
     businessId,
     businessName: snapshot.businessName,
     programName: snapshot.programName,
-    backgroundRgb: deriveBrandColor(businessId),
+    // Antes: siempre deriveBrandColor(businessId) (color hash-derivado,
+    // nunca el real) — ningún cliente real había visto la marca real de
+    // Google Wallet, pese a que la clase de referencia (chilaquikes_prod,
+    // aprobada) sí la tenía. resolveBrandColorRgb prefiere el hex real
+    // cuando existe, cae al hash solo para negocios sin branding cargado.
+    backgroundRgb: resolveBrandColorRgb(businessId, snapshot.businessBrandColorHex),
+    programLogoUri: snapshot.businessGoogleLogoUri ?? undefined,
+    heroImageUri: snapshot.businessGoogleHeroUri ?? undefined,
+    // wideProgramLogoUri: bloqueado — el asset horizontal (ratio 3:1) de
+    // Narciso todavía no existe. En cuanto businessGoogleWideLogoUri
+    // tenga valor, se manda solo, sin tocar este archivo de nuevo.
+    wideProgramLogoUri: snapshot.businessGoogleWideLogoUri ?? undefined,
   });
 
   const objectPayload = buildLoyaltyObjectPayload({

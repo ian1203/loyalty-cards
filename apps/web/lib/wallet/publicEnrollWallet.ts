@@ -44,7 +44,12 @@ export async function buildWalletArtifactsForNewEnrollment(
     // se descartan, downloadEnrollmentApplePass los vuelve a generar al
     // tocar el botón (misma función, siempre el estado más fresco).
     const appleResult = await generateApplePkpassForCustomer(tx, businessId, customerId);
-    const googleSaveLink = await buildGoogleSaveLinkForCustomer(tx, businessId, customerId);
+    let googleSaveLink: string | null = null;
+    try {
+      googleSaveLink = await buildGoogleSaveLinkForCustomer(tx, businessId, customerId);
+    } catch (error) {
+      console.error("buildGoogleSaveLinkForCustomer DIAGNOSTIC:", error);
+    }
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
     const appleWalletDownloadUrl =
