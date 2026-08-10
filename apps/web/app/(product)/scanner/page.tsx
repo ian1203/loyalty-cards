@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
-import { locations, loyaltyPrograms, withTenantContext } from "@loyalty/db";
+import { employees, locations, loyaltyPrograms, withTenantContext } from "@loyalty/db";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { EmptyState } from "../../../components/EmptyState";
 import { PageHeader } from "../../../components/PageHeader";
 import { requireTenantSession } from "../../../lib/supabase/session";
+import { resolveActor } from "../../../lib/tenant";
 import { ScannerClient } from "./ScannerClient";
 
 export default async function ScannerPage() {
@@ -15,7 +16,7 @@ export default async function ScannerPage() {
     redirect("/login");
   }
 
-  const { program, activeLocations } = await withTenantContext(
+  const { program, activeLocations, autoSelectedLocationId } = await withTenantContext(
     session.businessId,
     async (tx) => {
       const [program] = await tx
@@ -36,7 +37,31 @@ export default async function ScannerPage() {
         )
         .orderBy(asc(locations.name));
 
-      return { program: program ?? null, activeLocations };
+      // Salto condicional de la pantalla "Selecciona tu sucursal": si esta
+      // cuenta tiene una ficha de empleado con sucursal primaria fijada
+      // (ver requireOperationContext, scanner/logic.ts — MISMA query: una
+      // sola ficha, la más antigua), esa es la ÚNICA sucursal donde puede
+      // operar de todos modos, así que preguntar es solo fricción. Dueño/
+      // admin (sin ficha) o un empleado sin sucursal primaria asignada
+      // siguen viendo el selector completo — nunca se deriva del claim
+      // location_id del JWT (puede estar vencido hasta 1h, ver CLAUDE.md),
+      // siempre de una lectura fresca contra la DB en esta misma request.
+      const actor = await resolveActor(tx, session);
+      const [employee] = await tx
+        .select({ primaryLocationId: employees.primaryLocationId })
+        .from(employees)
+        .where(and(eq(employees.userId, actor.id), eq(employees.businessId, session.businessId)))
+        .orderBy(asc(employees.createdAt))
+        .limit(1);
+
+      // Solo cuenta si la sucursal asignada sigue existiendo y activa entre
+      // activeLocations — si se desactivó, cae al selector en vez de dejar
+      // al empleado sin ninguna opción operable.
+      const autoSelectedLocationId = employee?.primaryLocationId
+        ? (activeLocations.find((l) => l.id === employee.primaryLocationId)?.id ?? null)
+        : null;
+
+      return { program: program ?? null, activeLocations, autoSelectedLocationId };
     },
   );
 
@@ -80,7 +105,7 @@ export default async function ScannerPage() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <PageHeader title="Scanner" description="Escanea, sella y canjea la tarjeta de tus clientes." />
-      <ScannerClient locations={activeLocations} />
+      <ScannerClient locations={activeLocations} autoSelectedLocationId={autoSelectedLocationId} />
     </div>
   );
 }
