@@ -116,7 +116,13 @@ export function AppShell({
           <SheetContent side="left" className="w-72 p-0">
             <SheetHeader className="border-b">
               <SheetTitle className="sr-only">Navegación</SheetTitle>
-              <Logo />
+              {/* self-start: SheetHeader es flex-col, cuyo align-items
+                  default (stretch) estira el ancho de cualquier hijo con
+                  width:auto a ocupar todo el contenedor — eso deformaba el
+                  wordmark (altura fija de Logo, ancho forzado a 100%). El
+                  header/sidebar de escritorio no lo sufre porque son flex
+                  ROW con items-center, donde stretch no toca el ancho. */}
+              <Logo className="h-6 self-start" />
             </SheetHeader>
             <div className="flex flex-1 flex-col justify-between overflow-y-auto p-3">
               <div>
