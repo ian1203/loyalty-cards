@@ -47,13 +47,19 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
     },
   ];
 
-  const primaryFields = [
-    {
-      key: "stamps",
-      label: "Sellos",
-      value: `${input.currentStamps} de ${input.stampsRequired}`,
-    },
-  ];
+  // primaryFields queda VACÍO a propósito (Opción A, decisión post-bug real
+  // en dispositivo): para storeCard, PassKit renderiza primaryFields
+  // SUPERPUESTO sobre la imagen del strip (no debajo, como una sección
+  // aparte) — no es configurable desde pass.json (sin control de
+  // posición/tamaño). Con el strip nuevo (hero compuesto, ver
+  // generate-pass-assets.ts modo --hero), ese texto tapaba la cara del
+  // mascot y parte del wordmark en un dispositivo real. headerFields ya
+  // cubre "SELLOS X/Y" siempre visible (incluso en la vista apilada) sin
+  // superponerse a nada — se prefirió eliminar el campo entero antes que
+  // adivinar una zona "segura" en el strip, porque no hay forma de saber
+  // con certeza dónde PassKit lo posiciona (varía con accesibilidad/
+  // tamaño de texto dinámico del dispositivo).
+  const primaryFields: Array<{ key: string; label: string; value: string }> = [];
 
   const availableRewardsCount = input.availableRewardsCount ?? 0;
   const secondaryFields = [

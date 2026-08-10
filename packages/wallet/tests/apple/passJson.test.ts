@@ -22,13 +22,17 @@ const baseInput: PassJsonInput = {
 };
 
 describe("buildPassJson — contenido mínimo, sin PII de más", () => {
-  it("incluye el progreso de sellos y el nombre de pila", () => {
+  it("el progreso de sellos vive en headerFields, no en primaryFields — nombre de pila en secondaryFields", () => {
     const pass = buildPassJson(baseInput) as {
-      storeCard: { primaryFields: Array<{ value: string }>; secondaryFields: Array<{ value: string }> };
+      storeCard: { primaryFields: unknown[]; secondaryFields: Array<{ value: string }> };
     };
 
-    expect(pass.storeCard.primaryFields[0].value).toBe("4 de 6");
     expect(pass.storeCard.secondaryFields[0].value).toBe("María");
+  });
+
+  it("primaryFields queda SIEMPRE vacío — PassKit lo superpone sobre el strip en storeCard, sin control de posición, y con el hero compuesto tapaba el logo en un dispositivo real (bug encontrado post-deploy, ver comentario en passJson.ts)", () => {
+    const pass = buildPassJson(baseInput) as { storeCard: { primaryFields: unknown[] } };
+    expect(pass.storeCard.primaryFields).toEqual([]);
   });
 
   it("headerFields lleva 'SELLOS X/Y' siempre visible (vista apilada de Wallet), un solo campo", () => {
