@@ -155,6 +155,27 @@ describe("buildLoyaltyObjectPayload — contenido mínimo por cliente, sin PII d
     expect(obj).not.toHaveProperty("accountName");
   });
 
+  it("sin availableRewardsCount (o con 1), textModulesData NO agrega 'rewardsAvailable' — redundante con el mensaje de progreso/rewardName", () => {
+    const objNoCount = buildLoyaltyObjectPayload(objectInput) as { textModulesData: Array<{ id: string }> };
+    expect(objNoCount.textModulesData.map((m) => m.id)).not.toContain("rewardsAvailable");
+
+    const objOne = buildLoyaltyObjectPayload({ ...objectInput, availableRewardsCount: 1 }) as {
+      textModulesData: Array<{ id: string }>;
+    };
+    expect(objOne.textModulesData.map((m) => m.id)).not.toContain("rewardsAvailable");
+  });
+
+  it("con availableRewardsCount > 1, textModulesData SÍ agrega el conteo", () => {
+    const obj = buildLoyaltyObjectPayload({ ...objectInput, availableRewardsCount: 2 }) as {
+      textModulesData: Array<{ id: string; header: string; body: string }>;
+    };
+    expect(obj.textModulesData).toContainEqual({
+      id: "rewardsAvailable",
+      header: "Recompensas disponibles",
+      body: "2",
+    });
+  });
+
   it("nunca incluye email/teléfono — el tipo de entrada ni siquiera los acepta", () => {
     const obj = buildLoyaltyObjectPayload(objectInput);
     expect(JSON.stringify(obj)).not.toMatch(/@/);

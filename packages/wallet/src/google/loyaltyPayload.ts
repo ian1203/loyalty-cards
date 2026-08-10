@@ -12,10 +12,13 @@ import type { RgbColor } from "../apple/placeholderIcon";
 // migración de esquema para lo que es, en esencia, una constante de
 // código). Bump manual cuando el diseño de la clase cambie de nuevo
 // (quitar el hero fue el motivo de _v2 — ver
-// scripts/migrate-google-class-v2.ts): Google cachea agresivamente por
-// classId, así que un cambio de campos visuales SIEMPRE necesita un
-// classId nuevo, nunca un PATCH in-place de la clase vieja.
-export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v2";
+// scripts/migrate-google-class-v2.ts; volver a agregar un hero —esta vez
+// el patrón de mini-mascots, no la foto de producto que se veía fuera de
+// lugar— es el motivo de _v3, ver scripts/migrate-google-class-v3.ts):
+// Google cachea agresivamente por classId, así que un cambio de campos
+// visuales SIEMPRE necesita un classId nuevo, nunca un PATCH in-place de
+// la clase vieja.
+export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v3";
 
 export function buildLoyaltyClassId(issuerId: string, businessId: string, version?: string): string {
   const suffix = version ? `_${version}` : "";
@@ -105,6 +108,13 @@ export type LoyaltyObjectInput = {
   stampsRequired: number;
   rewardName: string | null;
   walletToken: string;
+  // Cuántas reglas de recompensa están desbloqueadas AHORA (no solo la
+  // primera/rewardName) — opcional y default 0 a propósito: la mayoría de
+  // los negocios define una sola recompensa, y en ese caso count nunca
+  // pasa de 1 (ver la nota de "solo si count > 1" en
+  // buildLoyaltyObjectPayload, evita duplicar la señal que rewardName ya
+  // da).
+  availableRewardsCount?: number;
   // Debe coincidir con el classVersion usado para armar el classId de esa
   // misma clase (ver LoyaltyClassInput.classVersion) — si no coinciden, el
   // objeto queda apuntando a un classId que no existe.
@@ -138,6 +148,7 @@ export function buildProgressMessage(
 }
 
 export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<string, unknown> {
+  const availableRewardsCount = input.availableRewardsCount ?? 0;
   const textModulesData = [
     ...(input.rewardName
       ? [
@@ -145,6 +156,21 @@ export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<str
             id: "progress",
             header: "Tu progreso",
             body: buildProgressMessage(input.currentStamps, input.stampsRequired, input.rewardName),
+          },
+        ]
+      : []),
+    // Solo con MÁS DE UNA recompensa desbloqueada: con exactamente 1, el
+    // mensaje de "progress" de arriba (o rewardName en Apple) ya avisa que
+    // hay una lista para canjear — repetir "Recompensas disponibles: 1"
+    // sería la misma redundancia que ya se evitó con "X de Y sellos" (ver
+    // el comentario de buildProgressMessage). Con 2+, si hay valor real:
+    // el cliente no sabría por otro medio que hay más de una esperando.
+    ...(availableRewardsCount > 1
+      ? [
+          {
+            id: "rewardsAvailable",
+            header: "Recompensas disponibles",
+            body: String(availableRewardsCount),
           },
         ]
       : []),

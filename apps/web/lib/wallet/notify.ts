@@ -111,7 +111,18 @@ async function notifyGoogleObject(businessId: VerifiedBusinessId, customerId: st
     customerFirstName: snapshot.customerFirstName,
     currentStamps: snapshot.currentStamps,
     stampsRequired: snapshot.stampsRequired,
-    rewardName: snapshot.rewardName,
+    // nextRewardName, NO rewardName — mismo motivo que googleSaveLink.ts
+    // (ver su comentario): Google necesita el mensaje motivador desde el
+    // primer sello, no solo cuando la recompensa ya está desbloqueada.
+    // BUG encontrado y corregido acá (auditoría del punto 4, verificación
+    // de propagación dinámica): este PATCH mandaba rewardName (null hasta
+    // desbloquear), así que textModulesData.progress desaparecía en SILENCIO
+    // de cada pase de Google después del primer sello, hasta el sello que
+    // desbloqueaba la recompensa — sin romper nada visible (el pase seguía
+    // actualizando loyaltyPoints.balance bien), solo perdía el mensaje
+    // motivador. googleSaveLink.ts (el link inicial) nunca tuvo este bug.
+    rewardName: snapshot.nextRewardName,
+    availableRewardsCount: snapshot.availableRewardsCount,
     walletToken: snapshot.walletToken,
     // Sin esto, cada sello/canje después de la migración a _v2
     // (googleSaveLink.ts) volvería a escribir el classId VIEJO en el

@@ -16,6 +16,11 @@ export type PassJsonInput = {
   currentStamps: number;
   stampsRequired: number;
   rewardName: string | null;
+  // Cuántas reglas de recompensa están desbloqueadas AHORA (no solo la
+  // primera/rewardName) — opcional y default 0. Ver la nota de "solo si
+  // count > 1" más abajo: con 1 sola, rewardName ya comunica que hay una
+  // lista, así que el campo nuevo no aporta información adicional.
+  availableRewardsCount?: number;
   walletToken: string; // customers.wallet_token — el barcode
   colors: {
     backgroundRgb: [number, number, number];
@@ -29,6 +34,19 @@ function rgb([r, g, b]: [number, number, number]): string {
 }
 
 export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
+  // Siempre visible, incluso en la vista apilada de Wallet (antes de tocar
+  // el pase) — a diferencia de primaryFields/el strip, que solo se ven al
+  // expandirlo. Un solo headerField a propósito: Wallet reserva poco
+  // espacio en esa esquina, un segundo campo ahí se trunca o empuja al
+  // primero.
+  const headerFields = [
+    {
+      key: "stampsHeader",
+      label: "SELLOS",
+      value: `${input.currentStamps}/${input.stampsRequired}`,
+    },
+  ];
+
   const primaryFields = [
     {
       key: "stamps",
@@ -37,9 +55,19 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
     },
   ];
 
-  const secondaryFields = input.customerFirstName
-    ? [{ key: "customer", label: "Cliente", value: input.customerFirstName }]
-    : [];
+  const availableRewardsCount = input.availableRewardsCount ?? 0;
+  const secondaryFields = [
+    ...(input.customerFirstName
+      ? [{ key: "customer", label: "Cliente", value: input.customerFirstName }]
+      : []),
+    // Solo con MÁS DE UNA recompensa desbloqueada — con exactamente 1,
+    // auxiliaryFields ya muestra su nombre (ver abajo), así que un
+    // "Recompensas disponibles: 1" ahí sería la misma redundancia que ya
+    // se evitó en otros campos de este pase.
+    ...(availableRewardsCount > 1
+      ? [{ key: "rewardsAvailable", label: "Recompensas disponibles", value: String(availableRewardsCount) }]
+      : []),
+  ];
 
   // "Powered by Pragmia" al FRENTE (auxiliaryFields) por default — texto
   // real del pase, con la fuente nativa de Wallet, no horneado en el
@@ -66,6 +94,7 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
     foregroundColor: rgb(input.colors.foregroundRgb),
     labelColor: rgb(input.colors.labelRgb),
     storeCard: {
+      headerFields,
       primaryFields,
       secondaryFields,
       auxiliaryFields,
