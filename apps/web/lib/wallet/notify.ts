@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { buildLoyaltyObjectId, buildLoyaltyObjectPayload } from "@loyalty/wallet";
+import { buildLoyaltyObjectId, buildLoyaltyObjectPayload, CURRENT_GOOGLE_LOYALTY_CLASS_VERSION } from "@loyalty/wallet";
 import { deviceRegistrations, walletPasses, withTenantContext, type VerifiedBusinessId } from "@loyalty/db";
 import { getApnsSender, getApplePassTypeIdentifier, getGoogleIssuerId, getGoogleWalletClient } from "./adapters";
 import { loadCustomerLoyaltySnapshot } from "./loyaltySnapshot";
@@ -113,6 +113,12 @@ async function notifyGoogleObject(businessId: VerifiedBusinessId, customerId: st
     stampsRequired: snapshot.stampsRequired,
     rewardName: snapshot.rewardName,
     walletToken: snapshot.walletToken,
+    // Sin esto, cada sello/canje después de la migración a _v2
+    // (googleSaveLink.ts) volvería a escribir el classId VIEJO en el
+    // objeto ya migrado — este PATCH pisaría la migración en el próximo
+    // movimiento del cliente. Debe coincidir siempre con el version que
+    // usa googleSaveLink.ts para la MISMA clase.
+    classVersion: CURRENT_GOOGLE_LOYALTY_CLASS_VERSION,
   });
 
   await withRetries(

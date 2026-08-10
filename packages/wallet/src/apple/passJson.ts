@@ -41,9 +41,17 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
     ? [{ key: "customer", label: "Cliente", value: input.customerFirstName }]
     : [];
 
+  // "Powered by Pragmia" al FRENTE (auxiliaryFields) por default — texto
+  // real del pase, con la fuente nativa de Wallet, no horneado en el
+  // strip. Solo cuando ya hay recompensa disponible, auxiliaryFields ya
+  // tiene el campo "reward" (que puede llevar un nombre largo, ej. "Orden
+  // de chilaquiles gratis") — meter poweredBy ahí forzaría a Wallet a
+  // partir la fila en dos mitades y truncar justo el mensaje que más
+  // importa en ese momento. En ese caso (y SOLO en ese caso) poweredBy
+  // cede el lugar y se queda en el back, como antes.
   const auxiliaryFields = input.rewardName
     ? [{ key: "reward", label: "Recompensa disponible", value: input.rewardName }]
-    : [];
+    : [{ key: "poweredBy", label: "", value: "Powered by Pragmia" }];
 
   return {
     formatVersion: 1,
@@ -61,18 +69,12 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
       primaryFields,
       secondaryFields,
       auxiliaryFields,
-      // "Powered by Pragmia" como backField (visible al tocar el ícono de
-      // info, back del pase) en vez de horneado en el strip — es texto
-      // real renderizado por Wallet (accesible, VoiceOver, sin depender
-      // de que el runtime serverless tenga una fuente instalada para
-      // rasterizar vía SVG).
-      backFields: [
-        {
-          key: "poweredBy",
-          label: "",
-          value: "Powered by Pragmia",
-        },
-      ],
+      // Contraparte de la nota de arriba: cuando poweredBy cedió su lugar
+      // al frente (recompensa disponible), sigue siendo accesible al
+      // tocar el ícono de info — nunca desaparece del todo, solo cambia
+      // de cara. Sin recompensa disponible, ya está al frente y el back
+      // no lo repite (sería redundante).
+      backFields: input.rewardName ? [{ key: "poweredBy", label: "", value: "Powered by Pragmia" }] : [],
     },
     barcodes: [
       {

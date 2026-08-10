@@ -7,8 +7,19 @@ import type { RgbColor } from "../apple/placeholderIcon";
 // determinísticamente del issuerId+businessId/customerId (ver skill
 // wallet-integration) — no se guardan en el esquema.
 
-export function buildLoyaltyClassId(issuerId: string, businessId: string): string {
-  return `${issuerId}.biz_${businessId}`;
+// Versión activa de la Loyalty Class de Google para TODO negocio nuevo —
+// sufijo determinístico, nunca una fila nueva en businesses (evita una
+// migración de esquema para lo que es, en esencia, una constante de
+// código). Bump manual cuando el diseño de la clase cambie de nuevo
+// (quitar el hero fue el motivo de _v2 — ver
+// scripts/migrate-google-class-v2.ts): Google cachea agresivamente por
+// classId, así que un cambio de campos visuales SIEMPRE necesita un
+// classId nuevo, nunca un PATCH in-place de la clase vieja.
+export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v2";
+
+export function buildLoyaltyClassId(issuerId: string, businessId: string, version?: string): string {
+  const suffix = version ? `_${version}` : "";
+  return `${issuerId}.biz_${businessId}${suffix}`;
 }
 
 export function buildLoyaltyObjectId(issuerId: string, customerId: string): string {
@@ -48,11 +59,15 @@ export type LoyaltyClassInput = {
   // (Google no soporta una rejilla gráfica de sellos, a diferencia de
   // Apple Wallet).
   heroImageUri?: string;
+  // Sufijo determinístico (ver CURRENT_GOOGLE_LOYALTY_CLASS_VERSION) — sin
+  // esto, el id sale igual que antes (compatibilidad hacia atrás para
+  // callers/tests que no versionan todavía).
+  classVersion?: string;
 };
 
 export function buildLoyaltyClassPayload(input: LoyaltyClassInput): Record<string, unknown> {
   return {
-    id: buildLoyaltyClassId(input.issuerId, input.businessId),
+    id: buildLoyaltyClassId(input.issuerId, input.businessId, input.classVersion),
     issuerName: input.businessName,
     programName: input.programName,
     // "UNDER_REVIEW" (SCREAMING_SNAKE_CASE — verificado contra la API
@@ -90,6 +105,10 @@ export type LoyaltyObjectInput = {
   stampsRequired: number;
   rewardName: string | null;
   walletToken: string;
+  // Debe coincidir con el classVersion usado para armar el classId de esa
+  // misma clase (ver LoyaltyClassInput.classVersion) — si no coinciden, el
+  // objeto queda apuntando a un classId que no existe.
+  classVersion?: string;
 };
 
 // Google Wallet no soporta una rejilla gráfica de sellos (a diferencia de
@@ -119,18 +138,28 @@ export function buildProgressMessage(
 }
 
 export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<string, unknown> {
-  const textModulesData = input.rewardName
-    ? [
-        {
-          header: "Tu progreso",
-          body: buildProgressMessage(input.currentStamps, input.stampsRequired, input.rewardName),
-        },
-      ]
-    : [];
+  const textModulesData = [
+    ...(input.rewardName
+      ? [
+          {
+            id: "progress",
+            header: "Tu progreso",
+            body: buildProgressMessage(input.currentStamps, input.stampsRequired, input.rewardName),
+          },
+        ]
+      : []),
+    // Sin condición de recompensa — a diferencia de Apple (donde
+    // poweredBy cede su lugar en auxiliaryFields cuando hay recompensa,
+    // ver apple/passJson.ts), Google no tiene un layout de campos fijos
+    // que se pueda "llenar": textModulesData es una lista que Wallet
+    // apila verticalmente sin límite de espacio horizontal, así que no
+    // hay ningún truncamiento que evitar acá.
+    { id: "poweredBy", header: "", body: "Powered by Pragmia" },
+  ];
 
   return {
     id: buildLoyaltyObjectId(input.issuerId, input.customerId),
-    classId: buildLoyaltyClassId(input.issuerId, input.businessId),
+    classId: buildLoyaltyClassId(input.issuerId, input.businessId, input.classVersion),
     state: "active",
     ...(input.customerFirstName ? { accountName: input.customerFirstName } : {}),
     loyaltyPoints: {

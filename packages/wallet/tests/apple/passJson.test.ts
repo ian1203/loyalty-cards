@@ -41,9 +41,14 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     expect(pass.barcodes[0].message).not.toContain("María");
   });
 
-  it("sin recompensa disponible, auxiliaryFields queda vacío (no un placeholder falso)", () => {
-    const pass = buildPassJson(baseInput) as { storeCard: { auxiliaryFields: unknown[] } };
-    expect(pass.storeCard.auxiliaryFields).toEqual([]);
+  it("sin recompensa disponible, 'Powered by Pragmia' ocupa el frente (auxiliaryFields) — no compite con nada ahí", () => {
+    const pass = buildPassJson(baseInput) as { storeCard: { auxiliaryFields: Array<{ value: string }> } };
+    expect(pass.storeCard.auxiliaryFields).toEqual([{ key: "poweredBy", label: "", value: "Powered by Pragmia" }]);
+  });
+
+  it("sin recompensa disponible, backFields no repite 'Powered by Pragmia' — ya está al frente", () => {
+    const pass = buildPassJson(baseInput) as { storeCard: { backFields: unknown[] } };
+    expect(pass.storeCard.backFields).toEqual([]);
   });
 
   it("con recompensa disponible, aparece en auxiliaryFields", () => {
@@ -51,6 +56,14 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
       storeCard: { auxiliaryFields: Array<{ value: string }> };
     };
     expect(pass.storeCard.auxiliaryFields[0].value).toBe("Café gratis");
+  });
+
+  it("con recompensa disponible, 'Powered by Pragmia' cede el frente (auxiliaryFields llevaría 2 campos y truncaría el nombre de la recompensa) y se queda en el back", () => {
+    const pass = buildPassJson({ ...baseInput, rewardName: "Orden de chilaquiles gratis" }) as {
+      storeCard: { auxiliaryFields: Array<{ key: string }>; backFields: Array<{ value: string }> };
+    };
+    expect(pass.storeCard.auxiliaryFields.map((f) => f.key)).toEqual(["reward"]);
+    expect(pass.storeCard.backFields).toEqual([{ key: "poweredBy", label: "", value: "Powered by Pragmia" }]);
   });
 
   it("sin nombre de cliente (null), secondaryFields queda vacío — nunca 'undefined' ni placeholder", () => {

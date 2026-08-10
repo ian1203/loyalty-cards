@@ -1,4 +1,4 @@
-import { buildLoyaltyClassPayload, buildLoyaltyObjectPayload } from "@loyalty/wallet";
+import { buildLoyaltyClassPayload, buildLoyaltyObjectPayload, CURRENT_GOOGLE_LOYALTY_CLASS_VERSION } from "@loyalty/wallet";
 import type { TenantTransaction, VerifiedBusinessId } from "@loyalty/db";
 import { getGoogleIssuerId, getGoogleWalletClient } from "./adapters";
 import { resolveBrandColorRgb } from "./brandColor";
@@ -40,11 +40,15 @@ export async function buildGoogleSaveLinkForCustomer(
     // cuando existe, cae al hash solo para negocios sin branding cargado.
     backgroundRgb: resolveBrandColorRgb(businessId, snapshot.businessBrandColorHex),
     programLogoUri: snapshot.businessGoogleLogoUri ?? undefined,
-    heroImageUri: snapshot.businessGoogleHeroUri ?? undefined,
-    // wideProgramLogoUri: bloqueado — el asset horizontal (ratio 3:1) de
-    // Narciso todavía no existe. En cuanto businessGoogleWideLogoUri
-    // tenga valor, se manda solo, sin tocar este archivo de nuevo.
+    // heroImageUri: quitado a propósito (_v2) — la foto de producto se
+    // veía fuera de lugar en el banner ancho y competía con el mensaje
+    // "Powered by Pragmia"; ver CURRENT_GOOGLE_LOYALTY_CLASS_VERSION.
+    // wideProgramLogoUri: bloqueado — el asset horizontal (1280x400,
+    // transparente) de Narciso todavía no existe. En cuanto
+    // businessGoogleWideLogoUri tenga valor, se manda solo, sin tocar
+    // este archivo de nuevo.
     wideProgramLogoUri: snapshot.businessGoogleWideLogoUri ?? undefined,
+    classVersion: CURRENT_GOOGLE_LOYALTY_CLASS_VERSION,
   });
 
   const objectPayload = buildLoyaltyObjectPayload({
@@ -61,6 +65,7 @@ export async function buildGoogleSaveLinkForCustomer(
     // a Apple, ver rewardName/passGeneration.ts).
     rewardName: snapshot.nextRewardName,
     walletToken: snapshot.walletToken,
+    classVersion: CURRENT_GOOGLE_LOYALTY_CLASS_VERSION,
   });
 
   // origins: dominios autorizados a disparar el guardado — mismo criterio
