@@ -182,4 +182,20 @@ describe("buildRelevantText — mismo tono/casos que buildProgressMessage de Goo
   it("con el ciclo completo, cambia a mensaje de canje listo", () => {
     expect(buildRelevantText(6, 6, "Café gratis")).toBe("¡Ya puedes canjear tu Café gratis!");
   });
+
+  it("con nombre de cliente, lo antepone en minúscula tras la coma (mismo cuerpo del mensaje)", () => {
+    expect(buildRelevantText(4, 6, "Orden de chilaquiles gratis", "Carlo")).toBe(
+      "¡Carlo, te faltan 2 sellos para tu Orden de chilaquiles gratis!",
+    );
+    expect(buildRelevantText(6, 6, "Café gratis", "Carlo")).toBe("¡Carlo, ya puedes canjear tu Café gratis!");
+  });
+
+  it("sin nombre (null o undefined), usa el texto genérico de siempre — nunca 'null,' ni placeholder", () => {
+    expect(buildRelevantText(4, 6, "Orden de chilaquiles gratis", null)).toBe(
+      "¡Te faltan 2 sellos para tu Orden de chilaquiles gratis!",
+    );
+    expect(buildRelevantText(4, 6, "Orden de chilaquiles gratis")).toBe(
+      "¡Te faltan 2 sellos para tu Orden de chilaquiles gratis!",
+    );
+  });
 });

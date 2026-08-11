@@ -23,6 +23,12 @@ export type BuildPkpassInput = {
   // que sí usa sharp pero corre offline).
   logoPng?: { at1x: Buffer; at2x: Buffer; at3x: Buffer };
   stripPng?: { at1x: Buffer; at2x: Buffer; at3x: Buffer };
+  // Mismo criterio que logoPng/stripPng — sin esto, icon.png sigue
+  // siendo el cuadrado sólido de siempre (buildSolidSquarePng). SCAFFOLDING
+  // (research + scaffolding de notificación por proximidad): sin
+  // consumidor real todavía en passGeneration.ts, ningún pase de
+  // producción manda este campo hasta que se cablee a propósito.
+  iconPng?: { at1x: Buffer; at2x: Buffer; at3x: Buffer };
 };
 
 function sha1(buf: Buffer): string {
@@ -31,15 +37,16 @@ function sha1(buf: Buffer): string {
 
 export async function buildPkpass(input: BuildPkpassInput): Promise<Buffer> {
   const passJsonBuffer = Buffer.from(JSON.stringify(input.passJson), "utf8");
-  const icon = buildSolidSquarePng(29, input.iconRgb);
-  const icon2x = buildSolidSquarePng(58, input.iconRgb);
-  const icon3x = buildSolidSquarePng(87, input.iconRgb);
 
   const files: Record<string, Buffer> = {
     "pass.json": passJsonBuffer,
-    "icon.png": icon,
-    "icon@2x.png": icon2x,
-    "icon@3x.png": icon3x,
+    ...(input.iconPng
+      ? { "icon.png": input.iconPng.at1x, "icon@2x.png": input.iconPng.at2x, "icon@3x.png": input.iconPng.at3x }
+      : {
+          "icon.png": buildSolidSquarePng(29, input.iconRgb),
+          "icon@2x.png": buildSolidSquarePng(58, input.iconRgb),
+          "icon@3x.png": buildSolidSquarePng(87, input.iconRgb),
+        }),
   };
 
   if (input.logoPng) {

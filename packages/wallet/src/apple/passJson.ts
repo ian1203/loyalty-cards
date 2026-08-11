@@ -61,20 +61,35 @@ export type PassJsonInput = {
 // especial de ciclo completo. Duplicado a propósito, no importado desde
 // google/ — cada plataforma mantiene su builder de mensajes desacoplado
 // (mismo criterio que separa apple/ de google/ en todo lo demás), aunque
-// el texto resultante sea equivalente hoy.
+// el texto resultante sea equivalente hoy. customerFirstName es EL MISMO
+// campo ya derivado en loyaltySnapshot.ts (customers.fullName.split(" ")[0])
+// que ya usa Apple en secondaryFields ("Cliente") y Google en accountName
+// — nunca una query nueva. Null cuando el cliente no tiene fullName
+// (defensivo — hoy tanto /enroll como el alta manual lo exigen, pero el
+// campo sigue siendo nullable en el esquema): sin nombre, cae al texto
+// genérico, nunca "null, te faltan...".
 export function buildRelevantText(
   cycleStamps: number,
   stampsRequired: number,
   rewardName: string,
+  customerFirstName?: string | null,
 ): string {
   const remaining = stampsRequired - cycleStamps;
-  if (remaining <= 0) {
-    return `¡Ya puedes canjear tu ${rewardName}!`;
+  const body =
+    remaining <= 0
+      ? `ya puedes canjear tu ${rewardName}`
+      : remaining === 1
+        ? `solo te falta 1 sello para tu ${rewardName}`
+        : `te faltan ${remaining} sellos para tu ${rewardName}`;
+
+  // Con nombre: "¡Carlo, te faltan 2 sellos...!" (minúscula tras la coma,
+  // flujo natural de saludo). Sin nombre: "¡Te faltan 2 sellos...!"
+  // (mayúscula al inicio de la oración, sin cambiar el tono ya usado en
+  // el resto del pase).
+  if (customerFirstName) {
+    return `¡${customerFirstName}, ${body}!`;
   }
-  if (remaining === 1) {
-    return `¡Solo te falta 1 sello para tu ${rewardName}!`;
-  }
-  return `¡Te faltan ${remaining} sellos para tu ${rewardName}!`;
+  return `¡${body.charAt(0).toUpperCase()}${body.slice(1)}!`;
 }
 
 function rgb([r, g, b]: [number, number, number]): string {

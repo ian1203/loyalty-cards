@@ -18,16 +18,33 @@ export const runtime = "nodejs";
 // registrarse para push, el web service real devuelve 401 (sin efectos
 // secundarios, mismo camino de "token inválido" que cualquier otro caso).
 // Borrar este archivo una vez confirmada la prueba en dispositivo.
-export async function GET() {
+export async function GET(request: Request) {
   const cycleStamps = 4;
   const stampsRequired = 6;
   const rewardName = "Recompensa de prueba";
-  const relevantText = buildRelevantText(cycleStamps, stampsRequired, rewardName);
+  // ?nombre= opcional — para reconfirmar en dispositivo que relevantText
+  // sale personalizado con un nombre real, mismo criterio de siempre
+  // (sin nombre, cae al texto genérico).
+  const customerFirstName = new URL(request.url).searchParams.get("nombre");
+  const relevantText = buildRelevantText(cycleStamps, stampsRequired, rewardName, customerFirstName);
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) {
     return new Response("NEXT_PUBLIC_SITE_URL no configurado", { status: 500 });
   }
+
+  // icon.png real (círculo + "C", fallback elegido a mano — el logo
+  // completo no aísla limpio a 29px, confirmado visualmente) — HTTP, NUNCA
+  // fs.readFileSync: mismo motivo que resolveBusinessAssetBuffer
+  // (businessAssets.ts) dejó de soportar rutas relativas esta sesión, ver
+  // ese comentario — @vercel/nft no traza una lectura de fs con ruta
+  // dinámica de forma consistente entre bundles de función.
+  const iconUrls = ["icon.png", "icon@2x.png", "icon@3x.png"].map(
+    (name) => `${siteUrl}/passes/chilaquikes/${name}`,
+  );
+  const [icon1x, icon2x, icon3x] = await Promise.all(
+    iconUrls.map((url) => fetch(url).then((res) => res.arrayBuffer().then((buf) => Buffer.from(buf)))),
+  );
 
   const passJson = buildPassJson({
     serialNumber: "geofence-test-00000000-0000-0000-0000-000000000000",
@@ -37,7 +54,7 @@ export async function GET() {
     teamIdentifier: getAppleTeamIdentifier(),
     organizationName: "PRUEBA — geofence",
     programName: "Prueba de ubicaciones",
-    customerFirstName: "Prueba",
+    customerFirstName: customerFirstName ?? "Prueba",
     cycleStamps,
     stampsRequired,
     rewardName,
@@ -63,6 +80,7 @@ export async function GET() {
     passJson,
     signer: getPkpassSigner(),
     iconRgb: [219, 10, 0],
+    iconPng: { at1x: icon1x, at2x: icon2x, at3x: icon3x },
   });
 
   return new Response(pkpass as BodyInit, {
