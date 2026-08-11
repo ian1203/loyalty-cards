@@ -115,7 +115,12 @@ async function main() {
       businessId: BUSINESS_ID,
       customerId: customer.customerId,
       customerFirstName: customer.fullName.split(" ")[0],
-      currentStamps: customer.currentStamps,
+      // cycleStamps reemplazó a currentStamps en LoyaltyObjectInput (ver
+      // packages/core/loyalty.ts, cycleStampProgress) — fix de compilación
+      // sobre un script histórico, no una re-ejecución: los 4 clientes de
+      // este snapshot tenían todos currentStamps < STAMPS_REQUIRED, así
+      // que el valor no cambia (sin envolver).
+      cycleStamps: customer.currentStamps,
       stampsRequired: STAMPS_REQUIRED,
       rewardName: resolveUnlockedRewardName(customer.currentStamps),
       walletToken: customer.walletToken,

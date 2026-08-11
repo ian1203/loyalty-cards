@@ -58,13 +58,9 @@ const BRAND_COLOR_HEX = "#DB0A00";
 const PROGRAM_LOGO_URI =
   "https://res.cloudinary.com/uvid8m0k/image/upload/v1786000242/chilaquikes-logo-pass_da7axu.png";
 const WIDE_PROGRAM_LOGO_URI: string | undefined = undefined; // sigue sin existir — ver comentario en googleSaveLink.ts sobre por qué logo-wordmark.png NO sirve para este campo
-// BLOQUEADO al momento de escribir esto: https://www.pragmia-data.com/passes/chilaquikes/hero-v3.jpg
-// responde 404 — el asset todavía no está deployado a producción (nada de
-// esta rama se pusheó todavía). NO reemplazar este placeholder hasta
-// confirmar 200 real contra ESA url (curl -I, no asumir por el nombre del
-// archivo). Ver el bloqueo documentado en la conversación — pendiente de
-// decidir cuándo se deploya respecto al merge a main.
-const HERO_IMAGE_URI = "REEMPLAZAR_CON_URL_PUBLICA_DE_hero-v3.jpg";
+// Confirmado con curl -I real (no asumido): 200, content-type: image/jpeg,
+// última verificación 2026-08-11.
+const HERO_IMAGE_URI = "https://www.pragmia-data.com/passes/chilaquikes/hero-v3.jpg";
 
 const PROGRAM_NAME = "Tarjeta de sellos Chilaquikes";
 const STAMPS_REQUIRED = 6;
@@ -76,17 +72,18 @@ function hexToRgb(hex: string): [number, number, number] {
 
 // customers + customer_balances + wallet_passes(platform='google') —
 // REFRESCADO vía `supabase db query --linked` justo antes de escribir esto
-// (no el snapshot viejo de migrate-google-class-v2.ts, que ya está
-// desactualizado: de los 4 clientes de entonces, solo Gerardo sigue con el
-// mismo customer_id/wallet_token; "Carlo Aburto" y "Narciso Vicente" ya no
-// tienen fila en wallet_passes(platform='google') — se excluyen, no hay
-// nada que migrar para ellos; "Ian Vicente" tiene un customer_id/token
-// NUEVO (el anterior ya no existe), probablemente por un alta repetida.
-// Si vuelves a correr este script más tarde, refresca de nuevo — este
-// snapshot vence rápido.
+// (2026-08-11) — el snapshot anterior (Gerardo + Ian solamente) ya estaba
+// desactualizado: ahora hay 5 clientes con fila de wallet_passes(platform=
+// 'google') — Juan Perez y Carlos/Carlo Aburto se agregaron desde
+// entonces (probablemente al pedir el link de Google en algún momento de
+// las pruebas). Si vuelves a correr este script más tarde, refresca de
+// nuevo — este snapshot vence rápido.
 const CUSTOMERS: Array<{ customerId: string; fullName: string; walletToken: string; currentStamps: number }> = [
   { customerId: "62e672f8-5765-4fa0-baee-404d4d064a0c", fullName: "Gerardo Aburto", walletToken: "z5zsDJEI6R4cq9Nxb2zuKehe2zXZsFx9", currentStamps: 2 },
   { customerId: "54deda8b-7d08-40ed-9ed8-7040bd5bcce4", fullName: "Ian Vicente", walletToken: "vtqczDqns0XirW2Vl8K1Phf5yZhmfjOo", currentStamps: 0 },
+  { customerId: "2348ae73-8d42-45f4-ad61-7979fe4efb7b", fullName: "Juan Perez", walletToken: "lDm0vnVNLC-wIWW6d2ZjNXrRal87e48V", currentStamps: 2 },
+  { customerId: "9f2014f7-3e2b-41d7-b47d-faca1b0ba319", fullName: "Carlos Aburto", walletToken: "_deAspvVOMcGdjgPaD_yz_FwuCAHjUba", currentStamps: 3 },
+  { customerId: "d61cecee-c199-42e8-873c-ebf7d00d1b8e", fullName: "Carlo Aburto", walletToken: "-HBw9GYGO16XbxfuTrYdYzb8orV49qwg", currentStamps: 2 },
 ];
 
 // reward_rules activas — mismo criterio que v2 (replica availableRewards
@@ -102,8 +99,23 @@ function resolveNextRewardName(): string | null {
   return ACTIVE_REWARD_RULES[0]?.name ?? null;
 }
 
+// Replica countAvailableRedemptions de @loyalty/core a mano (packages/wallet
+// no puede importar @loyalty/core, aislado a propósito) — canjes REALES
+// posibles, floor(currentStamps/costo) sumado por regla activa. NO
+// ACTIVE_REWARD_RULES.filter(...).length (esa era la implementación vieja,
+// contaba reglas DISTINTAS desbloqueadas, nunca más de 1 por regla sin
+// importar cuánto excediera el balance su costo — corregido en la sesión
+// que agregó cycleStamps/countAvailableRedemptions, ver loyalty.ts).
 function resolveAvailableRewardsCount(currentStamps: number): number {
-  return ACTIVE_REWARD_RULES.filter((rule) => rule.stampsRequired <= currentStamps).length;
+  return ACTIVE_REWARD_RULES.reduce((sum, rule) => sum + Math.floor(currentStamps / rule.stampsRequired), 0);
+}
+
+// Replica cycleStampProgress de @loyalty/core a mano, mismo motivo que
+// arriba — progreso del ciclo ACTUAL, con el caso especial de que un
+// múltiplo exacto del requisito es CICLO COMPLETO, no 0 vacío.
+function resolveCycleStamps(currentStamps: number, stampsRequired: number): number {
+  const remainder = currentStamps % stampsRequired;
+  return remainder === 0 && currentStamps > 0 ? stampsRequired : remainder;
 }
 
 async function main() {
@@ -139,8 +151,8 @@ async function main() {
       businessId: BUSINESS_ID,
       customerId: customer.customerId,
       customerFirstName: customer.fullName.split(" ")[0],
-      currentStamps: customer.currentStamps,
       stampsRequired: STAMPS_REQUIRED,
+      cycleStamps: resolveCycleStamps(customer.currentStamps, STAMPS_REQUIRED),
       rewardName: resolveNextRewardName(),
       availableRewardsCount: resolveAvailableRewardsCount(customer.currentStamps),
       walletToken: customer.walletToken,

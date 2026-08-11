@@ -84,7 +84,10 @@ const objectPayload = buildLoyaltyObjectPayload({
   businessId: PROD_BUSINESS_ID,
   customerId: PROD_CUSTOMER_ID,
   customerFirstName: "Verificación",
-  currentStamps: DEMO_CURRENT_STAMPS,
+  // DEMO_CURRENT_STAMPS (4) < STAMPS_REQUIRED (6): cycleStamps es el mismo
+  // valor, sin envolver — ver cycleStampProgress en @loyalty/core para el
+  // caso con excedente, que este script de verificación no necesita.
+  cycleStamps: DEMO_CURRENT_STAMPS,
   stampsRequired: STAMPS_REQUIRED,
   rewardName: REWARD_NAME,
   walletToken: `verify_${randomBytes(12).toString("hex")}`,

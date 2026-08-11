@@ -2,7 +2,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "types": ["node"]
+    "types": ["node"],
+    // Los scripts de packages/wallet/scripts/ se corren con
+    // `node --experimental-strip-types`, que exige extensión .ts explícita
+    // en los imports relativos — sin este flag, tsc los rechaza con
+    // TS5097 aunque el código sea correcto. Solo afecta a los archivos
+    // que ya importan con extensión (los scripts); src/ y tests/ no usan
+    // este patrón.
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "scripts"]
 }
