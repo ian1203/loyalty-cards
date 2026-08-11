@@ -91,6 +91,25 @@ describe("buildLoyaltyClassPayload — plantilla por negocio, sin datos de clien
     expect(cls.wideProgramLogo.sourceUri.uri).toBe("https://example.com/logo-wide.png");
     expect(cls.heroImage.sourceUri.uri).toBe("https://example.com/hero.jpg");
   });
+
+  // Sin esto, accountName (ya poblado en el Loyalty Object) solo aparece en
+  // el panel de detalles al tocar el pase, nunca en la cara visible —
+  // confirmado contra la documentación oficial de Google (Customize Google
+  // Wallet Passes — Loyalty cards): una fila con fieldPath
+  // "object.accountName" en cardRowTemplateInfos la saca a la cara.
+  it("classTemplateInfo saca accountName a la cara de la tarjeta (si no, solo vive en el panel de detalles)", () => {
+    const cls = buildLoyaltyClassPayload(classInput) as {
+      classTemplateInfo: {
+        cardTemplateOverride: {
+          cardRowTemplateInfos: Array<{
+            oneItem: { item: { firstValue: { fields: Array<{ fieldPath: string }> } } };
+          }>;
+        };
+      };
+    };
+    const rows = cls.classTemplateInfo.cardTemplateOverride.cardRowTemplateInfos;
+    expect(rows[0].oneItem.item.firstValue.fields[0].fieldPath).toBe("object.accountName");
+  });
 });
 
 describe("buildProgressMessage — texto motivador (Google Wallet no soporta rejilla gráfica de sellos)", () => {

@@ -52,5 +52,17 @@ export const customers = pgTable(
     uniqueIndex("customers_business_id_phone_key")
       .on(table.businessId, table.phone)
       .where(sql`${table.phone} is not null`),
+    // Mismo criterio que el de phone arriba, pero para el hueco real que sí
+    // existía: el alta manual (/customers, apps/web/.../customers/logic.ts)
+    // dedupeaba por SELECT-antes-de-INSERT a nivel app, sin ningún
+    // constraint que lo respaldara — dos altas casi simultáneas del mismo
+    // email (doble clic, reintento de red) podían ambas pasar el SELECT
+    // antes de que cualquiera confirmara el INSERT. El email ya se guarda
+    // siempre en minúsculas antes de insertar (único punto de escritura,
+    // customers/logic.ts), así que un índice simple alcanza — no hace
+    // falta lower(email) para normalizar acá también.
+    uniqueIndex("customers_business_id_email_key")
+      .on(table.businessId, table.email)
+      .where(sql`${table.email} is not null`),
   ],
 );
