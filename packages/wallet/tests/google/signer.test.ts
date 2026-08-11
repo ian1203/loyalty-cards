@@ -68,3 +68,24 @@ describe("createFakeGoogleWalletClient — upsertLoyaltyClass / upsertLoyaltyObj
     expect(clientB.insertCalls).toHaveLength(0);
   });
 });
+
+describe("createFakeGoogleWalletClient — addLoyaltyObjectMessage", () => {
+  it("golpea el endpoint addMessage con el mensaje exacto (POST, mismo registro que insertCalls)", async () => {
+    const client = createFakeGoogleWalletClient();
+    await client.addLoyaltyObjectMessage("issuer.pass_456", {
+      header: "¡Hola!",
+      body: "Carlo, te faltan 2 sellos para tu recompensa",
+      messageType: "TEXT_AND_NOTIFY",
+    });
+
+    expect(client.insertCalls).toHaveLength(1);
+    expect(client.insertCalls[0].url).toContain("loyaltyObject/issuer.pass_456/addMessage");
+    expect(client.insertCalls[0].payload).toEqual({
+      message: {
+        header: "¡Hola!",
+        body: "Carlo, te faltan 2 sellos para tu recompensa",
+        messageType: "TEXT_AND_NOTIFY",
+      },
+    });
+  });
+});

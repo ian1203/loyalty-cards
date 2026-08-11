@@ -211,6 +211,34 @@ export function buildProgressMessage(
   return `¡Te faltan ${remaining} sellos para tu ${rewardName}!`;
 }
 
+// Texto de la notificación PUSH real (loyaltyobject.addMessage,
+// TEXT_AND_NOTIFY) — deliberadamente una función DISTINTA de
+// buildProgressMessage: esa alimenta textModulesData, el texto SIEMPRE
+// visible del pase, ya en producción para todo cliente real; esta es
+// scaffolding sin caller real todavía (ver notify.ts), mismo criterio de
+// "no tocar lo que ya está en vivo" que separó apple/passJson.ts. Mismo
+// tono/casos que buildRelevantText (Apple) — duplicado a propósito,
+// plataformas desacopladas, aunque el texto resultante sea equivalente.
+export function buildNotificationMessage(
+  cycleStamps: number,
+  stampsRequired: number,
+  rewardName: string,
+  customerFirstName?: string | null,
+): string {
+  const remaining = Math.max(stampsRequired - cycleStamps, 0);
+  const body =
+    remaining === 0
+      ? `ya puedes canjear tu ${rewardName}`
+      : remaining === 1
+        ? `solo te falta 1 sello para tu ${rewardName}`
+        : `te faltan ${remaining} sellos para tu ${rewardName}`;
+
+  if (customerFirstName) {
+    return `¡${customerFirstName}, ${body}!`;
+  }
+  return `¡${body.charAt(0).toUpperCase()}${body.slice(1)}!`;
+}
+
 export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<string, unknown> {
   const availableRewardsCount = input.availableRewardsCount ?? 0;
   const textModulesData = [

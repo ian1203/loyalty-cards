@@ -15,9 +15,28 @@ export type GoogleSaveLinkPayload = {
   origins?: string[];
 };
 
+// SCAFFOLDING (research + scaffolding de notificación por proximidad, ver
+// skill wallet-integration) — sin caller real todavía en notify.ts.
+// TEXT_AND_NOTIFY: agrega el mensaje al "back of pass" (panel de
+// detalles) Y dispara un push real — a diferencia de merchantLocations
+// (solo lat/long, texto fijo controlado por Google), este SÍ es
+// personalizable de nuestro lado. Mismo límite combinado de 3
+// notificaciones/24h por pase que notifyOnUpdate (ver la ronda que probó
+// esto contra un objeto de prueba real).
+// messageType acotado a "TEXT_AND_NOTIFY" a propósito — es el único valor
+// que de verdad probamos contra la API real (200, notificación agregada);
+// Google documenta otros (TEXT, EXPIRATION_NOTIFICATION) pero no los
+// necesitamos hoy y no vale afirmar su forma exacta sin haberlos probado.
+export type LoyaltyObjectMessage = {
+  header: string;
+  body: string;
+  messageType: "TEXT_AND_NOTIFY";
+};
+
 export type GoogleWalletClient = {
   upsertLoyaltyClass(classId: string, payload: Record<string, unknown>): Promise<void>;
   upsertLoyaltyObject(objectId: string, payload: Record<string, unknown>): Promise<void>;
+  addLoyaltyObjectMessage(objectId: string, message: LoyaltyObjectMessage): Promise<void>;
   buildSaveLink(payload: GoogleSaveLinkPayload): Promise<string>;
 };
 
@@ -102,6 +121,18 @@ export function createRealGoogleWalletClient(
     async upsertLoyaltyObject(objectId, payload) {
       const accessToken = await fetchAccessToken(credentials, fetchImpl);
       await upsert(`${WALLET_OBJECTS_BASE}/loyaltyObject`, objectId, payload, accessToken, fetchImpl);
+    },
+    async addLoyaltyObjectMessage(objectId, message) {
+      const accessToken = await fetchAccessToken(credentials, fetchImpl);
+      const res = await fetchImpl(`${WALLET_OBJECTS_BASE}/loyaltyObject/${objectId}/addMessage`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`Google Wallet API respondió ${res.status} en addMessage de ${objectId}: ${body}`);
+      }
     },
     async buildSaveLink(payload) {
       const key = await importPKCS8(credentials.serviceAccount.private_key, "RS256");
