@@ -75,17 +75,17 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
       : []),
   ];
 
-  // "Powered by Pragmia" al FRENTE (auxiliaryFields) por default — texto
-  // real del pase, con la fuente nativa de Wallet, no horneado en el
-  // strip. Solo cuando ya hay recompensa disponible, auxiliaryFields ya
-  // tiene el campo "reward" (que puede llevar un nombre largo, ej. "Orden
-  // de chilaquiles gratis") — meter poweredBy ahí forzaría a Wallet a
-  // partir la fila en dos mitades y truncar justo el mensaje que más
-  // importa en ese momento. En ese caso (y SOLO en ese caso) poweredBy
-  // cede el lugar y se queda en el back, como antes.
+  // "Powered by Pragmia" vive SIEMPRE en backFields ahora (ver
+  // storeCard.backFields abajo) — decisión revisada: el estado
+  // "recompensa disponible" puede persistir indefinidamente (el cliente
+  // sigue acumulando sellos tras desbloquear la primera recompensa, no
+  // resetea), así que ya no existe un momento confiable en el que
+  // auxiliaryFields esté "libre" para poweredBy. auxiliaryFields queda
+  // dedicado por completo a la recompensa, sin competir por espacio con
+  // ningún otro campo, en cualquier estado.
   const auxiliaryFields = input.rewardName
     ? [{ key: "reward", label: "Recompensa disponible", value: input.rewardName }]
-    : [{ key: "poweredBy", label: "", value: "Powered by Pragmia" }];
+    : [];
 
   return {
     formatVersion: 1,
@@ -104,12 +104,12 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
       primaryFields,
       secondaryFields,
       auxiliaryFields,
-      // Contraparte de la nota de arriba: cuando poweredBy cedió su lugar
-      // al frente (recompensa disponible), sigue siendo accesible al
-      // tocar el ícono de info — nunca desaparece del todo, solo cambia
-      // de cara. Sin recompensa disponible, ya está al frente y el back
-      // no lo repite (sería redundante).
-      backFields: input.rewardName ? [{ key: "poweredBy", label: "", value: "Powered by Pragmia" }] : [],
+      // Incondicional (ver la nota de arriba en auxiliaryFields) — el
+      // único contenido que backFields ha tenido alguna vez es este
+      // mismo campo, así que no queda ningún otro huérfano al fijarlo
+      // siempre acá. Accesible al tocar el ícono de info, nunca al
+      // frente — un solo lugar, sin depender de ningún estado.
+      backFields: [{ key: "poweredBy", label: "", value: "Powered by Pragmia" }],
     },
     barcodes: [
       {
