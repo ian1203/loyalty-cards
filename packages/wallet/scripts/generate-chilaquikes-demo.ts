@@ -65,7 +65,7 @@ const objectPayload = buildLoyaltyObjectPayload({
   businessId: DEMO_BUSINESS_ID,
   customerId: DEMO_CUSTOMER_ID,
   customerFirstName: "María González",
-  currentStamps: 4,
+  cycleStamps: 4, // < 6, sin envolver — mismo criterio que create-chilaquikes-production-class.ts
   stampsRequired: 6,
   rewardName: "Orden de chilaquiles gratis",
   walletToken: DEMO_WALLET_TOKEN,
