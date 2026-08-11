@@ -105,14 +105,17 @@ export async function generateApplePkpassForCustomer(
   const labelRgb: RgbColor = brandColorHex ? [255, 217, 179] : [110, 110, 110];
   const iconRgb: RgbColor = brandColorHex ? backgroundRgb : deriveBrandColor(businessId);
 
-  // El canje ARRASTRA el sobrante (ver @loyalty/core) — currentStamps
-  // puede superar stampsRequired legítimamente. Solo existe un strip
-  // pre-generado por cada valor 0..stampsRequired (Sección A2), así que
-  // el conteo se clampea acá antes de derivar el nombre de archivo —
-  // igual que ya hacía el mensaje "X de Y" en el resto del pase.
-  const clampedStamps = Math.min(snapshot.currentStamps, snapshot.stampsRequired);
+  // El grid muestra el progreso del CICLO ACTUAL, no el total acumulado
+  // congelado en el máximo (bug real corregido: un cliente con 8 sellos y
+  // límite 6 se veía con el grid lleno de forma estática para siempre, en
+  // vez de ver 2/6 hacia su próxima recompensa). snapshot.cycleStamps ya
+  // viene calculado por cycleStampProgress() (@loyalty/core, vía
+  // loyaltySnapshot.ts) — múltiplo exacto del requisito = ciclo completo,
+  // nunca 0 vacío. Solo existe un strip pre-generado por cada valor
+  // 0..stampsRequired (Sección A2), y cycleStamps ya cae en ese rango por
+  // construcción.
   const stripUrl = snapshot.businessWalletHeroUrl
-    ? deriveStampCountUrl(snapshot.businessWalletHeroUrl, clampedStamps)
+    ? deriveStampCountUrl(snapshot.businessWalletHeroUrl, snapshot.cycleStamps)
     : null;
 
   const [logoPng, stripPng] = await Promise.all([
@@ -129,7 +132,7 @@ export async function generateApplePkpassForCustomer(
     organizationName: snapshot.businessName,
     programName: snapshot.programName,
     customerFirstName: snapshot.customerFirstName,
-    currentStamps: snapshot.currentStamps,
+    cycleStamps: snapshot.cycleStamps,
     stampsRequired: snapshot.stampsRequired,
     rewardName: snapshot.rewardName,
     availableRewardsCount: snapshot.availableRewardsCount,

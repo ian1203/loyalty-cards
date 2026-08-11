@@ -10,7 +10,7 @@ const baseInput: PassJsonInput = {
   organizationName: "Cafetería Test",
   programName: "Tarjeta de sellos",
   customerFirstName: "María",
-  currentStamps: 4,
+  cycleStamps: 4,
   stampsRequired: 6,
   rewardName: null,
   walletToken: "wallet-token-xyz",
@@ -42,6 +42,19 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     expect(pass.storeCard.headerFields).toEqual([
       { key: "stampsHeader", label: "SELLOS", value: "4/6" },
     ]);
+  });
+
+  // Bug real corregido: el campo es cycleStamps (progreso del CICLO
+  // actual, ya acotado por cycleStampProgress en @loyalty/core), nunca el
+  // total acumulado crudo — mostrar el total ("8/6") junto a un grid que
+  // solo puede representar un ciclo (strip-N.png) se leía inconsistente
+  // (confirmado con un render real). Caso de Carlo: 8 sellos crudos,
+  // límite 6 → cycleStamps ya viene calculado en 2 antes de llegar acá.
+  it("caso real de Carlo (8 sellos crudos, límite 6): con cycleStamps=2 ya calculado, el header dice '2/6', no '8/6'", () => {
+    const pass = buildPassJson({ ...baseInput, cycleStamps: 2, stampsRequired: 6 }) as {
+      storeCard: { headerFields: Array<{ value: string }> };
+    };
+    expect(pass.storeCard.headerFields[0].value).toBe("2/6");
   });
 
   it("sin availableRewardsCount (o con 1), secondaryFields NO agrega 'Recompensas disponibles' — sería redundante con auxiliaryFields.reward", () => {

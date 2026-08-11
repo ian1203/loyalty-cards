@@ -13,7 +13,16 @@ export type PassJsonInput = {
   organizationName: string; // nombre del negocio
   programName: string; // nombre del programa de sellos
   customerFirstName: string | null;
-  currentStamps: number;
+  // Progreso del CICLO ACTUAL (currentStamps % stampsRequired, ciclo
+  // completo si currentStamps es múltiplo exacto — cycleStampProgress en
+  // @loyalty/core, calculado en loyaltySnapshot.ts), NUNCA el total
+  // acumulado crudo. Decisión revisada (ver commit): mostrar el total
+  // crudo (ej. "8/6") junto a un grid que solo puede representar un ciclo
+  // (strip-N.png, ver generate-pass-assets.ts) se leía como inconsistente
+  // — confirmado con un render real antes de este cambio. El total
+  // crudo sigue existiendo en customer_balances/el dashboard, solo dejó
+  // de mostrarse en el pase del cliente.
+  cycleStamps: number;
   stampsRequired: number;
   rewardName: string | null;
   // Cuántas reglas de recompensa están desbloqueadas AHORA (no solo la
@@ -43,7 +52,7 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
     {
       key: "stampsHeader",
       label: "SELLOS",
-      value: `${input.currentStamps}/${input.stampsRequired}`,
+      value: `${input.cycleStamps}/${input.stampsRequired}`,
     },
   ];
 

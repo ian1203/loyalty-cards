@@ -69,8 +69,8 @@ export async function buildGoogleSaveLinkForCustomer(
     businessId,
     customerId,
     customerFirstName: snapshot.customerFirstName,
-    currentStamps: snapshot.currentStamps,
     stampsRequired: snapshot.stampsRequired,
+    cycleStamps: snapshot.cycleStamps,
     // nextRewardName (no rewardName): Google no tiene rejilla gráfica de
     // sellos, el texto motivador de buildProgressMessage es la única
     // forma de comunicar avance — necesita el nombre de la recompensa

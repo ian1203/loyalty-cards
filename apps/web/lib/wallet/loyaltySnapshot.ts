@@ -8,7 +8,7 @@ import {
   type TenantTransaction,
   type VerifiedBusinessId,
 } from "@loyalty/db";
-import { availableRewards } from "@loyalty/core";
+import { availableRewards, countAvailableRedemptions, cycleStampProgress } from "@loyalty/core";
 import { isUuid } from "../tenant";
 
 // Datos compartidos entre la generación del .pkpass de Apple
@@ -32,11 +32,21 @@ export type CustomerLoyaltySnapshot = {
   // si X existe ANTES de llegar. `rules` ya viene ordenado por
   // stampsRequired ascendente, así que el primero es el próximo hito.
   nextRewardName: string | null;
-  // Cuántas reglas ACTIVAS están desbloqueadas ahora mismo (0, 1, o más si
-  // el negocio define varios tiers y el cliente ya pasó más de uno) —
-  // reusa `rules`/`availableRewards()`, ya calculados abajo para
-  // `rewardName`, cero query nueva.
+  // Canjes REALES disponibles ahora mismo — countAvailableRedemptions(),
+  // NO availableRewards().length. Distinción real: con una sola regla de
+  // costo 6 y currentStamps=12, hay DOS canjes posibles (applyRedemption
+  // arrastra el sobrante y permite canjes consecutivos de la misma
+  // regla) — availableRewards().length se quedaría en 1 (cuenta reglas
+  // DISTINTAS desbloqueadas, no cuántas veces se puede canjear la misma).
   availableRewardsCount: number;
+  // Progreso del CICLO ACTUAL (currentStamps % stampsRequired, ciclo
+  // completo si currentStamps es múltiplo exacto — ver
+  // cycleStampProgress()) — lo que consume el grid físico de Apple
+  // (passGeneration.ts elige qué strip-N.png servir) y el mensaje de
+  // progreso de Google (loyaltyPayload.ts). Un cliente con más sellos que
+  // el requisito ya NO se ve congelado en el grid lleno — ve el avance
+  // real hacia su siguiente recompensa.
+  cycleStamps: number;
   walletToken: string;
   // Branding real del negocio (nullable — sin logo/hero cargados, el
   // .pkpass sigue el layout plano de siempre, nunca un placeholder
@@ -134,7 +144,8 @@ export async function loadCustomerLoyaltySnapshot(
     stampsRequired: program.stampsRequired,
     rewardName: firstAvailable?.name ?? null,
     nextRewardName: rules[0]?.name ?? null,
-    availableRewardsCount: unlockedRewards.length,
+    availableRewardsCount: countAvailableRedemptions(currentStamps, rules),
+    cycleStamps: cycleStampProgress(currentStamps, program.stampsRequired),
     walletToken: customer.walletToken,
     businessWalletLogoUrl: business.walletLogoUrl,
     businessBrandColorHex: business.brandColorHex,

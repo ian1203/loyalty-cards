@@ -136,8 +136,8 @@ async function notifyGoogleObject(businessId: VerifiedBusinessId, customerId: st
     businessId,
     customerId,
     customerFirstName: snapshot.customerFirstName,
-    currentStamps: snapshot.currentStamps,
     stampsRequired: snapshot.stampsRequired,
+    cycleStamps: snapshot.cycleStamps,
     // nextRewardName, NO rewardName — mismo motivo que googleSaveLink.ts
     // (ver su comentario): Google necesita el mensaje motivador desde el
     // primer sello, no solo cuando la recompensa ya está desbloqueada.
