@@ -36,7 +36,46 @@ export type PassJsonInput = {
     foregroundRgb: [number, number, number];
     labelRgb: [number, number, number];
   };
+  // SCAFFOLDING (research/scaffolding, ver skill wallet-integration) — sin
+  // consumidor real todavía en apps/web/lib/wallet/passGeneration.ts, así
+  // que ningún pase de producción incluye este campo hasta que se cablee
+  // a propósito. Hasta 10 ubicaciones (límite documentado de Apple
+  // PassKit); relevantText/latitude/longitude van YA CALCULADOS por el
+  // caller — buildPassJson sigue sin I/O ni conocer coordenadas de
+  // negocio, mismo criterio de siempre. maxDistance es pass-wide (metros,
+  // CLLocationDistance), no por ubicación — sin especificarlo, Apple usa
+  // un radio implícito (~100 m para storeCard, documentado como "detalle
+  // de implementación" que puede cambiar).
+  locations?: Array<{
+    latitude: number;
+    longitude: number;
+    altitude?: number;
+    relevantText?: string;
+  }>;
+  maxDistance?: number;
 };
+
+// Texto del banner de lock screen al entrar en el geofence de una
+// ubicación — mismo tono/casos que buildProgressMessage (Google,
+// loyaltyPayload.ts): sellos restantes, singular vs. plural, y el caso
+// especial de ciclo completo. Duplicado a propósito, no importado desde
+// google/ — cada plataforma mantiene su builder de mensajes desacoplado
+// (mismo criterio que separa apple/ de google/ en todo lo demás), aunque
+// el texto resultante sea equivalente hoy.
+export function buildRelevantText(
+  cycleStamps: number,
+  stampsRequired: number,
+  rewardName: string,
+): string {
+  const remaining = stampsRequired - cycleStamps;
+  if (remaining <= 0) {
+    return `¡Ya puedes canjear tu ${rewardName}!`;
+  }
+  if (remaining === 1) {
+    return `¡Solo te falta 1 sello para tu ${rewardName}!`;
+  }
+  return `¡Te faltan ${remaining} sellos para tu ${rewardName}!`;
+}
 
 function rgb([r, g, b]: [number, number, number]): string {
   return `rgb(${r}, ${g}, ${b})`;
@@ -127,5 +166,11 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
         messageEncoding: "iso-8859-1",
       },
     ],
+    ...(input.locations?.length
+      ? {
+          locations: input.locations,
+          ...(input.maxDistance !== undefined ? { maxDistance: input.maxDistance } : {}),
+        }
+      : {}),
   };
 }

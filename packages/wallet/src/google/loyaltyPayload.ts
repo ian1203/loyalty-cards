@@ -76,6 +76,16 @@ export type LoyaltyClassInput = {
   // esto, el id sale igual que antes (compatibilidad hacia atrás para
   // callers/tests que no versionan todavía).
   classVersion?: string;
+  // SCAFFOLDING (research/scaffolding, ver skill wallet-integration) — sin
+  // consumidor real todavía en apps/web/lib/wallet/googleSaveLink.ts/
+  // notify.ts, así que ninguna clase de producción incluye este campo
+  // hasta que se cablee a propósito (y eso exige un classId nuevo, mismo
+  // criterio que heroImageUri/classTemplateInfo: es un campo de la Loyalty
+  // Class, Google cachea por classId). A diferencia de locations de Apple,
+  // MerchantLocation solo trae latitude/longitude — el texto de la
+  // notificación lo arma Google del lado suyo, no es personalizable (sin
+  // relevantText ni campo equivalente en el schema).
+  merchantLocations?: Array<{ latitude: number; longitude: number }>;
 };
 
 export function buildLoyaltyClassPayload(input: LoyaltyClassInput): Record<string, unknown> {
@@ -106,6 +116,7 @@ export function buildLoyaltyClassPayload(input: LoyaltyClassInput): Record<strin
     ...(input.heroImageUri
       ? { heroImage: imageAsset(input.heroImageUri, input.businessName) }
       : {}),
+    ...(input.merchantLocations?.length ? { merchantLocations: input.merchantLocations } : {}),
     // Sin esto, accountName (ya poblado en el Loyalty Object — ver abajo)
     // solo aparece en el panel de detalles al tocar el pase, nunca en la
     // cara visible de la tarjeta — a diferencia de Apple, donde
