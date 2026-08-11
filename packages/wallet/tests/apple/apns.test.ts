@@ -3,6 +3,7 @@ import { decodeJwt, decodeProtectedHeader } from "jose";
 import { describe, expect, it } from "vitest";
 import {
   buildApnsAuthToken,
+  buildApnsTimeoutMessage,
   createFakeApnsSender,
   createRealApnsSender,
   type ApnsCredentials,
@@ -71,6 +72,32 @@ describe("createRealApnsSender — payload vacío, envío de red mockeado", () =
     await expect(
       send({ pushToken: "stale-token", passTypeIdentifier: "pass.dev.loyalty" }),
     ).rejects.toThrow(/410/);
+  });
+});
+
+describe("buildApnsTimeoutMessage — la parte determinística del timeout, sin red real", () => {
+  // El colgado real de http2 (socket que nunca conecta / respuesta que
+  // nunca llega) no se prueba acá — depende de temporizadores reales
+  // contra una red real o un servidor fake que aguante abierto, ninguno
+  // de los dos determinístico para CI. Esto SÍ es determinístico: el
+  // mensaje que se logueará cuando el timeout dispare, que es lo que hay
+  // que poder leer en producción sin depender del dashboard de Vercel.
+  it("incluye la fase, el tiempo transcurrido, y los últimos 6 caracteres del pushToken (nunca el token completo)", () => {
+    const message = buildApnsTimeoutMessage(
+      "connect",
+      5001,
+      "abcdef0123456789",
+      "la sesión http2 nunca terminó de conectar",
+    );
+    expect(message).toContain('fase "connect"');
+    expect(message).toContain("5001ms");
+    expect(message).toContain("…456789");
+    expect(message).not.toContain("abcdef0123456789");
+  });
+
+  it("distingue la fase 'request' de 'connect' en el mensaje", () => {
+    const message = buildApnsTimeoutMessage("request", 3000, "tok", "sin respuesta");
+    expect(message).toContain('fase "request"');
   });
 });
 

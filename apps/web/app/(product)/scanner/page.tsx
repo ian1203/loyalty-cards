@@ -10,6 +10,19 @@ import { requireTenantSession } from "../../../lib/supabase/session";
 import { resolveActor } from "../../../lib/tenant";
 import { ScannerClient } from "./ScannerClient";
 
+// Sin esto, la Server Action de sellar/canjear (y su trabajo en
+// background vía scheduleAfterResponse → notifyWalletOfTransaction)
+// corre con el límite de duración DEFAULT de la plataforma — no
+// configurado en ningún lado del repo hasta ahora, lo cual dejaba
+// terminar la función a mitad del push de Apple sin que nuestro propio
+// código llegara a loguear nada (el incidente real que motivó esto).
+// Peor caso real con los timeouts de apns.ts (5s conectar + 5s
+// respuesta) y los reintentos de notify.ts ([2000, 8000]ms entre
+// intentos, 3 intentos total): 3 × 10s + 2s + 8s = 40s. 60s dentro del
+// máximo configurable en el plan Hobby de Vercel (no hace falta Pro para
+// que esto funcione), con margen real sobre el peor caso calculado.
+export const maxDuration = 60;
+
 export default async function ScannerPage() {
   const session = await requireTenantSession();
   if (!session) {
