@@ -82,6 +82,24 @@ describe("buildPkpass — con firma FAKE (rápido, sin openssl)", () => {
     expect(Object.keys(manifest).sort()).toEqual(names.filter((n) => n !== "manifest.json" && n !== "signature").sort());
   });
 
+  it("con iconPng, usa esos bytes en vez del cuadrado sólido de siempre (mismas 3 entradas, contenido real)", async () => {
+    const onePixelPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    );
+    const pkpass = await buildPkpass({
+      passJson: buildPassJson(passJsonInput),
+      signer: createFakePkpassSigner(),
+      iconRgb: [200, 50, 50],
+      iconPng: { at1x: onePixelPng, at2x: onePixelPng, at3x: onePixelPng },
+    });
+
+    const zip = new AdmZip(pkpass);
+    expect(zip.getEntry("icon.png")!.getData().equals(onePixelPng)).toBe(true);
+    expect(zip.getEntry("icon@2x.png")!.getData().equals(onePixelPng)).toBe(true);
+    expect(zip.getEntry("icon@3x.png")!.getData().equals(onePixelPng)).toBe(true);
+  });
+
   it("pass.json dentro del zip es el mismo JSON que se le pasó", async () => {
     const passJson = buildPassJson(passJsonInput);
     const pkpass = await buildPkpass({

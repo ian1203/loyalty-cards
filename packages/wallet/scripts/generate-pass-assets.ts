@@ -48,6 +48,15 @@ const REPO_ROOT = path.join(__dirname, "../../..");
 const PUBLIC_PASSES_DIR = path.join(REPO_ROOT, "apps/web/public/passes");
 
 const LOGO_BASE_HEIGHT = 50;
+// icon.png/@2x/@3x: el ícono de fallback OBLIGATORIO del bundle .pkpass —
+// Apple lo usa en notificaciones, Apple Watch y el selector de Siri,
+// nunca en la cara del pase (eso es logo.png). 29x29pt, cuadrado exacto
+// (a diferencia de logo.png, que se ajusta por altura). El source
+// (--logo) ya llega cuadrado y con fondo transparente recortado
+// (chilaquikes-logo-pass.png, 660×660 — mismo criterio de "centrado en
+// lienzo cuadrado" que ya se usó para logo.png), así que un resize
+// directo alcanza — sin crop adicional.
+const ICON_BASE_SIZE = 29;
 const STRIP_BASE_WIDTH = 312;
 const STRIP_BASE_HEIGHT = 123;
 
@@ -83,6 +92,7 @@ type Args = {
   hero?: string;
   heroPatchX: number;
   heroPatchY: number;
+  iconFallbackLetter?: string;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -106,9 +116,13 @@ function parseArgs(argv: string[]): Args {
   // nuevo sale limpio).
   const heroPatchX = Number.parseInt(get("--hero-patch-x") ?? "0", 10);
   const heroPatchY = Number.parseInt(get("--hero-patch-y") ?? "0", 10);
+  // Un solo carácter (la letra que va en el círculo de fallback de
+  // icon.png) — explícito, no derivado del slug: el slug no siempre
+  // arranca con la letra que tiene sentido mostrar (ver CLAUDE.md).
+  const iconFallbackLetter = get("--icon-fallback-letter");
   if (!slug || !logo || !stampsRequiredRaw) {
     throw new Error(
-      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>]",
+      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--icon-fallback-letter <letra>]",
     );
   }
   const stampsRequired = Number.parseInt(stampsRequiredRaw, 10);
@@ -118,7 +132,7 @@ function parseArgs(argv: string[]): Args {
   // Gris oscuro por default — nunca invisible sobre el fondo blanco del
   // strip si un negocio corre este script sin marca cargada todavía.
   const brandColor = `#${(brandColorRaw ?? "1F1F1F").replace(/^#/, "")}`;
-  return { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY };
+  return { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY, iconFallbackLetter };
 }
 
 function computeStampLayout(stampsRequired: number): { diameter: number; centersX: number[]; centerY: number } {
@@ -130,6 +144,23 @@ function computeStampLayout(stampsRequired: number): { diameter: number; centers
   const startX = (STRIP_BASE_WIDTH - totalWidth) / 2;
   const centersX = Array.from({ length: stampsRequired }, (_, i) => startX + diameter / 2 + i * (diameter + gap));
   return { diameter, centersX, centerY: STRIP_BASE_HEIGHT / 2 };
+}
+
+// Fallback de icon.png cuando el logo real NO aísla limpio a 29x29pt —
+// confirmado visualmente (no supuesto): el logo de Chilaquikes trae
+// mascota + wordmark + subtítulo en la misma capa, y a 29px real (el
+// tamaño @1x que de verdad se usa en notificaciones/Apple Watch, no el
+// @3x ampliado) el resultado es una mancha de píxeles ilegible — mismo
+// criterio que ya descartó el crop del hero para el strip
+// (chilaquikes-emblem-attempt-NOT-USED.png): antes un resultado simple y
+// legible que uno "real" pero forzado.
+function buildIconFallbackSvg(letter: string, brandColor: string, size: number): string {
+  return `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="${brandColor}" />
+    <text x="50%" y="52%" text-anchor="middle" dominant-baseline="central"
+      font-family="Helvetica, Arial, sans-serif" font-weight="700"
+      font-size="${size * 0.56}" fill="#FFFFFF">${letter}</text>
+  </svg>`;
 }
 
 function buildStripSvg(filledCount: number, stampsRequired: number, brandColor: string, scale: number): string {
@@ -233,7 +264,7 @@ async function buildHeroStripAt3x(
 }
 
 async function main() {
-  const { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY } = parseArgs(
+  const { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY, iconFallbackLetter } = parseArgs(
     process.argv.slice(2),
   );
   const outDir = path.join(PUBLIC_PASSES_DIR, slug);
@@ -249,6 +280,20 @@ async function main() {
       .resize({ height: LOGO_BASE_HEIGHT * scale, fit: "inside", withoutEnlargement: false })
       .png()
       .toFile(path.join(outDir, `logo${suffix}.png`));
+  }
+
+  for (const [suffix, scale] of [["", 1], ["@2x", 2], ["@3x", 3]] as const) {
+    if (iconFallbackLetter) {
+      const svg = buildIconFallbackSvg(iconFallbackLetter, brandColor, ICON_BASE_SIZE * scale);
+      await sharp(Buffer.from(svg))
+        .png()
+        .toFile(path.join(outDir, `icon${suffix}.png`));
+      continue;
+    }
+    await sharp(logoPath)
+      .resize(ICON_BASE_SIZE * scale, ICON_BASE_SIZE * scale)
+      .png()
+      .toFile(path.join(outDir, `icon${suffix}.png`));
   }
 
   // Strip: un archivo por cada conteo posible de sellos (0..stampsRequired,
@@ -285,6 +330,7 @@ async function main() {
 
   console.log(`[generate-pass-assets] Listo: ${outDir}`);
   console.log("  logo.png, logo@2x.png, logo@3x.png");
+  console.log("  icon.png, icon@2x.png, icon@3x.png");
   console.log(
     `  strip-0.png..strip-${stampsRequired}.png (+ @2x/@3x) — ${(stampsRequired + 1) * 3} archivos de strip${heroPath ? " (modo --hero)" : ""}`,
   );
