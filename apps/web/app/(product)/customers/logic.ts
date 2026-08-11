@@ -113,9 +113,15 @@ export async function createCustomerForSession(
     await withTenantContext(session.businessId, async (tx) => {
       const actor = await resolveActor(tx, session);
 
-      // Dedupe a nivel app (no hay unique por (business_id, phone/email) en
-      // el esquema — decisión del plan de Fase 2): mismo phone o email
-      // dentro DEL TENANT rechaza con mensaje claro.
+      // Dedupe a nivel app: mismo phone o email dentro DEL TENANT rechaza
+      // con mensaje claro ANTES de llegar al INSERT — cortesía de UX, no la
+      // garantía real. La garantía real son los unique index parciales de
+      // customers (customers_business_id_phone_key/_email_key, WHERE ...
+      // IS NOT NULL): dos altas casi simultáneas del mismo phone/email
+      // (doble clic, reintento de red) pueden ambas pasar este SELECT antes
+      // de que cualquiera confirme su INSERT — el catch de abajo traduce
+      // esa violación de constraint (23505) al mismo DuplicateCustomerError,
+      // mismo patrón que enrollCustomerPublic (packages/db/src/enroll.ts).
       if (phone) {
         const [dup] = await tx
           .select({ id: customers.id })
@@ -190,6 +196,22 @@ export async function createCustomerForSession(
     if (error instanceof DuplicateCustomerError) {
       return { error: `Ya existe un cliente con ese ${error.field} en tu negocio.` };
     }
+
+    // Backstop real de la carrera SELECT-antes-de-INSERT de arriba: drizzle
+    // envuelve el error de `pg` en un DrizzleQueryError — el SQLSTATE y el
+    // nombre del constraint viven en `.cause`, no en el objeto de nivel
+    // superior (mismo desempaquetado que enrollCustomerPublic).
+    const cause = (error as { cause?: unknown }).cause;
+    const code = (cause as { code?: string })?.code ?? (error as { code?: string }).code;
+    const constraint =
+      (cause as { constraint?: string })?.constraint ?? (error as { constraint?: string }).constraint;
+    if (code === "23505" && constraint === "customers_business_id_phone_key") {
+      return { error: "Ya existe un cliente con ese teléfono en tu negocio." };
+    }
+    if (code === "23505" && constraint === "customers_business_id_email_key") {
+      return { error: "Ya existe un cliente con ese email en tu negocio." };
+    }
+
     console.error("createCustomerForSession:", error);
     return { error: "No se pudo dar de alta el cliente. Intenta de nuevo." };
   }

@@ -14,11 +14,16 @@ import type { RgbColor } from "../apple/placeholderIcon";
 // (quitar el hero fue el motivo de _v2 — ver
 // scripts/migrate-google-class-v2.ts; volver a agregar un hero —esta vez
 // el patrón de mini-mascots, no la foto de producto que se veía fuera de
-// lugar— es el motivo de _v3, ver scripts/migrate-google-class-v3.ts):
+// lugar— es el motivo de _v3, ver scripts/migrate-google-class-v3.ts;
+// classTemplateInfo para mostrar accountName en la CARA de la tarjeta —a
+// diferencia de Apple, donde "Cliente"/nombre ya vive en secondaryFields
+// del storeCard por defecto, Google solo lo pone en el panel de
+// detalles salvo que se declare explícito vía cardTemplateOverride— es
+// el motivo de _v4, ver scripts/migrate-google-class-v4.ts):
 // Google cachea agresivamente por classId, así que un cambio de campos
 // visuales SIEMPRE necesita un classId nuevo, nunca un PATCH in-place de
 // la clase vieja.
-export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v3";
+export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v4";
 
 export function buildLoyaltyClassId(issuerId: string, businessId: string, version?: string): string {
   const suffix = version ? `_${version}` : "";
@@ -96,6 +101,30 @@ export function buildLoyaltyClassPayload(input: LoyaltyClassInput): Record<strin
     ...(input.heroImageUri
       ? { heroImage: imageAsset(input.heroImageUri, input.businessName) }
       : {}),
+    // Sin esto, accountName (ya poblado en el Loyalty Object — ver abajo)
+    // solo aparece en el panel de detalles al tocar el pase, nunca en la
+    // cara visible de la tarjeta — a diferencia de Apple, donde
+    // secondaryFields SÍ vive en la cara por defecto sin configuración
+    // extra. Confirmado contra la documentación oficial de Google
+    // (Customize Google Wallet Passes — Loyalty cards): una fila con
+    // fieldPath "object.accountName" en cardRowTemplateInfos la saca a la
+    // cara. oneItem (una sola columna) porque es el único dato que
+    // queremos ahí — no hay un segundo campo con el que emparejarlo.
+    classTemplateInfo: {
+      cardTemplateOverride: {
+        cardRowTemplateInfos: [
+          {
+            oneItem: {
+              item: {
+                firstValue: {
+                  fields: [{ fieldPath: "object.accountName" }],
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
   };
 }
 
