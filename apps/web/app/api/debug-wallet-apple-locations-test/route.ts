@@ -1,5 +1,5 @@
 import { buildPassJson, buildPkpass, buildRelevantText } from "@loyalty/wallet";
-import { getApplePassTypeIdentifier, getAppleTeamIdentifier, getPkpassSigner } from "../../../../lib/wallet/adapters";
+import { getApplePassTypeIdentifier, getAppleTeamIdentifier, getPkpassSigner } from "../../../lib/wallet/adapters";
 
 export const runtime = "nodejs";
 
