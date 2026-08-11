@@ -4,6 +4,7 @@ import {
   buildLoyaltyClassPayload,
   buildLoyaltyObjectId,
   buildLoyaltyObjectPayload,
+  buildNotificationMessage,
   buildProgressMessage,
   type LoyaltyClassInput,
   type LoyaltyObjectInput,
@@ -151,6 +152,33 @@ describe("buildProgressMessage — texto motivador (Google Wallet no soporta rej
   it("caso real de Carlo (8 sellos crudos, límite 6): con cycleStamps ya calculado (2), avisa del progreso del nuevo ciclo, no 'ya puedes canjear' de nuevo", () => {
     expect(buildProgressMessage(2, 6, "Café gratis")).toBe(
       "¡Te faltan 4 sellos para tu Café gratis!",
+    );
+  });
+});
+
+describe("buildNotificationMessage — texto de la notificación PUSH real (addMessage), función DISTINTA de buildProgressMessage", () => {
+  it("mismos casos/tono que buildProgressMessage sin nombre (sellos pendientes, singular, ciclo completo)", () => {
+    expect(buildNotificationMessage(4, 6, "Orden de chilaquiles gratis")).toBe(
+      "¡Te faltan 2 sellos para tu Orden de chilaquiles gratis!",
+    );
+    expect(buildNotificationMessage(5, 6, "Orden de chilaquiles gratis")).toBe(
+      "¡Solo te falta 1 sello para tu Orden de chilaquiles gratis!",
+    );
+    expect(buildNotificationMessage(6, 6, "Café gratis")).toBe("¡Ya puedes canjear tu Café gratis!");
+  });
+
+  it("con nombre de cliente, lo antepone en minúscula tras la coma", () => {
+    expect(buildNotificationMessage(4, 6, "Orden de chilaquiles gratis", "Carlo")).toBe(
+      "¡Carlo, te faltan 2 sellos para tu Orden de chilaquiles gratis!",
+    );
+    expect(buildNotificationMessage(6, 6, "Café gratis", "Carlo")).toBe(
+      "¡Carlo, ya puedes canjear tu Café gratis!",
+    );
+  });
+
+  it("sin nombre (null o undefined), usa el texto genérico — nunca 'null,' ni placeholder", () => {
+    expect(buildNotificationMessage(4, 6, "Orden de chilaquiles gratis", null)).toBe(
+      "¡Te faltan 2 sellos para tu Orden de chilaquiles gratis!",
     );
   });
 });
