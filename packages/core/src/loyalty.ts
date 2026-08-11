@@ -68,6 +68,41 @@ export function availableRewards<T extends RewardRuleInput>(
   );
 }
 
+// Cuántos canjes REALES puede hacer el cliente ahora mismo — distinto de
+// availableRewards().length (que cuenta reglas DISTINTAS desbloqueadas,
+// como máximo una vez cada una, sin importar cuánto exceda el balance su
+// costo). applyRedemption arrastra el sobrante y permite canjes
+// consecutivos de la MISMA regla si el balance alcanza (12 sellos con una
+// regla de costo 6 → 2 canjes reales, uno tras otro) — este número
+// refleja eso: floor(currentStamps / costo) sumado por cada regla activa.
+export function countAvailableRedemptions<T extends RewardRuleInput>(
+  currentStamps: number,
+  rules: readonly T[],
+): number {
+  assertNonNegativeInt(currentStamps, "currentStamps");
+  return rules.reduce(
+    (sum, rule) => (rule.isActive ? sum + Math.floor(currentStamps / rule.stampsRequired) : sum),
+    0,
+  );
+}
+
+// Progreso dentro del CICLO ACTUAL — currentStamps % stampsRequired, con
+// un caso especial: un múltiplo exacto del requisito (6, 12, 18...) se
+// muestra como CICLO COMPLETO (stampsRequired), nunca como 0 vacío — un
+// cliente con exactamente 6 sellos (o 12, o 18) no debe ver su tarjeta en
+// blanco. A diferencia de stampProgress() (que clampea el TOTAL
+// acumulado a un máximo visual — sigue usándose tal cual para la barra
+// del dashboard, que sí puede comunicar "más de un ciclo" con texto),
+// esta función responde "¿cuánto llevo del ciclo que estoy llenando
+// ahora?" — la única pregunta que el grid físico de un pase de Wallet
+// puede representar, porque no tiene espacio para ciclos ya completados.
+export function cycleStampProgress(currentStamps: number, stampsRequired: number): number {
+  assertNonNegativeInt(currentStamps, "currentStamps");
+  assertPositiveInt(stampsRequired, "stampsRequired");
+  const remainder = currentStamps % stampsRequired;
+  return remainder === 0 && currentStamps > 0 ? stampsRequired : remainder;
+}
+
 export type RedemptionEvaluationInput = {
   currentStamps: number;
   ruleActive: boolean;

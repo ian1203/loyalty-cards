@@ -15,9 +15,11 @@ import {
   transactions,
   users,
   walletPasses,
+  withTenantContext,
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
 import { createCustomerForSession } from "../app/(product)/customers/logic";
+import { loadCustomerLoyaltySnapshot } from "../lib/wallet/loyaltySnapshot";
 import { saveProgramForSession, saveRewardRuleForSession } from "../app/(product)/rewards/logic";
 import { registerStampForSession } from "../app/(product)/scanner/logic";
 import { requireTenantSession } from "../lib/supabase/session";
@@ -406,5 +408,55 @@ describe("notifyWalletOfTransaction — hook post-sello, Apple + Google, impls f
       .from(customerBalances)
       .where(and(eq(customerBalances.customerId, customer.id), eq(customerBalances.loyaltyProgramId, programId)));
     expect(balance.currentStamps).toBe(1);
+  });
+
+  // Caso real de Carlo, con DB real (no cálculo aislado) — el programa de
+  // este describe ya tiene stampsRequired=6 y UNA regla de recompensa de
+  // costo 6 (setup de arriba). cooldownMinutes=0 permite sellar en loop
+  // sin esperar.
+  it("2+ ciclos completos sin canjear: cycleStamps refleja el ciclo actual (no el grid congelado), availableRewardsCount cuenta canjes reales (no reglas distintas)", async () => {
+    const customer = await freshCustomer(`Dos ciclos ${suffix}`);
+
+    for (let i = 0; i < 8; i++) {
+      const result = await registerStampForSession(sessionStaff, {
+        customerId: customer.id,
+        locationId,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      expect(result.ok).toBe(true);
+    }
+
+    const snapshotAt8 = await withTenantContext(sessionOwner.businessId, (tx) =>
+      loadCustomerLoyaltySnapshot(tx, sessionOwner.businessId, customer.id),
+    );
+    expect(snapshotAt8?.currentStamps).toBe(8);
+    // Caso real de Carlo: 8 sellos, límite 6 → ciclo actual en 2, no el
+    // grid lleno congelado en 6.
+    expect(snapshotAt8?.cycleStamps).toBe(2);
+    // floor(8/6) = 1 canje real — NO 2 reglas (solo hay una regla), y NO
+    // el conteo viejo de "reglas distintas desbloqueadas" (que también
+    // daría 1 acá, así que este caso por sí solo no distingue las dos
+    // implementaciones — el siguiente sí).
+    expect(snapshotAt8?.availableRewardsCount).toBe(1);
+
+    for (let i = 0; i < 4; i++) {
+      const result = await registerStampForSession(sessionStaff, {
+        customerId: customer.id,
+        locationId,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      expect(result.ok).toBe(true);
+    }
+
+    const snapshotAt12 = await withTenantContext(sessionOwner.businessId, (tx) =>
+      loadCustomerLoyaltySnapshot(tx, sessionOwner.businessId, customer.id),
+    );
+    expect(snapshotAt12?.currentStamps).toBe(12);
+    // Múltiplo exacto de dos ciclos: CICLO COMPLETO (6), no 0 vacío.
+    expect(snapshotAt12?.cycleStamps).toBe(6);
+    // floor(12/6) = 2 canjes reales — acá SÍ distingue: el conteo viejo
+    // (reglas distintas desbloqueadas) se hubiera quedado en 1 para
+    // siempre, sin importar cuánto acumulara el cliente.
+    expect(snapshotAt12?.availableRewardsCount).toBe(2);
   });
 });

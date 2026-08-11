@@ -3,6 +3,8 @@ import {
   applyRedemption,
   applyStamp,
   availableRewards,
+  countAvailableRedemptions,
+  cycleStampProgress,
   evaluateRedemption,
   evaluateStamp,
   stampProgress,
@@ -229,5 +231,69 @@ describe("stampProgress", () => {
 
   it("stampsRequired inválido revienta", () => {
     expect(() => stampProgress(1, 0)).toThrow();
+  });
+});
+
+describe("countAvailableRedemptions — canjes REALES posibles, no reglas distintas desbloqueadas", () => {
+  const oneRule = [{ isActive: true, stampsRequired: 6 }];
+
+  it("por debajo del costo, cero canjes", () => {
+    expect(countAvailableRedemptions(4, oneRule)).toBe(0);
+  });
+
+  it("exactamente el costo, un canje", () => {
+    expect(countAvailableRedemptions(6, oneRule)).toBe(1);
+  });
+
+  it("caso real de Carlo (8 sellos, límite 6): un canje, no dos — floor(8/6)=1", () => {
+    expect(countAvailableRedemptions(8, oneRule)).toBe(1);
+  });
+
+  it("dos ciclos completos exactos (12 sellos, límite 6): DOS canjes — a diferencia de availableRewards().length, que se quedaría en 1", () => {
+    expect(countAvailableRedemptions(12, oneRule)).toBe(2);
+    expect(availableRewards(12, oneRule).length).toBe(1);
+  });
+
+  it("suma entre varias reglas activas", () => {
+    const rules = [
+      { isActive: true, stampsRequired: 3 }, // floor(10/3) = 3
+      { isActive: true, stampsRequired: 6 }, // floor(10/6) = 1
+    ];
+    expect(countAvailableRedemptions(10, rules)).toBe(4);
+  });
+
+  it("regla inactiva no cuenta", () => {
+    const rules = [{ isActive: false, stampsRequired: 3 }];
+    expect(countAvailableRedemptions(12, rules)).toBe(0);
+  });
+});
+
+describe("cycleStampProgress — progreso del ciclo ACTUAL, nunca se congela en el máximo", () => {
+  it("por debajo del requisito, es el total tal cual", () => {
+    expect(cycleStampProgress(4, 6)).toBe(4);
+  });
+
+  it("exactamente el requisito: ciclo completo, no vacío", () => {
+    expect(cycleStampProgress(6, 6)).toBe(6);
+  });
+
+  it("caso real de Carlo (8 sellos, límite 6): progreso del ciclo nuevo, no el grid congelado en 6", () => {
+    expect(cycleStampProgress(8, 6)).toBe(2);
+  });
+
+  it("múltiplo exacto de más de un ciclo (12): ciclo completo, no 0 vacío", () => {
+    expect(cycleStampProgress(12, 6)).toBe(6);
+  });
+
+  it("múltiplo exacto de tres ciclos (18): sigue siendo ciclo completo", () => {
+    expect(cycleStampProgress(18, 6)).toBe(6);
+  });
+
+  it("cero sellos: cero, no ciclo completo (el caso especial exige currentStamps > 0)", () => {
+    expect(cycleStampProgress(0, 6)).toBe(0);
+  });
+
+  it("stampsRequired inválido revienta", () => {
+    expect(() => cycleStampProgress(1, 0)).toThrow();
   });
 });

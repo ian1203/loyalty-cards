@@ -16,7 +16,7 @@ const passJsonInput: PassJsonInput = {
   organizationName: "Cafetería Test",
   programName: "Tarjeta de sellos",
   customerFirstName: "María",
-  currentStamps: 4,
+  cycleStamps: 4,
   stampsRequired: 6,
   rewardName: null,
   walletToken: "wallet-token-xyz",

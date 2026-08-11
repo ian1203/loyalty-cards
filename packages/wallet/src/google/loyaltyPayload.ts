@@ -104,8 +104,18 @@ export type LoyaltyObjectInput = {
   businessId: string;
   customerId: string;
   customerFirstName: string | null;
-  currentStamps: number;
   stampsRequired: number;
+  // Progreso del CICLO ACTUAL (currentStamps % stampsRequired, ciclo
+  // completo si currentStamps es múltiplo exacto — ver cycleStampProgress
+  // en @loyalty/core, calculado en loyaltySnapshot.ts) — usado tanto en
+  // loyaltyPoints.balance (el número siempre visible) como en
+  // buildProgressMessage ("cuánto falta"), NUNCA el total acumulado
+  // crudo. Decisión revisada (ver commit): mostrar "8 / 6" en el balance
+  // junto a un mensaje de progreso ya cycle-aware se leía inconsistente
+  // — confirmado con un render real antes de este cambio. El total
+  // crudo sigue existiendo en customer_balances/el dashboard, solo dejó
+  // de mostrarse en el pase del cliente.
+  cycleStamps: number;
   rewardName: string | null;
   walletToken: string;
   // Cuántas reglas de recompensa están desbloqueadas AHORA (no solo la
@@ -132,12 +142,21 @@ export type LoyaltyObjectInput = {
 // plantilla fija de Google Wallet (el orden de campos en el JSON no
 // controla el layout — Google decide esa jerarquía, no nosotros). Repetir
 // el conteo acá era la redundancia real que había que arreglar.
+//
+// Recibe cycleStamps (progreso del ciclo actual, YA acotado a
+// [0, stampsRequired] por cycleStampProgress en @loyalty/core), nunca el
+// total acumulado crudo — bug real corregido: con el total crudo, un
+// cliente con 8 sellos y límite 6 leía "¡Ya puedes canjear!" para
+// siempre, sin ninguna señal de que ya lleva 2 sellos de un segundo
+// ciclo. packages/wallet no depende de @loyalty/core (paquete aislado a
+// propósito) — el cálculo del módulo vive en loyaltySnapshot.ts, acá
+// solo se consume el resultado ya listo.
 export function buildProgressMessage(
-  currentStamps: number,
+  cycleStamps: number,
   stampsRequired: number,
   rewardName: string,
 ): string {
-  const remaining = Math.max(stampsRequired - currentStamps, 0);
+  const remaining = Math.max(stampsRequired - cycleStamps, 0);
   if (remaining === 0) {
     return `¡Ya puedes canjear tu ${rewardName}!`;
   }
@@ -155,7 +174,7 @@ export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<str
           {
             id: "progress",
             header: "Tu progreso",
-            body: buildProgressMessage(input.currentStamps, input.stampsRequired, input.rewardName),
+            body: buildProgressMessage(input.cycleStamps, input.stampsRequired, input.rewardName),
           },
         ]
       : []),
@@ -190,7 +209,7 @@ export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<str
     ...(input.customerFirstName ? { accountName: input.customerFirstName } : {}),
     loyaltyPoints: {
       label: "Sellos",
-      balance: { string: `${input.currentStamps} / ${input.stampsRequired}` },
+      balance: { string: `${input.cycleStamps} / ${input.stampsRequired}` },
     },
     textModulesData,
     barcode: { type: "QR_CODE", value: input.walletToken },

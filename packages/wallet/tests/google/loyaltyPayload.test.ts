@@ -22,8 +22,8 @@ const objectInput: LoyaltyObjectInput = {
   businessId: "11111111-1111-1111-1111-111111111111",
   customerId: "22222222-2222-2222-2222-222222222222",
   customerFirstName: "María",
-  currentStamps: 4,
   stampsRequired: 6,
+  cycleStamps: 4,
   rewardName: null,
   walletToken: "wallet-token-xyz",
 };
@@ -106,12 +106,20 @@ describe("buildProgressMessage — texto motivador (Google Wallet no soporta rej
     );
   });
 
-  it("con el total completo, cambia a mensaje de canje listo (no '0 de N')", () => {
+  it("con el ciclo completo, cambia a mensaje de canje listo (no '0 de N')", () => {
     expect(buildProgressMessage(6, 6, "Café gratis")).toBe("¡Ya puedes canjear tu Café gratis!");
   });
 
-  it("con excedente (canje ya arrastró sobrante, ver @loyalty/core), sigue en mensaje de canje listo", () => {
-    expect(buildProgressMessage(8, 6, "Café gratis")).toBe("¡Ya puedes canjear tu Café gratis!");
+  // Bug real corregido: el parámetro es cycleStamps (progreso del CICLO
+  // actual, ya acotado por cycleStampProgress en @loyalty/core), nunca el
+  // total acumulado crudo. Con el total crudo (8), este mensaje decía
+  // "¡Ya puedes canjear!" para siempre y nunca avisaba que ya llevaba 2
+  // sellos de un segundo ciclo — el mismo síntoma que el grid de Apple
+  // congelado en el máximo.
+  it("caso real de Carlo (8 sellos crudos, límite 6): con cycleStamps ya calculado (2), avisa del progreso del nuevo ciclo, no 'ya puedes canjear' de nuevo", () => {
+    expect(buildProgressMessage(2, 6, "Café gratis")).toBe(
+      "¡Te faltan 4 sellos para tu Café gratis!",
+    );
   });
 });
 
@@ -135,6 +143,17 @@ describe("buildLoyaltyObjectPayload — contenido mínimo por cliente, sin PII d
     expect(obj.loyaltyPoints.balance.string).toBe("4 / 6");
   });
 
+  // Bug real corregido: loyaltyPoints.balance usa cycleStamps (progreso
+  // del ciclo actual), nunca el total acumulado crudo — mostrar "8 / 6"
+  // junto a un mensaje de progreso ya cycle-aware ("te faltan 4") se leía
+  // inconsistente (confirmado con un render real antes de este cambio).
+  it("caso real de Carlo (8 sellos crudos, límite 6): con cycleStamps=2 ya calculado, el balance dice '2 / 6', no '8 / 6'", () => {
+    const obj = buildLoyaltyObjectPayload({ ...objectInput, cycleStamps: 2, stampsRequired: 6 }) as {
+      loyaltyPoints: { balance: { string: string } };
+    };
+    expect(obj.loyaltyPoints.balance.string).toBe("2 / 6");
+  });
+
   it("sin recompensa disponible, textModulesData lleva solo 'Powered by Pragmia' (sin mensaje de progreso)", () => {
     const obj = buildLoyaltyObjectPayload(objectInput) as { textModulesData: Array<{ id: string; body: string }> };
     expect(obj.textModulesData).toEqual([{ id: "poweredBy", header: "", body: "Powered by Pragmia" }]);
@@ -145,7 +164,7 @@ describe("buildLoyaltyObjectPayload — contenido mínimo por cliente, sin PII d
       textModulesData: Array<{ id: string; header: string; body: string }>;
     };
     expect(obj.textModulesData[0].body).toBe(
-      buildProgressMessage(objectInput.currentStamps, objectInput.stampsRequired, "Café gratis"),
+      buildProgressMessage(objectInput.cycleStamps, objectInput.stampsRequired, "Café gratis"),
     );
     expect(obj.textModulesData[1]).toEqual({ id: "poweredBy", header: "", body: "Powered by Pragmia" });
   });
