@@ -19,11 +19,16 @@ import type { RgbColor } from "../apple/placeholderIcon";
 // diferencia de Apple, donde "Cliente"/nombre ya vive en secondaryFields
 // del storeCard por defecto, Google solo lo pone en el panel de
 // detalles salvo que se declare explícito vía cardTemplateOverride— es
-// el motivo de _v4, ver scripts/migrate-google-class-v4.ts):
+// el motivo de _v4, ver scripts/migrate-google-class-v4.ts; programName
+// vuelve a ser el nombre real del programa de Chilaquikes ("Club de la
+// Gorrita", restaurado en loyalty_programs.name — el genérico "Tarjeta de
+// sellos Chilaquikes" nunca fue el nombre real, quedó puesto a mano en
+// _v2/_v3/_v4 sin que nadie lo hubiera pedido así) — es el motivo de _v5,
+// ver scripts/migrate-google-class-v5.ts):
 // Google cachea agresivamente por classId, así que un cambio de campos
 // visuales SIEMPRE necesita un classId nuevo, nunca un PATCH in-place de
 // la clase vieja.
-export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v4";
+export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v5";
 
 export function buildLoyaltyClassId(issuerId: string, businessId: string, version?: string): string {
   const suffix = version ? `_${version}` : "";
