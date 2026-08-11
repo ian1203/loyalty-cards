@@ -24,11 +24,13 @@ import type { RgbColor } from "../apple/placeholderIcon";
 // Gorrita", restaurado en loyalty_programs.name — el genérico "Tarjeta de
 // sellos Chilaquikes" nunca fue el nombre real, quedó puesto a mano en
 // _v2/_v3/_v4 sin que nadie lo hubiera pedido así) — es el motivo de _v5,
-// ver scripts/migrate-google-class-v5.ts):
+// ver scripts/migrate-google-class-v5.ts; merchantLocations activado con
+// las 3 coordenadas reales de Chilaquikes — es el motivo de _v6, ver
+// scripts/migrate-google-class-v6.ts):
 // Google cachea agresivamente por classId, así que un cambio de campos
 // visuales SIEMPRE necesita un classId nuevo, nunca un PATCH in-place de
 // la clase vieja.
-export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v5";
+export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v6";
 
 export function buildLoyaltyClassId(issuerId: string, businessId: string, version?: string): string {
   const suffix = version ? `_${version}` : "";

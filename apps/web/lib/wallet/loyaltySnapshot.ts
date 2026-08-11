@@ -1,8 +1,9 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import {
   businesses,
   customerBalances,
   customers,
+  locations,
   loyaltyPrograms,
   rewardRules,
   type TenantTransaction,
@@ -62,6 +63,11 @@ export type CustomerLoyaltySnapshot = {
   businessGoogleLogoUri: string | null;
   businessGoogleHeroUri: string | null;
   businessGoogleWideLogoUri: string | null;
+  // Sucursales ACTIVAS con coordenadas reales cargadas — para
+  // notificación por proximidad (Apple locations, Google
+  // merchantLocations). Vacío si el negocio no tiene ninguna sucursal con
+  // lat/long todavía (nunca una ubicación inventada).
+  businessLocations: Array<{ latitude: number; longitude: number }>;
 };
 
 export async function loadCustomerLoyaltySnapshot(
@@ -136,6 +142,18 @@ export async function loadCustomerLoyaltySnapshot(
   const unlockedRewards = availableRewards(currentStamps, rules);
   const [firstAvailable] = unlockedRewards;
 
+  const locationRows = await tx
+    .select({ latitude: locations.latitude, longitude: locations.longitude })
+    .from(locations)
+    .where(
+      and(
+        eq(locations.businessId, businessId),
+        eq(locations.isActive, true),
+        isNotNull(locations.latitude),
+        isNotNull(locations.longitude),
+      ),
+    );
+
   return {
     businessName: business.name,
     programName: program.name,
@@ -153,5 +171,9 @@ export async function loadCustomerLoyaltySnapshot(
     businessGoogleLogoUri: business.googleLogoUri,
     businessGoogleHeroUri: business.googleHeroUri,
     businessGoogleWideLogoUri: business.googleWideLogoUri,
+    // isNotNull ya filtra los null en SQL, pero el tipo inferido de
+    // drizzle sigue siendo `number | null` por columna — el cast refleja
+    // lo que el WHERE ya garantiza, no lo cambia.
+    businessLocations: locationRows as Array<{ latitude: number; longitude: number }>,
   };
 }

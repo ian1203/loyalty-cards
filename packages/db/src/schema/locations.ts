@@ -1,4 +1,4 @@
-import { boolean, foreignKey, index, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, foreignKey, index, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { businesses } from "./businesses";
 import { users } from "./users";
 
@@ -11,6 +11,13 @@ export const locations = pgTable(
       .references(() => businesses.id),
     name: text("name").notNull(),
     address: text("address"),
+    // Coordenadas reales para notificación por proximidad (Apple
+    // locations/relevantText, Google merchantLocations) — nullable: sin
+    // ellas, esa sucursal simplemente no participa del geofence, nunca un
+    // (0,0) inventado. Rango válido lo valida cada API en el momento de
+    // mandarlas (-90..90 / -180..180), no acá.
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
     timezone: text("timezone").notNull().default("UTC"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })

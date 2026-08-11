@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { buildPassJson, buildPkpass, type RgbColor } from "@loyalty/wallet";
+import { buildPassJson, buildPkpass, buildRelevantText, type RgbColor } from "@loyalty/wallet";
 import { walletPasses, type TenantTransaction, type VerifiedBusinessId } from "@loyalty/db";
 import { getApplePassTypeIdentifier, getAppleTeamIdentifier, getPkpassSigner } from "./adapters";
 import { deriveBrandColor, hexToRgb } from "./brandColor";
@@ -35,6 +35,16 @@ function deriveStampCountUrl(url: string, stampCount: number): string {
   const dotIndex = url.lastIndexOf(".");
   if (dotIndex === -1) return `${url}-${stampCount}`;
   return `${url.slice(0, dotIndex)}-${stampCount}${url.slice(dotIndex)}`;
+}
+
+// icon.png vive en el mismo directorio que logo.png (generate-pass-assets.ts
+// los escribe juntos) — se deriva del mismo businessWalletLogoUrl en vez de
+// agregar una columna nueva en businesses, mismo criterio que
+// deriveStampCountUrl de arriba.
+function deriveIconUrl(logoUrl: string): string {
+  const slashIndex = logoUrl.lastIndexOf("/");
+  if (slashIndex === -1) return "icon.png";
+  return `${logoUrl.slice(0, slashIndex + 1)}icon.png`;
 }
 
 async function loadStaticAssetSet(
@@ -118,10 +128,31 @@ export async function generateApplePkpassForCustomer(
     ? deriveStampCountUrl(snapshot.businessWalletHeroUrl, snapshot.cycleStamps)
     : null;
 
-  const [logoPng, stripPng] = await Promise.all([
+  const iconUrl = snapshot.businessWalletLogoUrl ? deriveIconUrl(snapshot.businessWalletLogoUrl) : null;
+
+  const [logoPng, stripPng, iconPng] = await Promise.all([
     loadStaticAssetSet(snapshot.businessWalletLogoUrl),
     loadStaticAssetSet(stripUrl),
+    loadStaticAssetSet(iconUrl),
   ]);
+
+  // relevantText usa nextRewardName (no rewardName) — mismo motivo que
+  // buildProgressMessage de Google (loyaltyPayload.ts): el geofence tiene
+  // que decir algo útil ANTES de desbloquear la recompensa, no solo
+  // después. Sin reglas activas (nextRewardName null), no hay locations
+  // en el pase — un geofence sin texto que mostrar no aporta nada.
+  const relevantText = snapshot.nextRewardName
+    ? buildRelevantText(
+        snapshot.cycleStamps,
+        snapshot.stampsRequired,
+        snapshot.nextRewardName,
+        snapshot.customerFirstName,
+      )
+    : null;
+  const appleLocations =
+    relevantText && snapshot.businessLocations.length > 0
+      ? snapshot.businessLocations.map((loc) => ({ ...loc, relevantText }))
+      : undefined;
 
   const passJson = buildPassJson({
     serialNumber: walletPass.id,
@@ -138,6 +169,7 @@ export async function generateApplePkpassForCustomer(
     availableRewardsCount: snapshot.availableRewardsCount,
     walletToken: snapshot.walletToken,
     colors: { backgroundRgb, foregroundRgb, labelRgb },
+    locations: appleLocations,
   });
 
   const pkpass = await buildPkpass({
@@ -146,6 +178,7 @@ export async function generateApplePkpassForCustomer(
     iconRgb,
     logoPng,
     stripPng,
+    iconPng,
   });
 
   return { ok: true, pkpass, walletPassId: walletPass.id };
