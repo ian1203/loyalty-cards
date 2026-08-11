@@ -55,9 +55,12 @@ async function tenantSession(jar: CookieMethodsServer): Promise<TenantSession> {
   return session;
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 2000,
+): Promise<void> {
   const start = Date.now();
-  while (!predicate()) {
+  while (!(await predicate())) {
     if (Date.now() - start > timeoutMs) {
       throw new Error("waitFor: tiempo agotado esperando la condición");
     }
@@ -252,6 +255,49 @@ describe("notifyWalletOfTransaction — hook post-sello, Apple + Google, impls f
     // Estable un momento más: no debería llegar un SEGUNDO push tardío.
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(getFakeApnsSentPushes().length).toBe(before + 1);
+  });
+
+  // Bug real encontrado y confirmado: listUpdatedSerialsForDevice (el
+  // endpoint "What Changed?" que Apple consulta tras el push, ver
+  // apps/web/app/api/wallet/apple/logic.ts) filtra por
+  // wallet_passes.updated_at — sin este bump, un pase creado antes del
+  // último checkpoint del dispositivo NUNCA calificaba como "cambiado",
+  // sin importar cuántos sellos recibiera después. El push llegaba, el
+  // dispositivo preguntaba, pero la respuesta decía "nada tuyo" para
+  // siempre.
+  it("un sello bumpea wallet_passes.updated_at — sin esto, el dispositivo nunca sabe que hay algo nuevo que pedir", async () => {
+    const customer = await freshCustomer(`Bump updated_at ${suffix}`);
+    const backdated = new Date(Date.now() - 60_000); // 1 minuto atrás
+    const [pass] = await adminDb
+      .insert(walletPasses)
+      .values({
+        businessId,
+        customerId: customer.id,
+        platform: "apple",
+        authenticationToken: `tok-${crypto.randomUUID()}`,
+        updatedAt: backdated,
+      })
+      .returning();
+
+    const result = await registerStampForSession(sessionStaff, {
+      customerId: customer.id,
+      locationId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(result.ok).toBe(true);
+
+    // El bump corre dentro del mismo hook post-transacción — sin
+    // dispositivo registrado no hay push que esperar, pero el bump SÍ
+    // debe correr igual (un dispositivo que se registre después también
+    // necesita ver el estado de sync correcto).
+    await waitFor(async () => {
+      const [row] = await adminDb
+        .select({ updatedAt: walletPasses.updatedAt })
+        .from(walletPasses)
+        .where(eq(walletPasses.id, pass.id))
+        .limit(1);
+      return (row?.updatedAt.getTime() ?? 0) > backdated.getTime();
+    });
   });
 
   it("un replay (misma idempotency_key) NO dispara un push nuevo", async () => {

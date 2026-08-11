@@ -51,6 +51,21 @@ async function notifyAppleDevices(
       .limit(1);
     if (!pass) return [];
 
+    // Bug real encontrado y confirmado por lectura de código (no
+    // hipótesis): wallet_passes.updated_at SÍ está diseñado como el tag
+    // de "passesUpdatedSince" (ver comentario en el schema,
+    // packages/db/src/schema/walletPasses.ts) — listUpdatedSerialsForDevice
+    // (el endpoint "What Changed?" que Apple consulta tras el push) filtra
+    // por esta columna. Pero NADA la tocaba desde la creación de la fila:
+    // ensureWalletPass solo hace INSERT, nunca UPDATE. Resultado real: el
+    // push SÍ llegaba, el dispositivo SÍ preguntaba "¿qué cambió?", pero
+    // la respuesta decía "nada tuyo" para siempre si el pase se creó antes
+    // del último checkpoint del dispositivo — sin importar cuántos sellos
+    // recibiera después. Se bumpea SIEMPRE que hay un pase real, incluso
+    // sin ningún dispositivo registrado hoy — uno que se registre después
+    // también necesita ver el estado de sync correcto.
+    await tx.update(walletPasses).set({ updatedAt: new Date() }).where(eq(walletPasses.id, pass.id));
+
     return tx
       .select({
         pushToken: deviceRegistrations.pushToken,
