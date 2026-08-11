@@ -38,6 +38,38 @@ export type ApnsHttp2Post = (input: {
   body: string;
 }) => Promise<{ status: number; body: string }>;
 
+// Sin timeout explícito, un socket http2 colgado (conexión que nunca
+// establece, o respuesta que nunca llega) deja la promesa sin resolver
+// NI rechazar para siempre — el caller (notifyAppleDevices) nunca ve un
+// error, nunca reintenta, y en un runtime serverless la función solo
+// muere por el límite de duración de la PLATAFORMA, sin que nuestro
+// propio catch/log llegue a correr (fallo real encontrado: sellos reales
+// sin push visible, sin ningún error nuestro logueado). Estos dos
+// timeouts convierten ese colgado en un Error explícito y logueado, sin
+// importar la causa de fondo (fricción de red serverless→Apple, DNS,
+// etc.) — el caller (notify.ts) ya tiene su propio withRetries encima,
+// así que un timeout acá simplemente se vuelve un intento fallido más,
+// no un caso especial.
+const APNS_CONNECT_TIMEOUT_MS = 5000;
+const APNS_REQUEST_TIMEOUT_MS = 5000;
+
+// Últimos 6 caracteres nada más — suficiente para correlacionar con
+// device_registrations.push_token en un log sin exponer el token
+// completo (identificador de push por dispositivo, no una contraseña,
+// pero tampoco hace falta imprimirlo entero).
+function redactPushToken(pushToken: string): string {
+  return `…${pushToken.slice(-6)}`;
+}
+
+export function buildApnsTimeoutMessage(
+  phase: "connect" | "request",
+  elapsedMs: number,
+  pushToken: string,
+  detail: string,
+): string {
+  return `APNs timeout en fase "${phase}" tras ${elapsedMs}ms (pushToken=${redactPushToken(pushToken)}) — ${detail}`;
+}
+
 async function defaultHttp2Post({
   pushToken,
   headers,
@@ -47,34 +79,79 @@ async function defaultHttp2Post({
   headers: Record<string, string>;
   body: string;
 }): Promise<{ status: number; body: string }> {
+  const startedAt = Date.now();
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    let requestTimer: ReturnType<typeof setTimeout> | undefined;
+
     const client = http2.connect("https://api.push.apple.com");
-    client.on("error", reject);
 
-    const req = client.request({
-      ":method": "POST",
-      ":path": `/3/device/${pushToken}`,
-      ...headers,
-    });
-    req.setEncoding("utf8");
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(connectTimer);
+      clearTimeout(requestTimer);
+      client.close();
+      reject(error);
+    };
 
-    let status = 0;
-    let responseBody = "";
-    req.on("response", (resHeaders) => {
-      status = Number(resHeaders[":status"] ?? 0);
+    connectTimer = setTimeout(() => {
+      fail(
+        new Error(
+          buildApnsTimeoutMessage(
+            "connect",
+            Date.now() - startedAt,
+            pushToken,
+            "la sesión http2 nunca terminó de conectar a api.push.apple.com",
+          ),
+        ),
+      );
+    }, APNS_CONNECT_TIMEOUT_MS);
+
+    client.on("error", fail);
+
+    client.once("connect", () => {
+      clearTimeout(connectTimer);
+
+      const req = client.request({
+        ":method": "POST",
+        ":path": `/3/device/${pushToken}`,
+        ...headers,
+      });
+      req.setEncoding("utf8");
+
+      requestTimer = setTimeout(() => {
+        fail(
+          new Error(
+            buildApnsTimeoutMessage(
+              "request",
+              Date.now() - startedAt,
+              pushToken,
+              "la sesión conectó pero la respuesta nunca llegó",
+            ),
+          ),
+        );
+      }, APNS_REQUEST_TIMEOUT_MS);
+
+      let status = 0;
+      let responseBody = "";
+      req.on("response", (resHeaders) => {
+        status = Number(resHeaders[":status"] ?? 0);
+      });
+      req.on("data", (chunk: string) => {
+        responseBody += chunk;
+      });
+      req.on("end", () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(requestTimer);
+        client.close();
+        resolve({ status, body: responseBody });
+      });
+      req.on("error", fail);
+      req.end(body);
     });
-    req.on("data", (chunk: string) => {
-      responseBody += chunk;
-    });
-    req.on("end", () => {
-      client.close();
-      resolve({ status, body: responseBody });
-    });
-    req.on("error", (err) => {
-      client.close();
-      reject(err);
-    });
-    req.end(body);
   });
 }
 

@@ -52,7 +52,11 @@ async function notifyAppleDevices(
     if (!pass) return [];
 
     return tx
-      .select({ pushToken: deviceRegistrations.pushToken })
+      .select({
+        pushToken: deviceRegistrations.pushToken,
+        deviceLibraryIdentifier: deviceRegistrations.deviceLibraryIdentifier,
+        walletPassId: deviceRegistrations.walletPassId,
+      })
       .from(deviceRegistrations)
       .where(
         and(
@@ -69,12 +73,20 @@ async function notifyAppleDevices(
 
   // Cada dispositivo se reintenta y se atrapa POR SEPARADO: que uno falle
   // (token vencido, dispositivo offline) nunca debe impedir el push a los
-  // demás dispositivos del mismo cliente.
+  // demás dispositivos del mismo cliente. deviceLibraryIdentifier/
+  // walletPassId van en el log — SIN eso, un timeout de APNs (ver
+  // apns.ts) es imposible de correlacionar con QUÉ pase/dispositivo
+  // falló sin entrar al dashboard de Vercel a mano (incidente real: cero
+  // señal para diagnosticar el sello de un cliente real que no se
+  // propagó).
   await Promise.all(
     registrations.map((reg) =>
       withRetries(() => sender({ pushToken: reg.pushToken, passTypeIdentifier }), RETRY_DELAYS_MS).catch(
         (error) => {
-          console.error("[wallet:notify:apple] push falló tras reintentos:", error);
+          console.error(
+            `[wallet:notify:apple] push falló tras reintentos (walletPassId=${reg.walletPassId}, deviceLibraryIdentifier=${reg.deviceLibraryIdentifier}):`,
+            error,
+          );
         },
       ),
     ),
