@@ -110,6 +110,19 @@ describe("buildLoyaltyClassPayload — plantilla por negocio, sin datos de clien
     const rows = cls.classTemplateInfo.cardTemplateOverride.cardRowTemplateInfos;
     expect(rows[0].oneItem.item.firstValue.fields[0].fieldPath).toBe("object.accountName");
   });
+
+  it("sin merchantLocations, la clase no lleva ese campo (nunca un array vacío fantasma)", () => {
+    const cls = buildLoyaltyClassPayload(classInput);
+    expect(cls).not.toHaveProperty("merchantLocations");
+  });
+
+  it("con merchantLocations, se pasan tal cual — solo lat/long, sin texto (Google arma la notificación del lado suyo)", () => {
+    const cls = buildLoyaltyClassPayload({
+      ...classInput,
+      merchantLocations: [{ latitude: 19.1738, longitude: -96.1342 }],
+    }) as { merchantLocations: Array<{ latitude: number; longitude: number }> };
+    expect(cls.merchantLocations).toEqual([{ latitude: 19.1738, longitude: -96.1342 }]);
+  });
 });
 
 describe("buildProgressMessage — texto motivador (Google Wallet no soporta rejilla gráfica de sellos)", () => {

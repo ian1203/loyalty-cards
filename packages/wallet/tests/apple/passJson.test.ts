@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPassJson, type PassJsonInput } from "../../src/apple/passJson";
+import { buildPassJson, buildRelevantText, type PassJsonInput } from "../../src/apple/passJson";
 
 const baseInput: PassJsonInput = {
   serialNumber: "11111111-1111-1111-1111-111111111111",
@@ -137,5 +137,49 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
   it("los colores se serializan como rgb(...)", () => {
     const pass = buildPassJson(baseInput) as { backgroundColor: string };
     expect(pass.backgroundColor).toBe("rgb(255, 255, 255)");
+  });
+
+  it("sin locations, el pase no lleva ese campo (nunca un array vacío fantasma)", () => {
+    const pass = buildPassJson(baseInput);
+    expect(pass).not.toHaveProperty("locations");
+    expect(pass).not.toHaveProperty("maxDistance");
+  });
+
+  it("con locations, se pasan tal cual (relevantText ya calculado por el caller) + maxDistance si se manda", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      locations: [{ latitude: 19.1738, longitude: -96.1342, relevantText: "¡Te faltan 2 sellos!" }],
+      maxDistance: 150,
+    }) as { locations: Array<{ latitude: number; relevantText: string }>; maxDistance: number };
+    expect(pass.locations).toHaveLength(1);
+    expect(pass.locations[0].latitude).toBe(19.1738);
+    expect(pass.locations[0].relevantText).toBe("¡Te faltan 2 sellos!");
+    expect(pass.maxDistance).toBe(150);
+  });
+
+  it("con locations pero sin maxDistance, no manda ese campo (deja que Apple use su radio implícito)", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      locations: [{ latitude: 19.1738, longitude: -96.1342 }],
+    });
+    expect(pass).not.toHaveProperty("maxDistance");
+  });
+});
+
+describe("buildRelevantText — mismo tono/casos que buildProgressMessage de Google, duplicado a propósito", () => {
+  it("con sellos pendientes (2+), dice cuántos faltan", () => {
+    expect(buildRelevantText(4, 6, "Orden de chilaquiles gratis")).toBe(
+      "¡Te faltan 2 sellos para tu Orden de chilaquiles gratis!",
+    );
+  });
+
+  it("con exactamente 1 sello restante, usa singular", () => {
+    expect(buildRelevantText(5, 6, "Orden de chilaquiles gratis")).toBe(
+      "¡Solo te falta 1 sello para tu Orden de chilaquiles gratis!",
+    );
+  });
+
+  it("con el ciclo completo, cambia a mensaje de canje listo", () => {
+    expect(buildRelevantText(6, 6, "Café gratis")).toBe("¡Ya puedes canjear tu Café gratis!");
   });
 });
