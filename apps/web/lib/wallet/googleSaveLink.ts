@@ -61,6 +61,7 @@ export async function buildGoogleSaveLinkForCustomer(
     // rojo intruso en el header de Google, no un logotipo. Sigue
     // pendiente el asset transparente dedicado de Narciso.
     wideProgramLogoUri: snapshot.businessGoogleWideLogoUri ?? undefined,
+    merchantLocations: snapshot.businessLocations.length > 0 ? snapshot.businessLocations : undefined,
     classVersion: CURRENT_GOOGLE_LOYALTY_CLASS_VERSION,
   });
 

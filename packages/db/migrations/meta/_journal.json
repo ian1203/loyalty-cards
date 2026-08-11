@@ -155,6 +155,13 @@
       "when": 1786422980997,
       "tag": "0021_ancient_cobalt_man",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1786485455152,
+      "tag": "0022_flowery_nuke",
+      "breakpoints": true
     }
   ]
 }
