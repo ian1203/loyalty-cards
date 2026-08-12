@@ -3,7 +3,14 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GiftIcon, LayoutDashboardIcon, MenuIcon, ScanLineIcon, UsersIcon } from "lucide-react";
+import {
+  GiftIcon,
+  LayoutDashboardIcon,
+  MenuIcon,
+  ScanLineIcon,
+  UserCogIcon,
+  UsersIcon,
+} from "lucide-react";
 import { Logo } from "./Logo";
 import { UserMenu } from "./UserMenu";
 import { Separator } from "./ui/separator";
@@ -14,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
   { href: "/rewards", label: "Programa", icon: GiftIcon },
   { href: "/customers", label: "Clientes", icon: UsersIcon },
+  { href: "/team", label: "Equipo", icon: UserCogIcon },
   { href: "/scanner", label: "Scanner", icon: ScanLineIcon },
 ] as const;
 

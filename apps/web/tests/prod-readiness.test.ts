@@ -64,6 +64,34 @@ describe("scoping de secretos — service role nunca al cliente", () => {
     expect(offenders).toEqual([]);
   });
 
+  // Excepción angosta al "cero adminDb fuera de /admin": createAdminClient()
+  // (Supabase Auth Admin API, no adminDb/Postgres, pero mismo espíritu de
+  // la regla) solo puede importarse desde el camino confinado de /admin y
+  // desde lib/employeeOffboarding.ts (bloqueo de login de un empleado
+  // desactivado, ver esa función). Cualquier uso futuro fuera de esta
+  // lista debe fallar este test, no quedar en un comentario.
+  const ALLOWED_CREATE_ADMIN_CLIENT_IMPORTERS = new Set([
+    "app/admin/actions.ts",
+    "lib/employeeOffboarding.ts",
+  ]);
+
+  it("createAdminClient() solo se importa desde los archivos confinados permitidos", () => {
+    const webDir = join(__dirname, "..");
+    const offenders: string[] = [];
+
+    for (const subdir of ["app", "lib", "components"]) {
+      walkTsFiles(join(webDir, subdir), (relPath, content) => {
+        if (!content.includes("createAdminClient")) return;
+        const rel = `${subdir}/${relPath}`;
+        if (rel === "lib/supabase/server.ts") return; // define la función, no la importa
+        if (ALLOWED_CREATE_ADMIN_CLIENT_IMPORTERS.has(rel)) return;
+        offenders.push(rel);
+      });
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it("ninguna variable NEXT_PUBLIC_ declarada en .env.example expone el service role", () => {
     const envExamplePath = join(__dirname, "..", "..", "..", ".env.example");
     const content = readFileSync(envExamplePath, "utf8");

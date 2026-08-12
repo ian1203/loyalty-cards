@@ -412,8 +412,11 @@ describe("notifyWalletOfTransaction — hook post-sello, Apple + Google, impls f
 
   // Caso real de Carlo, con DB real (no cálculo aislado) — el programa de
   // este describe ya tiene stampsRequired=6 y UNA regla de recompensa de
-  // costo 6 (setup de arriba). cooldownMinutes=0 permite sellar en loop
-  // sin esperar.
+  // costo 6 (setup de arriba). cooldownMinutes=0 en el programa, pero el
+  // piso duro de 30s (ver scanner/logic.ts, endurecimiento de seguridad)
+  // aplica igual — hay que "esperar" entre sellos del loop empujando
+  // last_stamp_at al pasado, mismo patrón que clearCooldown en
+  // fase3-scanner.test.ts.
   it("2+ ciclos completos sin canjear: cycleStamps refleja el ciclo actual (no el grid congelado), availableRewardsCount cuenta canjes reales (no reglas distintas)", async () => {
     const customer = await freshCustomer(`Dos ciclos ${suffix}`);
 
@@ -424,6 +427,10 @@ describe("notifyWalletOfTransaction — hook post-sello, Apple + Google, impls f
         idempotencyKey: crypto.randomUUID(),
       });
       expect(result.ok).toBe(true);
+      await adminDb
+        .update(customerBalances)
+        .set({ lastStampAt: new Date(Date.now() - 31_000) })
+        .where(eq(customerBalances.customerId, customer.id));
     }
 
     const snapshotAt8 = await withTenantContext(sessionOwner.businessId, (tx) =>
@@ -446,6 +453,10 @@ describe("notifyWalletOfTransaction — hook post-sello, Apple + Google, impls f
         idempotencyKey: crypto.randomUUID(),
       });
       expect(result.ok).toBe(true);
+      await adminDb
+        .update(customerBalances)
+        .set({ lastStampAt: new Date(Date.now() - 31_000) })
+        .where(eq(customerBalances.customerId, customer.id));
     }
 
     const snapshotAt12 = await withTenantContext(sessionOwner.businessId, (tx) =>

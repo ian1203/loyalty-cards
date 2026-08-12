@@ -145,6 +145,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
   describe("registro/desregistro de dispositivo", () => {
     it("con el token correcto, registra el dispositivo dentro del tenant del pase", async () => {
       const result = await registerDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: `device-${suffix}-1`,
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
@@ -170,6 +171,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
     it("registrar dos veces el mismo dispositivo es idempotente (actualiza, no duplica)", async () => {
       const deviceId = `device-${suffix}-idem`;
       await registerDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: deviceId,
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
@@ -177,6 +179,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
         pushToken: "push-v1",
       });
       await registerDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: deviceId,
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
@@ -198,6 +201,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
 
     it("el token de B contra el serialNumber de A: 401 genérico, ningún registro creado", async () => {
       const result = await registerDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: `device-${suffix}-cross`,
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
@@ -215,6 +219,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
 
     it("un token que no coincide con ningún pase: 401, indistinguible de un token cruzado", async () => {
       const result = await registerDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: `device-${suffix}-bad`,
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
@@ -226,6 +231,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
 
     it("un passTypeIdentifier distinto al de la plataforma: 401, sin tocar la DB", async () => {
       const result = await registerDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: `device-${suffix}-wrongtype`,
         passTypeIdentifier: "pass.otro.identificador",
         serialNumber: passA.id,
@@ -238,6 +244,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
     it("desregistrar con el token correcto borra la fila; con el de otro tenant, 401 y no borra", async () => {
       const deviceId = `device-${suffix}-unreg`;
       await registerDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: deviceId,
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
@@ -246,6 +253,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
       });
 
       const crossAttempt = await unregisterDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: deviceId,
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
@@ -264,6 +272,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
       expect(stillThere).toHaveLength(1);
 
       const result = await unregisterDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: deviceId,
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
@@ -287,6 +296,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
     it("respeta passesUpdatedSince: solo lista pases con updated_at posterior", async () => {
       const deviceId = `device-${suffix}-list`;
       await registerDeviceForPass({
+        clientIp: "127.0.0.1",
         deviceLibraryIdentifier: deviceId,
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
@@ -323,6 +333,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
   describe("descarga del pase más reciente", () => {
     it("con el token correcto, sirve el .pkpass (zip) con no-store", async () => {
       const result = await getLatestPass({
+        clientIp: "127.0.0.1",
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
         authorizationHeader: `ApplePass ${passA.authenticationToken}`,
@@ -337,6 +348,7 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
 
     it("el token de B no sirve el pase de A (401, no 404 con datos)", async () => {
       const result = await getLatestPass({
+        clientIp: "127.0.0.1",
         passTypeIdentifier: PASS_TYPE,
         serialNumber: passA.id,
         authorizationHeader: `ApplePass ${passB.authenticationToken}`,

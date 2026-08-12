@@ -21,6 +21,7 @@ import { createCustomerForSession } from "../app/(product)/customers/logic";
 import { saveProgramForSession, saveRewardRuleForSession } from "../app/(product)/rewards/logic";
 import {
   checkLookupRateLimit,
+  checkStampRateLimit,
   lookupCustomerByTokenForSession,
   recordLookupFailure,
   redeemRewardForSession,
@@ -741,5 +742,129 @@ describe("rate limiter del lookup — funciones puras, sin DB", () => {
     // 10º fallo: dispara el bloqueo.
     const blocked = checkLookupRateLimit(user, t0 + 9500);
     expect(blocked.allowed).toBe(false);
+  });
+});
+
+describe("rate limiter del sellado — función pura, sin DB", () => {
+  const fakeUser = "stamp-rate-limit-test-user-fixed-id";
+
+  it("permite hasta el máximo de la ventana (60/60s) y luego bloquea", () => {
+    const t0 = 4_000_000;
+    for (let i = 0; i < 60; i++) {
+      expect(checkStampRateLimit(fakeUser, t0 + i).allowed).toBe(true);
+    }
+    const blocked = checkStampRateLimit(fakeUser, t0 + 60);
+    expect(blocked.allowed).toBe(false);
+    if (!blocked.allowed) expect(blocked.retryAfterSeconds).toBeGreaterThan(0);
+  });
+
+  it("dos empleados distintos tienen contadores independientes", () => {
+    const t0 = 5_000_000;
+    for (let i = 0; i < 60; i++) checkStampRateLimit(`${fakeUser}-a`, t0 + i);
+    expect(checkStampRateLimit(`${fakeUser}-a`, t0 + 60).allowed).toBe(false);
+    // El otro empleado arranca fresco.
+    expect(checkStampRateLimit(`${fakeUser}-b`, t0 + 60).allowed).toBe(true);
+  });
+});
+
+describe("Fase 3 — piso mínimo entre sellos (30s)", () => {
+  const suffix = `floor-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const password = "fase3-floor-password-1";
+
+  let ownerAuthUserId: string;
+  let businessId: string;
+  let locationId: string;
+  let sessionOwner: TenantSession;
+
+  beforeAll(async () => {
+    resetLookupRateLimiter();
+    const platformAdminAuthUserId = await createPlatformAdmin(
+      `fase3-floor-admin-${suffix}@test.dev`,
+      password,
+    );
+    const ownerEmail = `fase3-floor-owner-${suffix}@test.dev`;
+    const business = await createBusinessWithRealOwner({
+      businessName: `Fase3 Floor ${suffix}`,
+      slug: `fase3-floor-${suffix}`,
+      ownerEmail,
+      ownerPassword: password,
+      createdByAuthUserId: platformAdminAuthUserId,
+    });
+    businessId = business.business.id;
+    ownerAuthUserId = business.ownerAuthUserId;
+
+    const [loc] = await adminDb
+      .insert(locations)
+      .values({ businessId, name: "Sucursal única" })
+      .returning();
+    locationId = loc.id;
+
+    sessionOwner = await tenantSession(await signInAsCookieJar(ownerEmail, password));
+
+    // Cooldown DESACTIVADO a nivel de programa (0 minutos) — el piso duro
+    // de 30s debe seguir aplicando de todas formas.
+    const programResult = await saveProgramForSession(
+      sessionOwner,
+      form({ name: "Programa Floor", stampsRequired: "5", cooldownMinutes: "0", isActive: "on" }),
+    );
+    if (!programResult.success) throw new Error(`setup programa: ${programResult.error}`);
+  });
+
+  afterAll(async () => {
+    await adminDb.delete(auditLogs).where(eq(auditLogs.businessId, businessId));
+    await adminDb.delete(transactions).where(eq(transactions.businessId, businessId));
+    await adminDb.delete(customerBalances).where(eq(customerBalances.businessId, businessId));
+    await adminDb.delete(customers).where(eq(customers.businessId, businessId));
+    await adminDb.delete(loyaltyPrograms).where(eq(loyaltyPrograms.businessId, businessId));
+    await adminDb.delete(locations).where(eq(locations.businessId, businessId));
+    await adminDb.delete(users).where(eq(users.businessId, businessId));
+    await adminDb.delete(businesses).where(eq(businesses.id, businessId));
+    await supabaseAdminClient().auth.admin.deleteUser(ownerAuthUserId);
+  });
+
+  it("con cooldown de programa en 0, un segundo sello inmediato igual se rechaza (piso de 30s)", async () => {
+    const [customer] = await adminDb
+      .insert(customers)
+      .values({ businessId, fullName: `Floor ${suffix}`, walletToken: crypto.randomUUID() })
+      .returning();
+
+    const first = await registerStampForSession(sessionOwner, {
+      customerId: customer.id,
+      locationId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(first.ok).toBe(true);
+
+    const second = await registerStampForSession(sessionOwner, {
+      customerId: customer.id,
+      locationId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.code).toBe("cooldown");
+  });
+
+  it("31s después (con cooldown de programa en 0), el siguiente sello sí se permite", async () => {
+    const [customer] = await adminDb
+      .insert(customers)
+      .values({ businessId, fullName: `Floor liberado ${suffix}`, walletToken: crypto.randomUUID() })
+      .returning();
+
+    await registerStampForSession(sessionOwner, {
+      customerId: customer.id,
+      locationId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await adminDb
+      .update(customerBalances)
+      .set({ lastStampAt: new Date(Date.now() - 31_000) })
+      .where(eq(customerBalances.customerId, customer.id));
+
+    const result = await registerStampForSession(sessionOwner, {
+      customerId: customer.id,
+      locationId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(result.ok).toBe(true);
   });
 });

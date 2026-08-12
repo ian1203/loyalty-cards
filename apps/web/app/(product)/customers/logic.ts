@@ -6,7 +6,7 @@
 // llama. Los tests de Paso 5 también, con sesiones reales producidas por
 // getVerifiedSession().
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import {
   customerBalances,
   customers,
@@ -14,6 +14,7 @@ import {
   withTenantContext,
   type TenantTransaction,
 } from "@loyalty/db";
+import { checkRateLimit } from "../../../lib/rateLimit";
 import { resolveActor, writeAuditLog, type TenantSession } from "../../../lib/tenant";
 
 export type CustomerActionState = {
@@ -25,19 +26,23 @@ const SEARCH_LIMIT = 50;
 
 // Búsqueda del directorio — el MISMO código que usa la página (y el test de
 // no-fuga del Paso 5). `q` es input del cliente y se usa SOLO como filtro
-// dentro del tenant (parametrizado, comodines de LIKE escapados) — el
-// business_id sale exclusivamente de la sesión. Proyección explícita SIN
-// wallet_token (hallazgo de la revisión de seguridad): la UI no lo necesita
-// y así un refactor futuro que pase estas filas a un Client Component no
-// puede exponer el token opaco por accidente.
+// dentro del tenant — el business_id sale exclusivamente de la sesión.
+// Match EXACTO (case-insensitive), no parcial (hallazgo de endurecimiento
+// de seguridad: ILIKE con comodines es una superficie de enumeración sin
+// rate limit agresivo previo) — lower() en ambos lados en vez de ILIKE sin
+// comodines, para que la semántica de "exacto" quede inequívoca en el
+// código y un futuro `%${q}%` no reintroduzca el hueco en silencio.
+// Tradeoff real, no un bug: "Mari" ya no encuentra "María González".
+// Proyección explícita SIN wallet_token (hallazgo de la revisión de
+// seguridad): la UI no lo necesita y así un refactor futuro que pase estas
+// filas a un Client Component no puede exponer el token opaco por accidente.
 export async function searchCustomers(
   tx: TenantTransaction,
   session: TenantSession,
   rawQ: string,
 ) {
   const q = rawQ.trim().slice(0, 100);
-  const escaped = q.replace(/[\\%_]/g, (match) => `\\${match}`);
-  const pattern = `%${escaped}%`;
+  const qLower = q.toLowerCase();
 
   return tx
     .select({
@@ -54,15 +59,42 @@ export async function searchCustomers(
         eq(customers.businessId, session.businessId),
         q
           ? or(
-              ilike(customers.fullName, pattern),
-              ilike(customers.phone, pattern),
-              ilike(customers.email, pattern),
+              eq(sql`lower(${customers.fullName})`, qLower),
+              eq(sql`lower(${customers.phone})`, qLower),
+              eq(sql`lower(${customers.email})`, qLower),
             )
           : undefined,
       ),
     )
     .orderBy(desc(customers.createdAt))
     .limit(SEARCH_LIMIT);
+}
+
+export type CustomerSearchResult =
+  | { ok: true; rows: Awaited<ReturnType<typeof searchCustomers>> }
+  | { ok: false; error: string; code: "rate_limited" };
+
+// Wrapper que agrega el rate limit ANTES de pagar el costo de una conexión
+// Postgres (checkRateLimit es una llamada de red a Upstash, más barata que
+// abrir una tx). searchCustomers en sí queda sin tocar — los tests de
+// Fase 2 la llaman directo con un tx ya abierto.
+export async function searchCustomersForSession(
+  session: TenantSession,
+  rawQ: string,
+): Promise<CustomerSearchResult> {
+  const rate = await checkRateLimit("customer_search_employee", session.authUserId);
+  if (!rate.allowed) {
+    return {
+      ok: false,
+      code: "rate_limited",
+      error: `Demasiadas búsquedas seguidas — espera ${rate.retryAfterSeconds}s.`,
+    };
+  }
+
+  const rows = await withTenantContext(session.businessId, (tx) =>
+    searchCustomers(tx, session, rawQ),
+  );
+  return { ok: true, rows };
 }
 
 const MAX_NAME_LENGTH = 120;

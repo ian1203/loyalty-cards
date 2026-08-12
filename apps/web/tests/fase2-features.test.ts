@@ -15,7 +15,11 @@ import {
   withTenantContext,
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
-import { createCustomerForSession, searchCustomers } from "../app/(product)/customers/logic";
+import {
+  createCustomerForSession,
+  searchCustomers,
+  searchCustomersForSession,
+} from "../app/(product)/customers/logic";
 import {
   saveProgramForSession,
   saveRewardRuleForSession,
@@ -207,14 +211,47 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
       expect(rows.some((row) => row.id === customerBId)).toBe(false);
     });
 
-    it("los comodines de LIKE van escapados: buscar '%' no devuelve todo", async () => {
-      // Con el escape, '%' se busca literal (ningún nombre lo contiene);
-      // sin escape sería el comodín "todo" — incluida una falsa sensación
-      // de que el filtro funciona. Cero filas = escapado correcto.
+    it("buscar '%' no devuelve todo el directorio (match exacto, no comodín de LIKE)", async () => {
+      // Bajo match exacto, '%' se compara literal contra fullName/phone/
+      // email — ningún cliente se llama literalmente "%". Cero filas.
       const rows = await withTenantContext(sessionOwnerA.businessId, (tx) =>
         searchCustomers(tx, sessionOwnerA, "%"),
       );
       expect(rows).toHaveLength(0);
+    });
+
+    it("match EXACTO: una coincidencia parcial del nombre ya no devuelve nada", async () => {
+      const fullName = `María González Exacta ${suffix}`;
+      const created = await createCustomerForSession(sessionOwnerA, form({ fullName }));
+      expect(created.success).toBeTruthy();
+
+      const partial = await withTenantContext(sessionOwnerA.businessId, (tx) =>
+        searchCustomers(tx, sessionOwnerA, "María"),
+      );
+      expect(partial.some((row) => row.fullName === fullName)).toBe(false);
+    });
+
+    it("match EXACTO: case-insensitive — casing distinto sigue encontrando la fila", async () => {
+      const fullName = `Casing Exacto ${suffix}`;
+      await createCustomerForSession(sessionOwnerA, form({ fullName }));
+
+      const rows = await withTenantContext(sessionOwnerA.businessId, (tx) =>
+        searchCustomers(tx, sessionOwnerA, fullName.toUpperCase()),
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].fullName).toBe(fullName);
+    });
+
+    // El límite real (Upstash) no se puede disparar en este entorno de test
+    // sin credenciales de Upstash — cae a fail-open (ver lib/rateLimit.ts y
+    // apps/web/tests/rate-limit.test.ts). Esto solo confirma que el wrapper
+    // devuelve el mismo resultado tenant-scoped que searchCustomers.
+    it("searchCustomersForSession envuelve el rate limit y devuelve resultados tenant-scoped", async () => {
+      const result = await searchCustomersForSession(sessionOwnerA, "");
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.rows.every((row) => row.businessId === businessAId)).toBe(true);
+      }
     });
   });
 

@@ -38,6 +38,7 @@ import {
   writeAuditLog,
   type TenantSession,
 } from "../../../lib/tenant";
+import { checkRateLimit } from "../../../lib/rateLimit";
 import { notifyWalletOfTransaction } from "../../../lib/wallet/notify";
 import { scheduleAfterResponse } from "../../../lib/wallet/scheduleAfterResponse";
 
@@ -55,9 +56,17 @@ const FAILURE_WINDOW_MS = 60_000;
 const FAILURE_MAX_PER_WINDOW = 10;
 const BLOCK_MS = 60_000;
 
+// Sellado: mismo espíritu que el lookup de arriba, contador separado (son
+// acciones distintas). Pre-filtro barato de un solo proceso — el chequeo
+// real cross-instancia es checkRateLimit("scanner_stamp_employee"/
+// "scanner_stamp_business", ...) contra Upstash, ver lib/rateLimit.ts.
+const STAMP_WINDOW_MS = 60_000;
+const STAMP_MAX_PER_WINDOW = 60;
+
 const lookupTimestamps = new Map<string, number[]>();
 const failureTimestamps = new Map<string, number[]>();
 const blockedUntil = new Map<string, number>();
+const stampTimestamps = new Map<string, number[]>();
 
 function prune(timestamps: number[], windowMs: number, now: number): number[] {
   return timestamps.filter((t) => now - t < windowMs);
@@ -85,6 +94,11 @@ function sweepStaleEntries(now: number): void {
   for (const [key, until] of blockedUntil) {
     if (now >= until) {
       blockedUntil.delete(key);
+    }
+  }
+  for (const [key, timestamps] of stampTimestamps) {
+    if (prune(timestamps, STAMP_WINDOW_MS, now).length === 0) {
+      stampTimestamps.delete(key);
     }
   }
 }
@@ -122,12 +136,32 @@ export function recordLookupFailure(
   }
 }
 
+export function checkStampRateLimit(
+  authUserId: string,
+  now: number = Date.now(),
+): { allowed: true } | { allowed: false; retryAfterSeconds: number } {
+  sweepStaleEntries(now);
+  const recent = prune(stampTimestamps.get(authUserId) ?? [], STAMP_WINDOW_MS, now);
+  if (recent.length >= STAMP_MAX_PER_WINDOW) {
+    return { allowed: false, retryAfterSeconds: Math.ceil(STAMP_WINDOW_MS / 1000) };
+  }
+  recent.push(now);
+  stampTimestamps.set(authUserId, recent);
+  return { allowed: true };
+}
+
 // Solo para tests: el estado es a nivel de módulo.
 export function resetLookupRateLimiter(): void {
   lookupTimestamps.clear();
   failureTimestamps.clear();
   blockedUntil.clear();
+  stampTimestamps.clear();
 }
+
+// Piso duro entre sellos del mismo cliente, independiente del cooldown
+// configurable por programa (que puede estar fijado más bajo) — medida
+// temporal de endurecimiento hasta que exista un cap de 1 sello/día.
+const MIN_STAMP_GAP_SECONDS = 30;
 
 // ---------------------------------------------------------------------------
 // Tipos de resultado
@@ -342,6 +376,25 @@ export async function lookupCustomerByTokenForSession(
     };
   }
 
+  // Chequeo cross-instancia (Upstash) detrás del pre-filtro en memoria de
+  // arriba — dos ejes independientes, empleado y negocio (ver lib/rateLimit.ts).
+  const employeeRate = await checkRateLimit("scanner_lookup_employee", session.authUserId);
+  if (!employeeRate.allowed) {
+    return {
+      ok: false,
+      code: "rate_limited",
+      error: `Demasiados escaneos seguidos — espera ${employeeRate.retryAfterSeconds}s.`,
+    };
+  }
+  const businessRate = await checkRateLimit("scanner_lookup_business", session.businessId);
+  if (!businessRate.allowed) {
+    return {
+      ok: false,
+      code: "rate_limited",
+      error: `Demasiados escaneos seguidos en tu negocio — espera ${businessRate.retryAfterSeconds}s.`,
+    };
+  }
+
   const token = rawToken.trim();
   if (!TOKEN_RE.test(token)) {
     // Forma inválida = mismo mensaje que un token inexistente (sin oráculo),
@@ -455,6 +508,31 @@ export async function registerStampForSession(
     return { ok: false, error: "Solicitud inválida." };
   }
 
+  const stampPreFilter = checkStampRateLimit(session.authUserId);
+  if (!stampPreFilter.allowed) {
+    return {
+      ok: false,
+      code: "rate_limited",
+      error: `Demasiados sellos seguidos — espera ${stampPreFilter.retryAfterSeconds}s.`,
+    };
+  }
+  const stampEmployeeRate = await checkRateLimit("scanner_stamp_employee", session.authUserId);
+  if (!stampEmployeeRate.allowed) {
+    return {
+      ok: false,
+      code: "rate_limited",
+      error: `Demasiados sellos seguidos — espera ${stampEmployeeRate.retryAfterSeconds}s.`,
+    };
+  }
+  const stampBusinessRate = await checkRateLimit("scanner_stamp_business", session.businessId);
+  if (!stampBusinessRate.allowed) {
+    return {
+      ok: false,
+      code: "rate_limited",
+      error: `Demasiados sellos seguidos en tu negocio — espera ${stampBusinessRate.retryAfterSeconds}s.`,
+    };
+  }
+
   try {
     const result = await withTenantContext(session.businessId, async (tx) => {
       const ctx = await requireOperationContext(tx, session, input.locationId);
@@ -519,9 +597,12 @@ export async function registerStampForSession(
       }
 
       const now = new Date();
+      // Piso duro, temporal hasta el cap de 1/día: convive con (no
+      // reemplaza) el cooldown configurable por programa — nunca lo acorta,
+      // solo eleva un cooldown más corto que MIN_STAMP_GAP_SECONDS.
       const decision = evaluateStamp({
         programActive: program.isActive,
-        cooldownSeconds: program.cooldownSeconds,
+        cooldownSeconds: Math.max(program.cooldownSeconds, MIN_STAMP_GAP_SECONDS),
         lastStampAt: balance.lastStampAt,
         now,
       });
