@@ -131,11 +131,16 @@ export async function createCustomerForSession(
     return { error: "El nombre del cliente es obligatorio (máx. 120 caracteres)." };
   }
 
+  // Teléfono y fecha de nacimiento son obligatorios en el alta manual
+  // (decisión explícita — antes eran opcionales). Ocupación se queda
+  // opcional: el cliente la da o no. dateOfBirth guarda la fecha real (no
+  // edad calculada) para poder correr campañas de cumpleaños después,
+  // nunca calculada acá — sin uso todavía, solo captura y almacenamiento.
   const rawPhone = String(formData.get("phone") ?? "").trim();
-  if (rawPhone && !PHONE_RE.test(rawPhone)) {
-    return { error: "El teléfono no tiene un formato válido." };
+  if (!rawPhone || !PHONE_RE.test(rawPhone)) {
+    return { error: "El teléfono es obligatorio y debe tener un formato válido." };
   }
-  const phone = rawPhone || null;
+  const phone = rawPhone;
 
   const rawEmail = String(formData.get("email") ?? "").trim().toLowerCase();
   if (rawEmail && (rawEmail.length > MAX_EMAIL_LENGTH || !EMAIL_RE.test(rawEmail))) {
@@ -143,19 +148,19 @@ export async function createCustomerForSession(
   }
   const email = rawEmail || null;
 
-  // Campos opcionales de perfil (nullable en schema, sin uso todavía — solo
-  // captura y almacenamiento, ver CLAUDE.md). dateOfBirth guarda la fecha
-  // real (no edad calculada) para poder correr campañas de cumpleaños
-  // después, nunca calculada acá.
   const rawDateOfBirth = String(formData.get("dateOfBirth") ?? "").trim();
-  let dateOfBirth: string | null = null;
-  if (rawDateOfBirth) {
-    const parsed = new Date(`${rawDateOfBirth}T00:00:00Z`);
-    if (!DATE_RE.test(rawDateOfBirth) || Number.isNaN(parsed.getTime()) || parsed.getTime() > Date.now()) {
-      return { error: "La fecha de nacimiento no es válida." };
-    }
-    dateOfBirth = rawDateOfBirth;
+  if (!rawDateOfBirth) {
+    return { error: "La fecha de nacimiento es obligatoria." };
   }
+  const parsedDateOfBirth = new Date(`${rawDateOfBirth}T00:00:00Z`);
+  if (
+    !DATE_RE.test(rawDateOfBirth) ||
+    Number.isNaN(parsedDateOfBirth.getTime()) ||
+    parsedDateOfBirth.getTime() > Date.now()
+  ) {
+    return { error: "La fecha de nacimiento no es válida." };
+  }
+  const dateOfBirth = rawDateOfBirth;
 
   const rawOccupation = String(formData.get("occupation") ?? "").trim();
   if (rawOccupation.length > MAX_OCCUPATION_LENGTH) {
@@ -176,19 +181,18 @@ export async function createCustomerForSession(
       // de que cualquiera confirme su INSERT — el catch de abajo traduce
       // esa violación de constraint (23505) al mismo DuplicateCustomerError,
       // mismo patrón que enrollCustomerPublic (packages/db/src/enroll.ts).
-      if (phone) {
-        const [dup] = await tx
-          .select({ id: customers.id })
-          .from(customers)
-          .where(
-            and(
-              eq(customers.businessId, session.businessId),
-              eq(customers.phone, phone),
-            ),
-          )
-          .limit(1);
-        if (dup) throw new DuplicateCustomerError("teléfono");
-      }
+      const [dupPhone] = await tx
+        .select({ id: customers.id })
+        .from(customers)
+        .where(
+          and(
+            eq(customers.businessId, session.businessId),
+            eq(customers.phone, phone),
+          ),
+        )
+        .limit(1);
+      if (dupPhone) throw new DuplicateCustomerError("teléfono");
+
       if (email) {
         const [dup] = await tx
           .select({ id: customers.id })

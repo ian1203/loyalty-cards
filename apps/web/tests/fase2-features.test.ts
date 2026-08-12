@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CookieMethodsServer } from "@supabase/ssr";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   auditLogs,
@@ -134,7 +134,11 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
 
     const customerB = await createCustomerForSession(
       sessionOwnerB,
-      form({ fullName: `Cliente B Exclusivo ${suffix}`, phone: "+52 555 000 0001" }),
+      form({
+        fullName: `Cliente B Exclusivo ${suffix}`,
+        phone: "+52 555 000 0001",
+        dateOfBirth: "1990-01-01",
+      }),
     );
     if (!customerB.success) throw new Error(`setup cliente B: ${customerB.error}`);
     const [customerBRow] = await adminDb
@@ -222,7 +226,10 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
 
     it("match EXACTO: una coincidencia parcial del nombre ya no devuelve nada", async () => {
       const fullName = `María González Exacta ${suffix}`;
-      const created = await createCustomerForSession(sessionOwnerA, form({ fullName }));
+      const created = await createCustomerForSession(
+        sessionOwnerA,
+        form({ fullName, phone: "+52 555 000 0011", dateOfBirth: "1990-01-01" }),
+      );
       expect(created.success).toBeTruthy();
 
       const partial = await withTenantContext(sessionOwnerA.businessId, (tx) =>
@@ -233,7 +240,10 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
 
     it("match EXACTO: case-insensitive — casing distinto sigue encontrando la fila", async () => {
       const fullName = `Casing Exacto ${suffix}`;
-      await createCustomerForSession(sessionOwnerA, form({ fullName }));
+      await createCustomerForSession(
+        sessionOwnerA,
+        form({ fullName, phone: "+52 555 000 0012", dateOfBirth: "1990-01-01" }),
+      );
 
       const rows = await withTenantContext(sessionOwnerA.businessId, (tx) =>
         searchCustomers(tx, sessionOwnerA, fullName.toUpperCase()),
@@ -339,7 +349,7 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
     it("staff NO puede dar de alta un cliente: rechazado server-side, sin fila creada", async () => {
       const result = await createCustomerForSession(
         sessionStaffA,
-        form({ fullName: "Cliente de Staff A", phone: "+52 555 000 0003" }),
+        form({ fullName: "Cliente de Staff A", phone: "+52 555 000 0003", dateOfBirth: "1990-01-01" }),
       );
       expect(result.error).toBeDefined();
       expect(result.success).toBeUndefined();
@@ -359,7 +369,7 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
     it("owner da de alta un cliente (balance inicial 0 + audit) y el dedupe de teléfono rechaza un segundo alta", async () => {
       const created = await createCustomerForSession(
         sessionOwnerA,
-        form({ fullName: "Cliente de Owner A", phone: "+52 555 000 0002" }),
+        form({ fullName: "Cliente de Owner A", phone: "+52 555 000 0002", dateOfBirth: "1990-01-01" }),
       );
       expect(created.success).toBeDefined();
 
@@ -394,15 +404,20 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
 
       const duplicate = await createCustomerForSession(
         sessionOwnerA,
-        form({ fullName: "Duplicado", phone: "+52 555 000 0002" }),
+        form({ fullName: "Duplicado", phone: "+52 555 000 0002", dateOfBirth: "1990-01-01" }),
       );
       expect(duplicate.error).toBe("Ya existe un cliente con ese teléfono en tu negocio.");
     });
 
-    it("perfil opcional (cumpleaños/ocupación): se guardan si se dan, quedan null si no", async () => {
+    it("perfil: cumpleaños/ocupación se guardan cuando se dan; ocupación (el único opcional) queda null si no", async () => {
       const withProfile = await createCustomerForSession(
         sessionOwnerA,
-        form({ fullName: `Con perfil ${suffix}`, dateOfBirth: "1990-05-20", occupation: "Maestra" }),
+        form({
+          fullName: `Con perfil ${suffix}`,
+          phone: "+52 555 000 0021",
+          dateOfBirth: "1990-05-20",
+          occupation: "Maestra",
+        }),
       );
       expect(withProfile.success).toBeDefined();
       const [rowWithProfile] = await adminDb
@@ -412,29 +427,62 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
       expect(rowWithProfile.dateOfBirth).toBe("1990-05-20");
       expect(rowWithProfile.occupation).toBe("Maestra");
 
-      const withoutProfile = await createCustomerForSession(
+      // Ocupación es el único campo de perfil que sigue siendo opcional
+      // (teléfono y cumpleaños ya son obligatorios, ver los tests de abajo).
+      const withoutOccupation = await createCustomerForSession(
         sessionOwnerA,
-        form({ fullName: `Sin perfil ${suffix}` }),
+        form({ fullName: `Sin ocupación ${suffix}`, phone: "+52 555 000 0022", dateOfBirth: "1990-01-01" }),
       );
-      expect(withoutProfile.success).toBeDefined();
-      const [rowWithoutProfile] = await adminDb
+      expect(withoutOccupation.success).toBeDefined();
+      const [rowWithoutOccupation] = await adminDb
         .select()
         .from(customers)
-        .where(and(eq(customers.businessId, businessAId), eq(customers.fullName, `Sin perfil ${suffix}`)));
-      expect(rowWithoutProfile.dateOfBirth).toBeNull();
-      expect(rowWithoutProfile.occupation).toBeNull();
+        .where(and(eq(customers.businessId, businessAId), eq(customers.fullName, `Sin ocupación ${suffix}`)));
+      expect(rowWithoutOccupation.occupation).toBeNull();
 
       const invalidDate = await createCustomerForSession(
         sessionOwnerA,
-        form({ fullName: `Fecha inválida ${suffix}`, dateOfBirth: "no-es-una-fecha" }),
+        form({
+          fullName: `Fecha inválida ${suffix}`,
+          phone: "+52 555 000 0023",
+          dateOfBirth: "no-es-una-fecha",
+        }),
       );
       expect(invalidDate.error).toBe("La fecha de nacimiento no es válida.");
+    });
+
+    it("teléfono y cumpleaños son obligatorios en el alta manual — sin ellos, rechaza sin crear fila", async () => {
+      const withoutPhone = await createCustomerForSession(
+        sessionOwnerA,
+        form({ fullName: `Sin teléfono ${suffix}`, dateOfBirth: "1990-01-01" }),
+      );
+      expect(withoutPhone.error).toBeDefined();
+
+      const withoutDob = await createCustomerForSession(
+        sessionOwnerA,
+        form({ fullName: `Sin cumpleaños ${suffix}`, phone: "+52 555 000 0024" }),
+      );
+      expect(withoutDob.error).toBe("La fecha de nacimiento es obligatoria.");
+
+      const rows = await adminDb
+        .select()
+        .from(customers)
+        .where(
+          and(
+            eq(customers.businessId, businessAId),
+            or(
+              eq(customers.fullName, `Sin teléfono ${suffix}`),
+              eq(customers.fullName, `Sin cumpleaños ${suffix}`),
+            ),
+          ),
+        );
+      expect(rows).toHaveLength(0);
     });
 
     it("el MISMO teléfono en OTRO negocio sí se permite (el dedupe es por tenant, no global)", async () => {
       const result = await createCustomerForSession(
         sessionOwnerB,
-        form({ fullName: "Cliente B con tel de A", phone: "+52 555 000 0002" }),
+        form({ fullName: "Cliente B con tel de A", phone: "+52 555 000 0002", dateOfBirth: "1990-01-01" }),
       );
       expect(result.success).toBeDefined();
     });

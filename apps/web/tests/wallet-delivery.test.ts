@@ -57,7 +57,10 @@ describe("entrega mínima de Wallet — descarga de .pkpass + link de Google, se
     );
     if (!program.success) throw new Error(`setup programa: ${program.error}`);
 
-    const customer = await createCustomerForSession(session, form({ fullName: "Cliente Delivery" }));
+    const customer = await createCustomerForSession(
+      session,
+      form({ fullName: "Cliente Delivery", phone: "+52 555 800 0001", dateOfBirth: "1990-01-01" }),
+    );
     if (!customer.success) throw new Error(`setup cliente: ${customer.error}`);
     const [customerRow] = await adminDb.select().from(customers).where(eq(customers.businessId, businessId));
     customerId = customerRow.id;
