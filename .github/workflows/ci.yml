@@ -9,26 +9,24 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
+    # Los valores de abajo son los mismos que .env.example (ya commiteado):
+    # DATABASE_URL/APP_DATABASE_URL apuntan al puerto 54322 (Postgres real
+    # de `supabase start`, no un postgres:16 suelto) y los tres NEXT_PUBLIC_*/
+    # SUPABASE_SERVICE_ROLE_KEY son las claves JWT DEMO fijas que Supabase
+    # CLI genera siempre para el mismo JWT_SECRET local por default — no son
+    # secretos reales, son idénticas en cualquier `supabase start` de
+    # cualquier máquina (confirmado contra `supabase status` en local). Dev
+    # y test comparten la misma base `postgres`, igual que en local (ver el
+    # comentario de .env.example) — nunca una `loyalty_test` aparte.
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test
-      APP_DATABASE_URL: postgres://app_user:app_user@localhost:5432/loyalty_test
-      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/loyalty_test
-      TEST_APP_DATABASE_URL: postgres://app_user:app_user@localhost:5432/loyalty_test
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      APP_DATABASE_URL: postgresql://app_user:app_user@127.0.0.1:54322/postgres
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      TEST_APP_DATABASE_URL: postgresql://app_user:app_user@127.0.0.1:54322/postgres
 
     steps:
       - uses: actions/checkout@v4
@@ -44,46 +42,24 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Create test database
-        run: psql "postgres://postgres:postgres@localhost:5432/postgres" -c "CREATE DATABASE loyalty_test;"
-        env:
-          PGPASSWORD: postgres
+      # Reemplaza al postgres:16 suelto + stub manual del schema auth que
+      # había antes: ESE Postgres no tenía GoTrue real, así que cualquier
+      # test que hiciera login real (signInWithPassword/admin.createUser —
+      # la mayoría de apps/web/tests, ver el comentario en
+      # apps/web/vitest.config.ts) fallaba con NEXT_PUBLIC_SUPABASE_URL
+      # apuntando a la nada. `supabase start` levanta el mismo stack que
+      # local dev (mismo supabase/config.toml, mismos puertos) — real Auth,
+      # no un stub. -x excluye contenedores que este proyecto no usa
+      # (storage/realtime/imgproxy/mailpit/studio/analytics/pooler, ver
+      # CLAUDE.md: sin esas features) para no pagar su arranque en CI;
+      # kong/gotrue/postgrest/postgres se quedan porque SÍ se usan.
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.110.0
 
-      # El contenedor postgres:16 es Postgres puro — no es un proyecto
-      # Supabase real, así que no trae el schema `auth` ni el rol
-      # `supabase_auth_admin` que Supabase aprovisiona automáticamente en
-      # todo proyecto (ver el comentario de 0010_supabase_auth_bridge.sql:
-      # "auth.users, tabla que Supabase crea — nuestras migraciones nunca
-      # la tocan"). Esa migración asume que ambos ya existen — cierto en
-      # local (Supabase CLI) y en producción (Supabase hosted), falso en
-      # este contenedor pelón. Se stubea acá lo mínimo indispensable para
-      # que las migraciones corran (una tabla con la PK que la FK
-      # necesita, no una réplica de GoTrue) — nunca en los archivos de
-      # migración, que deben seguir asumiendo la realidad de un Supabase
-      # real, no la de este workaround de CI.
-      - name: Stub del schema auth de Supabase (solo CI, Postgres puro)
-        run: |
-          psql "postgres://postgres:postgres@localhost:5432/loyalty_test" <<'SQL'
-          CREATE SCHEMA IF NOT EXISTS auth;
-          CREATE TABLE IF NOT EXISTS auth.users (
-            id uuid PRIMARY KEY DEFAULT gen_random_uuid()
-          );
-          DO $$
-          BEGIN
-            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'supabase_auth_admin') THEN
-              CREATE ROLE supabase_auth_admin;
-            END IF;
-            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN
-              CREATE ROLE anon;
-            END IF;
-            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN
-              CREATE ROLE authenticated;
-            END IF;
-          END
-          $$;
-          SQL
-        env:
-          PGPASSWORD: postgres
+      - name: supabase start (Postgres + Auth real, igual que local)
+        run: supabase start --yes -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,logflare,vector,supavisor
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
