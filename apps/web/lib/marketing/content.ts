@@ -52,26 +52,6 @@ export const HOW_IT_WORKS: HowItWorksStep[] = [
   },
 ];
 
-export type Benefit = { title: string; description: string; comingSoon?: boolean };
-
-export const BENEFITS: Benefit[] = [
-  {
-    title: "Tarjeta digital sin app",
-    description:
-      "Apple/Google Wallet, con la identidad visual del negocio, QR/identificador, progreso visible, actualización sin reemplazar la tarjeta.",
-  },
-  {
-    title: "Mecánicas de lealtad",
-    description:
-      "Sellos por visita: cada visita suma un sello a la tarjeta y, al llegar a la meta que definas, la recompensa se desbloquea sola.",
-  },
-  {
-    title: "Mecánicas avanzadas",
-    description: "Puntos por compra, bienvenida, cumpleaños, VIP.",
-    comingSoon: true,
-  },
-];
-
 export type PromoType = { name: string; description: string; comingSoon?: boolean };
 
 export const PROMO_TYPES: PromoType[] = [
@@ -152,103 +132,64 @@ export type ComparisonRow = {
   basico: string;
   negocio: string;
   intelligence: string;
-  comingSoon?: boolean;
+  // "value": texto/número libre, se muestra tal cual. "boolean": el valor
+  // es literalmente "Sí"/"No" y ComparisonMatrix lo reemplaza por un ícono
+  // check/x — nunca uses "boolean" con un valor que no sea exactamente
+  // "Sí" o "No" (ej. "Básica"/"Completa" es "value", no "boolean").
+  kind: "value" | "boolean";
 };
 
+// Auditado 2026-08-11 contra el código real (no contra el plan original) —
+// toda fila "Próximamente" que no tenía una implementación real detrás se
+// eliminó (el visitante quiere saber qué obtiene el día 1, no el roadmap).
+// Filas agrupadas: primero valores (precio, cantidades), después
+// características Sí/No.
 export const COMPARISON_MATRIX: ComparisonRow[] = [
-  { feature: "Precio mensual", basico: "$500", negocio: "$700", intelligence: "$1,000" },
-  { feature: "Puntos de venta", basico: "1", negocio: "Hasta 3", intelligence: "Hasta 5" },
-  { feature: "Apple/Google Wallet", basico: "Sí", negocio: "Sí", intelligence: "Sí" },
-  { feature: "Puntos o sellos", basico: "Sí", negocio: "Sí", intelligence: "Sí" },
+  // --- Valores ---
+  { feature: "Precio mensual", basico: "$500", negocio: "$700", intelligence: "$1,000", kind: "value" },
+  { feature: "Puntos de venta", basico: "1", negocio: "Hasta 3", intelligence: "Hasta 5", kind: "value" },
   {
     feature: "Promociones visibles simultáneas",
     basico: "1",
     negocio: "Hasta 3",
     intelligence: "Sin límite*",
+    kind: "value",
   },
   {
     feature: "Administración de promociones",
     basico: "1 cambio/mes por solicitud",
     negocio: "Desde plataforma",
     intelligence: "Desde plataforma",
+    kind: "value",
   },
-  { feature: "Notificaciones de Wallet", basico: "No", negocio: "Sí", intelligence: "Sí" },
-  { feature: "Avisos por ubicación", basico: "No", negocio: "Sí", intelligence: "Sí", comingSoon: true },
-  {
-    feature: "Cupones individuales de un solo uso",
-    basico: "No",
-    negocio: "Sí",
-    intelligence: "Sí",
-    comingSoon: true,
-  },
-  {
-    feature: "Envío de cupones por Wallet y correo",
-    basico: "No",
-    negocio: "Sí",
-    intelligence: "Sí",
-    comingSoon: true,
-  },
-  {
-    feature: "Cupón automático de cumpleaños",
-    basico: "No",
-    negocio: "Sí",
-    intelligence: "Sí",
-    comingSoon: true,
-  },
-  { feature: "Campañas de temporada", basico: "No", negocio: "Sí", intelligence: "Sí", comingSoon: true },
-  {
-    feature: "Selección de clientes con filtros",
-    basico: "No",
-    negocio: "Sí",
-    intelligence: "Sí",
-    comingSoon: true,
-  },
-  { feature: "Métricas generales", basico: "Sí", negocio: "Sí", intelligence: "Sí" },
-  { feature: "Clientes nuevos vs recurrentes", basico: "No", negocio: "Sí", intelligence: "Sí" },
-  { feature: "Frecuencia y tiempo entre visitas", basico: "No", negocio: "Sí", intelligence: "Sí" },
-  { feature: "Tasa de redención", basico: "No", negocio: "Sí", intelligence: "Sí" },
   {
     feature: "Comparación entre sucursales",
     basico: "No",
     negocio: "Básica",
     intelligence: "Completa",
+    kind: "value",
+  },
+  // --- Características (Sí/No) ---
+  { feature: "Apple/Google Wallet", basico: "Sí", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
+  { feature: "Puntos o sellos", basico: "Sí", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
+  { feature: "Notificaciones de Wallet", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
+  { feature: "Avisos por ubicación", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
+  { feature: "Métricas generales", basico: "Sí", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
+  {
+    feature: "Clientes nuevos vs recurrentes",
+    basico: "No",
+    negocio: "Sí",
+    intelligence: "Sí",
+    kind: "boolean",
   },
   {
-    feature: "Segmentación por comportamiento",
+    feature: "Frecuencia y tiempo entre visitas",
     basico: "No",
-    negocio: "No",
+    negocio: "Sí",
     intelligence: "Sí",
-    comingSoon: true,
+    kind: "boolean",
   },
-  {
-    feature: "Detección de inactivos y VIP",
-    basico: "No",
-    negocio: "No",
-    intelligence: "Sí",
-    comingSoon: true,
-  },
-  {
-    feature: "Recomendaciones de campaña",
-    basico: "No",
-    negocio: "No",
-    intelligence: "Sí",
-    comingSoon: true,
-  },
-  {
-    feature: "Automatización de campañas",
-    basico: "No",
-    negocio: "No",
-    intelligence: "Sí",
-    comingSoon: true,
-  },
-  { feature: "Asistente inteligente", basico: "No", negocio: "No", intelligence: "Sí", comingSoon: true },
-  {
-    feature: "Exportación de información",
-    basico: "No",
-    negocio: "No",
-    intelligence: "Sí",
-    comingSoon: true,
-  },
+  { feature: "Tasa de redención", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
 ];
 
 export const COMPARISON_FOOTNOTE = "*Sujeto a política de uso razonable.";

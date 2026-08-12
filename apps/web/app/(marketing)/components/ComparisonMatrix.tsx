@@ -1,3 +1,4 @@
+import { CheckIcon, ChevronDownIcon, ListChecksIcon, XIcon } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -7,21 +8,43 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { ComingSoonBadge } from "./ComingSoonBadge";
 import { COMPARISON_FOOTNOTE, COMPARISON_MATRIX } from "../../../lib/marketing/content";
 
+// Ícono en vez de "Sí"/"No" (estándar en tablas de pricing, más escaneable).
+// "No" en muted, no en destructive/rojo: la ausencia de una función en un
+// plan más chico no es un error, es una diferenciación de producto normal.
+function BooleanCell({ value }: { value: string }) {
+  const isYes = value === "Sí";
+  return (
+    <span className="inline-flex items-center">
+      {isYes ? (
+        <CheckIcon className="size-4 text-success" aria-hidden="true" />
+      ) : (
+        <XIcon className="size-4 text-muted-foreground/50" aria-hidden="true" />
+      )}
+      <span className="sr-only">{value}</span>
+    </span>
+  );
+}
+
 // <details> nativo en vez de un Accordion de shadcn: es "expandible" con
-// cero JS y cero dependencia nueva (shadcn Accordion tira @radix-ui/react-accordion,
-// no hace falta para un solo bloque colapsable).
+// cero JS y cero dependencia nueva. NUNCA abierto por default (feedback de
+// marketing: la tabla completa abierta de entrada abruma la sección de
+// precios) — lo que sí cambió es que el trigger ahora es imposible de
+// pasar de largo: borde + fondo con el acento de marca, ícono de lista
+// (no una flechita sola) y el texto "Ver todas las diferencias" a la
+// derecha, además del label principal a la izquierda.
 export function ComparisonMatrix() {
   return (
-    <details className="group rounded-lg border bg-card">
-      <summary className="cursor-pointer list-none px-5 py-4 font-medium marker:content-none">
-        <span className="inline-flex items-center gap-2">
+    <details className="group overflow-hidden rounded-lg border-2 border-primary/25 bg-primary/5 open:bg-card">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 marker:content-none hover:bg-primary/10 group-open:hover:bg-transparent">
+        <span className="inline-flex items-center gap-2.5 font-semibold text-primary">
+          <ListChecksIcon className="size-5 shrink-0" aria-hidden="true" />
           Ver comparación completa de planes
-          <span className="text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true">
-            ▾
-          </span>
+        </span>
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-sm font-medium text-primary">
+          <span className="hidden sm:inline">Ver todas las diferencias</span>
+          <ChevronDownIcon className="size-5 transition-transform group-open:rotate-180" aria-hidden="true" />
         </span>
       </summary>
       <div className="border-t px-5 pb-5 pt-2">
@@ -36,19 +59,23 @@ export function ComparisonMatrix() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {COMPARISON_MATRIX.map((row) => (
-              <TableRow key={row.feature}>
-                <TableCell className="font-medium">
-                  <span className="inline-flex flex-wrap items-center gap-2">
-                    {row.feature}
-                    {row.comingSoon ? <ComingSoonBadge /> : null}
-                  </span>
-                </TableCell>
-                <TableCell>{row.basico}</TableCell>
-                <TableCell>{row.negocio}</TableCell>
-                <TableCell>{row.intelligence}</TableCell>
-              </TableRow>
-            ))}
+            {COMPARISON_MATRIX.map((row, i) => {
+              // Separador visual entre el grupo de valores (precio,
+              // cantidades) y el grupo de características Sí/No — un
+              // borde más marcado en la primera fila del segundo grupo,
+              // sin agregar una fila/elemento extra al DOM.
+              const isFirstBoolean = row.kind === "boolean" && COMPARISON_MATRIX[i - 1]?.kind !== "boolean";
+              return (
+                <TableRow key={row.feature} className={isFirstBoolean ? "border-t-2 border-t-border" : undefined}>
+                  <TableCell className="font-medium">{row.feature}</TableCell>
+                  <TableCell>{row.kind === "boolean" ? <BooleanCell value={row.basico} /> : row.basico}</TableCell>
+                  <TableCell>{row.kind === "boolean" ? <BooleanCell value={row.negocio} /> : row.negocio}</TableCell>
+                  <TableCell>
+                    {row.kind === "boolean" ? <BooleanCell value={row.intelligence} /> : row.intelligence}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

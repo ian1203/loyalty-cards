@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 // Marco de teléfono en CSS puro (bordes + notch), no una foto de stock de
-// un iPhone. Envuelve <WalletCardMockup> en ProductShowcase para mostrar
+// un iPhone. Envuelve <WalletCardMockup> en ProductAndProblem para mostrar
 // el pase "instalado" en Wallet, no solo flotando sobre la página.
 export function PhoneFrame({ children }: { children: ReactNode }) {
   return (

@@ -26,10 +26,24 @@ export const metadata: Metadata = {
   },
 };
 
-// Nav superior deliberadamente mínimo: solo el logo + "Iniciar sesión".
-// Ni "Precios" (ahora es una sección ancla dentro de esta misma página,
-// no una ruta aparte) ni "Aviso de privacidad" (tenerlo arriba se sentía
-// invasivo) — el aviso de privacidad sigue accesible desde el footer.
+// Nav superior con anchor links a las secciones de la home (feedback de
+// marketing: sin esto el usuario dependía de scroll manual). Todos los
+// links usan "/#id" — funcionan igual desde la home y desde cualquier otra
+// página de (marketing) (mismo patrón que ya usaba el footer con
+// "/#precios"). Oculta en mobile (hidden md:flex): agregar un drawer/Sheet
+// para mobile quedó fuera de este cambio a propósito, ver conversación —
+// en mobile el usuario sigue navegando por scroll, igual que antes. "Aviso
+// de privacidad" sigue sin estar en el header (se sentía invasivo arriba),
+// accesible desde el footer.
+const NAV_LINKS = [
+  { href: "/#como-funciona", label: "Cómo funciona" },
+  { href: "/#producto", label: "Producto" },
+  { href: "/#precios", label: "Precios" },
+  { href: "/#simulacion", label: "Simulación" },
+  { href: "/#para-quien-es", label: "Para quién es" },
+  { href: "/#contacto", label: "Contacto" },
+] as const;
+
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
@@ -38,6 +52,13 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
           <Link href="/" className="whitespace-nowrap">
             <Logo />
           </Link>
+          <nav className="hidden items-center gap-5 text-sm font-medium text-muted-foreground md:flex lg:gap-6">
+            {NAV_LINKS.map((link) => (
+              <Link key={link.href} href={link.href} className="whitespace-nowrap hover:text-foreground">
+                {link.label}
+              </Link>
+            ))}
+          </nav>
           <Link
             href="/login"
             className="whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground"

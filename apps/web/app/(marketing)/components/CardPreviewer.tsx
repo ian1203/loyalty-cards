@@ -73,7 +73,7 @@ export function CardPreviewer() {
   );
 
   return (
-    <section className="border-t bg-muted/20">
+    <section id="simulacion" className="scroll-mt-20 border-t bg-muted/20">
       <div className="mx-auto max-w-5xl px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-lg text-center">
           <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Previsualiza tu tarjeta</h2>
