@@ -169,9 +169,13 @@ export default async function CustomerDetailPage({
   }
 
   const { customer, balances, qrSvg, hasConfirmedApple, hasGeneratedGoogle, firstStampLocation } = data;
+  // Cada wallet lleva su propio calificador explícito — un solo
+  // "(sin confirmar)" al final de la lista se leía como si aplicara a
+  // ambos (hallazgo real: así lo interpretó el dueño del negocio) en vez
+  // de solo a Google.
   const walletLabels = [
-    hasConfirmedApple ? "Apple Wallet" : null,
-    hasGeneratedGoogle ? "Google Wallet (link generado, sin confirmar)" : null,
+    hasConfirmedApple ? "Apple Wallet (confirmado)" : null,
+    hasGeneratedGoogle ? "Google Wallet (sin confirmar)" : null,
   ].filter((label): label is string => label !== null);
 
   return (

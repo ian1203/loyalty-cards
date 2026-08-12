@@ -200,29 +200,24 @@ correspondiente en `CLAUDE.md`.
 
 ## Verificación pendiente (una vez que existan las credenciales)
 
-Nada de esto se puede probar sin las credenciales reales de arriba — son
-los smoke tests a correr manualmente la primera vez que se configuren:
+Las credenciales reales de Apple y Google ya están cargadas en producción
+— items 1, 2 y 5 de abajo **ya se confirmaron con dispositivo/evidencia
+real** (Carlo, Apple; push automático confirmado sin reinstalar, ~6 min
+de latencia — protocolo `GET /registrations` → `GET /passes/{serial}`
+real, no una reinstalación; Google confirmado con GET real contra la API
+tras un sello real). Genuinamente pendientes: 3, 4 y 6.
 
-1. **Agregar el pase en un iPhone real**: loguearse como dueño/staff,
-   entrar a un cliente (`/customers/{id}`), tocar "Descargar pase de
-   Apple" desde Safari en el iPhone (o AirDrop el `.pkpass` descargado) →
-   confirmar que Wallet lo reconoce y lo instala sin error de certificado.
-2. **Sellar y ver la actualización en vivo**: con el pase ya instalado en
-   el paso anterior, hacer un sello desde `/scanner` para ese cliente →
-   confirmar que el pase en el iPhone se actualiza solo (progreso de
-   sellos nuevo) en un lapso corto, sin reabrir la app Wallet a mano —
-   valida el ciclo completo push vacío → pull del `.pkpass`.
+1. ~~Agregar el pase en un iPhone real~~ — **confirmado**.
+2. ~~Sellar y ver la actualización en vivo (Apple)~~ — **confirmado**.
 3. **Desregistro**: borrar el pase desde Wallet en el iPhone → confirmar
    en la DB (`device_registrations`) que la fila correspondiente
    desaparece (Apple llama al DELETE del web service al borrarlo).
-4. **Agregar el pase en Android (modo demo)**: desde `/customers/{id}`,
-   tocar "Agregar a Google Wallet" → confirmar que se instala (con la
-   marca "[TEST ONLY]" visible, esperado hasta completar la sección 3) y
-   que el balance/QR coinciden con los del negocio.
-5. **Actualización del pase de Google**: sellar de nuevo para ese mismo
-   cliente → confirmar que el objeto en Google Wallet se actualiza (sin
-   push — es un PATCH directo, revisar que el progreso de sellos cambie
-   en la app en un lapso corto).
+4. **Agregar el pase en Android real**: desde `/customers/{id}`,
+   tocar "Agregar a Google Wallet" → confirmar que se instala en un
+   dispositivo Android real (todo lo de Google en este proyecto se
+   verificó por API directa hasta ahora, nunca en un teléfono Android
+   real) y que el balance/QR coinciden con los del negocio.
+5. ~~Actualización del pase de Google~~ — **confirmado**.
 6. **Cross-check de aislamiento**: repetir 1-2 con un cliente de OTRO
    negocio tenant, confirmar que cada pase lleva el branding/nombre de SU
    propio negocio — no hay mezcla entre tenants (esto ya está cubierto por
