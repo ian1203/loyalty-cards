@@ -32,7 +32,7 @@ export async function GoogleWalletButton({ customerId }: { customerId: string })
 
   return (
     <Button asChild variant="outline">
-      <a href={saveLink}>Agregar a Google Wallet (prueba)</a>
+      <a href={saveLink}>Agregar a Google Wallet</a>
     </Button>
   );
 }

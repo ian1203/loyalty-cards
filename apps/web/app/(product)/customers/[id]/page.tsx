@@ -1,9 +1,10 @@
 import { notFound, redirect } from "next/navigation";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import QRCode from "qrcode";
 import {
   customerBalances,
   customers,
+  deviceRegistrations,
   locations,
   loyaltyPrograms,
   transactions,
@@ -77,12 +78,18 @@ export default async function CustomerDetailPage({
       createdAt: row.createdAt,
     };
 
-    // Plataforma(s) de Wallet reales del cliente — no un guess por
-    // user-agent (eso es solo para elegir qué botón mostrar en /enroll),
-    // sino wallet_passes.platform: solo existe una fila ahí una vez que
-    // ensureWalletPass() corrió de verdad para ese cliente+plataforma.
-    const walletPlatforms = await tx
-      .select({ platform: walletPasses.platform })
+    // wallet_passes.platform NO significa "el cliente usa esta plataforma"
+    // — se prepara para AMBAS automáticamente en todo auto-registro
+    // (buildWalletArtifactsForNewEnrollment llama ensureWalletPass para
+    // apple Y google sin importar el dispositivo real) y cada botón de
+    // descarga del alta manual crea la suya propia. La única señal de
+    // instalación CONFIRMADA es Apple: device_registrations solo tiene
+    // fila cuando el dispositivo real llamó al web service de PassKit
+    // después de tocar "Agregar" — Google no tiene ningún callback
+    // equivalente en este código, así que para Google solo podemos decir
+    // "se generó un link", nunca "se confirmó".
+    const walletRows = await tx
+      .select({ platform: walletPasses.platform, walletPassId: walletPasses.id })
       .from(walletPasses)
       .where(
         and(
@@ -90,6 +97,23 @@ export default async function CustomerDetailPage({
           eq(walletPasses.customerId, customer.id),
         ),
       );
+    const applePassIds = walletRows.filter((w) => w.platform === "apple").map((w) => w.walletPassId);
+    const hasConfirmedApple =
+      applePassIds.length > 0
+        ? (
+            await tx
+              .select({ id: deviceRegistrations.id })
+              .from(deviceRegistrations)
+              .where(
+                and(
+                  eq(deviceRegistrations.businessId, session.businessId),
+                  inArray(deviceRegistrations.walletPassId, applePassIds),
+                ),
+              )
+              .limit(1)
+          ).length > 0
+        : false;
+    const hasGeneratedGoogle = walletRows.some((w) => w.platform === "google");
 
     // "Sucursal de alta" no se captura en ningún lado hoy (ni el alta
     // manual ni /enroll piden sucursal) — en vez de agregar un campo nuevo
@@ -137,15 +161,18 @@ export default async function CustomerDetailPage({
         ),
       );
 
-    return { customer, balances, qrSvg, walletPlatforms, firstStampLocation };
+    return { customer, balances, qrSvg, hasConfirmedApple, hasGeneratedGoogle, firstStampLocation };
   });
 
   if (!data) {
     notFound();
   }
 
-  const { customer, balances, qrSvg, walletPlatforms, firstStampLocation } = data;
-  const platformLabels = { apple: "Apple Wallet", google: "Google Wallet" } as const;
+  const { customer, balances, qrSvg, hasConfirmedApple, hasGeneratedGoogle, firstStampLocation } = data;
+  const walletLabels = [
+    hasConfirmedApple ? "Apple Wallet" : null,
+    hasGeneratedGoogle ? "Google Wallet (link generado, sin confirmar)" : null,
+  ].filter((label): label is string => label !== null);
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -195,6 +222,7 @@ export default async function CustomerDetailPage({
                   ? new Date(`${customer.dateOfBirth}T00:00:00Z`).toLocaleDateString("es-MX", {
                       day: "numeric",
                       month: "long",
+                      year: "numeric",
                       timeZone: "UTC",
                     })
                   : "—"}
@@ -209,9 +237,7 @@ export default async function CustomerDetailPage({
             <div>
               <dt className="text-muted-foreground">Wallet</dt>
               <dd className="font-medium">
-                {walletPlatforms.length > 0
-                  ? walletPlatforms.map((w) => platformLabels[w.platform]).join(" · ")
-                  : "Sin pase todavía"}
+                {walletLabels.length > 0 ? walletLabels.join(" · ") : "Sin pase todavía"}
               </dd>
             </div>
             <div>
@@ -268,14 +294,13 @@ export default async function CustomerDetailPage({
         <CardHeader>
           <CardTitle>Wallet</CardTitle>
           <CardDescription>
-            Integración en construcción (Fase 4): pases sin credenciales
-            reales todavía, ver docs/WALLET-SETUP.md. Sirve para probar el
-            flujo completo antes de tener cuenta de Apple/Google.
+            Entrega manual del pase — útil para clientes dados de alta desde el
+            dashboard, que no pasaron por el auto-registro (/enroll).
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           <Button asChild variant="outline">
-            <a href={`/customers/${customer.id}/wallet/apple`}>Descargar pase de Apple (prueba)</a>
+            <a href={`/customers/${customer.id}/wallet/apple`}>Descargar pase de Apple</a>
           </Button>
           <GoogleWalletButton customerId={customer.id} />
         </CardContent>
