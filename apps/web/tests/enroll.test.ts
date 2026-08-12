@@ -12,7 +12,8 @@ import {
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
 import { enrollCustomerPublic } from "@loyalty/db/enroll";
-import { enrollCustomerForSlug, HONEYPOT_FIELD, normalizePhone } from "../app/(marketing)/enroll/[slug]/logic";
+import { HONEYPOT_FIELD } from "../app/(marketing)/enroll/[slug]/honeypot";
+import { enrollCustomerForSlug, normalizePhone } from "../app/(marketing)/enroll/[slug]/logic";
 import { saveProgramForSession } from "../app/(product)/rewards/logic";
 import { requireTenantSession } from "../lib/supabase/session";
 import { downloadEnrollmentApplePass } from "../lib/wallet/publicEnrollWallet";

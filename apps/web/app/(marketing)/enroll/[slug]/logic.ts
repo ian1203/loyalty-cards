@@ -12,14 +12,7 @@ import {
 } from "@loyalty/db/enroll";
 import { checkRateLimit } from "../../../../lib/rateLimit";
 import { buildWalletArtifactsForNewEnrollment } from "../../../../lib/wallet/publicEnrollWallet";
-
-// Nombre de campo señuelo para el honeypot — nunca visible/llenable por un
-// humano (ver el input correspondiente, oculto vía CSS + aria-hidden +
-// tabIndex=-1, en EnrollForm.tsx). Un bot que autocompleta cualquier
-// input de aspecto estándar sí lo llena. Deliberadamente NO se avisa al
-// bot que fue detectado — misma respuesta neutra que un alta real, sin
-// tocar la DB.
-export const HONEYPOT_FIELD = "company";
+import { HONEYPOT_FIELD } from "./honeypot";
 
 // Narrowing, no eliminación total, del timing entre "teléfono duplicado"
 // (rechaza en el INSERT, nunca llega a generar wallet) y "alta nueva"
