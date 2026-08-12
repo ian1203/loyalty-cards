@@ -12,19 +12,26 @@ import {
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
 import { enrollCustomerPublic } from "@loyalty/db/enroll";
-import { enrollCustomerForSlug, normalizePhone } from "../app/(marketing)/enroll/[slug]/logic";
+import { enrollCustomerForSlug, HONEYPOT_FIELD, normalizePhone } from "../app/(marketing)/enroll/[slug]/logic";
 import { saveProgramForSession } from "../app/(product)/rewards/logic";
 import { requireTenantSession } from "../lib/supabase/session";
 import { downloadEnrollmentApplePass } from "../lib/wallet/publicEnrollWallet";
 import { createBusinessWithRealOwner, createPlatformAdmin, form, signInAsCookieJar } from "./support/testAuth";
 
+// IP fija para todos los llamados de este archivo — checkRateLimit hace
+// fail-open sin UPSTASH_REDIS_REST_URL/TOKEN (no configuradas en este
+// entorno, ver rate-limit.test.ts), así que reusar la misma IP entre tests
+// nunca los bloquea entre sí acá.
+const TEST_IP = "203.0.113.1";
+
 // Definición de "listo" de /enroll: un visitante SIN sesión se registra
 // solo bajo el negocio de su slug (nunca otro — enroll_customer_public
 // resuelve el business_id EXCLUSIVAMENTE por slug, nunca por un parámetro
 // que el visitante controle), con balance inicial en 0 contra el programa
-// activo, dedupe por teléfono DENTRO del negocio (no global), gate de
-// mayoría de edad para el autoconsentimiento LFPDPPP, y entrega best-effort
-// de Wallet (adaptador fake en este entorno de test).
+// activo, dedupe por teléfono DENTRO del negocio (no global) SIN filtrar
+// esa información al visitante (respuesta neutra, ver más abajo), gate de
+// mayoría de edad para el autoconsentimiento LFPDPPP, honeypot silencioso,
+// y entrega best-effort de Wallet (adaptador fake en este entorno de test).
 describe("/enroll — auto-registro público de clientes", () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const password = "enroll-test-password-1";
@@ -111,7 +118,7 @@ describe("/enroll — auto-registro público de clientes", () => {
   });
 
   it("registra un cliente adulto con consentimiento, balance en 0 y artefactos de Wallet (fake)", async () => {
-    const result = await enrollCustomerForSlug(businessASlug, validFields());
+    const result = await enrollCustomerForSlug(businessASlug, validFields(), TEST_IP);
 
     expect(result.error).toBeUndefined();
     expect(result.success?.businessName).toContain("Enroll A");
@@ -134,7 +141,7 @@ describe("/enroll — auto-registro público de clientes", () => {
   });
 
   it("registra un cliente en un negocio activo SIN programa todavía (sin balance, sin error)", async () => {
-    const result = await enrollCustomerForSlug(businessBSlug, validFields());
+    const result = await enrollCustomerForSlug(businessBSlug, validFields(), TEST_IP);
 
     expect(result.error).toBeUndefined();
     expect(result.success?.programName).toBeNull();
@@ -149,14 +156,18 @@ describe("/enroll — auto-registro público de clientes", () => {
   });
 
   it("rechaza un slug inexistente sin crear ningún cliente", async () => {
-    const result = await enrollCustomerForSlug(`slug-inexistente-${suffix}`, validFields());
+    const result = await enrollCustomerForSlug(`slug-inexistente-${suffix}`, validFields(), TEST_IP);
     expect(result.error).toBeTruthy();
     expect(result.success).toBeUndefined();
   });
 
   it("rechaza el registro de un menor de edad (autoconsentimiento LFPDPPP) sin crear cliente", async () => {
     const phone = `+52 229 ${Math.floor(1000000 + Math.random() * 8999999)}`;
-    const result = await enrollCustomerForSlug(businessASlug, validFields({ dateOfBirth: minorDob(), phone }));
+    const result = await enrollCustomerForSlug(
+      businessASlug,
+      validFields({ dateOfBirth: minorDob(), phone }),
+      TEST_IP,
+    );
 
     expect(result.error).toBeTruthy();
     expect(result.success).toBeUndefined();
@@ -167,24 +178,57 @@ describe("/enroll — auto-registro público de clientes", () => {
 
   it("rechaza sin el checkbox de consentimiento marcado", async () => {
     const phone = `+52 229 ${Math.floor(1000000 + Math.random() * 8999999)}`;
-    const result = await enrollCustomerForSlug(businessASlug, validFields({ consent: "off", phone }));
+    const result = await enrollCustomerForSlug(businessASlug, validFields({ consent: "off", phone }), TEST_IP);
 
     expect(result.error).toBeTruthy();
     const rows = await adminDb.select().from(customers).where(eq(customers.phone, normalizePhone(phone)!));
     expect(rows).toHaveLength(0);
   });
 
-  it("rechaza un teléfono duplicado DENTRO del mismo negocio", async () => {
+  // Hallazgo real corregido (auditoría de seguridad de /enroll): antes,
+  // el segundo intento devolvía un error EXPLÍCITO ("ya existe un
+  // registro con ese teléfono") — un oráculo de enumeración: cualquiera
+  // podía probar números uno por uno y confirmar cuáles ya son clientes
+  // de un negocio, sin necesitar el dashboard. Ahora la respuesta es
+  // idéntica en FORMA a un alta nueva (success, sin wallet links) —
+  // ver buildNeutralConfirmation en logic.ts.
+  it("un teléfono duplicado responde IGUAL que un alta nueva (sin oráculo de enumeración) y no crea una segunda fila", async () => {
     const phone = `+52 229 ${Math.floor(1000000 + Math.random() * 8999999)}`;
-    const first = await enrollCustomerForSlug(businessASlug, validFields({ phone }));
+    const first = await enrollCustomerForSlug(businessASlug, validFields({ phone }), TEST_IP);
     expect(first.success).toBeTruthy();
 
-    const second = await enrollCustomerForSlug(businessASlug, validFields({ phone }));
-    expect(second.error).toBeTruthy();
-    expect(second.success).toBeUndefined();
+    const second = await enrollCustomerForSlug(businessASlug, validFields({ phone }), TEST_IP);
+    expect(second.error).toBeUndefined();
+    expect(second.success).toBeTruthy();
+    expect(second.success?.businessName).toContain("Enroll A");
+    // Sin wallet links: no hay forma segura de re-emitir el pase de un
+    // cliente que ya existe sin verificar que quien llena el form de
+    // verdad es su dueño.
+    expect(second.success?.appleWalletDownloadUrl).toBeNull();
+    expect(second.success?.googleSaveLink).toBeNull();
 
     const rows = await adminDb.select().from(customers).where(eq(customers.phone, normalizePhone(phone)!));
     expect(rows).toHaveLength(1);
+  });
+
+  // Honeypot: un bot que autocompleta cualquier input de aspecto estándar
+  // llena este campo oculto — un humano nunca lo ve. Rechazo en silencio,
+  // MISMA respuesta neutra que un alta real, sin tocar la DB.
+  it("un formulario con el campo honeypot lleno se rechaza en silencio — misma respuesta neutra, cero fila creada", async () => {
+    const phone = `+52 229 ${Math.floor(1000000 + Math.random() * 8999999)}`;
+    const result = await enrollCustomerForSlug(
+      businessASlug,
+      validFields({ phone, [HONEYPOT_FIELD]: "un bot llenó esto" }),
+      TEST_IP,
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.success).toBeTruthy();
+    expect(result.success?.appleWalletDownloadUrl).toBeNull();
+    expect(result.success?.googleSaveLink).toBeNull();
+
+    const rows = await adminDb.select().from(customers).where(eq(customers.phone, normalizePhone(phone)!));
+    expect(rows).toHaveLength(0);
   });
 
   it("el gate de mayoría de edad también vive en la función SQL, no solo en la capa de aplicación", async () => {
@@ -216,8 +260,8 @@ describe("/enroll — auto-registro público de clientes", () => {
 
   it("el MISMO teléfono puede registrarse en dos negocios distintos (dedupe es por negocio, no global)", async () => {
     const phone = `+52 229 ${Math.floor(1000000 + Math.random() * 8999999)}`;
-    const first = await enrollCustomerForSlug(businessASlug, validFields({ phone }));
-    const second = await enrollCustomerForSlug(businessBSlug, validFields({ phone }));
+    const first = await enrollCustomerForSlug(businessASlug, validFields({ phone }), TEST_IP);
+    const second = await enrollCustomerForSlug(businessBSlug, validFields({ phone }), TEST_IP);
 
     expect(first.success).toBeTruthy();
     expect(second.success).toBeTruthy();
@@ -251,7 +295,7 @@ describe("/enroll — auto-registro público de clientes", () => {
     });
 
     it("el link devuelto sirve el .pkpass real con el token correcto", async () => {
-      const result = await enrollCustomerForSlug(businessASlug, validFields());
+      const result = await enrollCustomerForSlug(businessASlug, validFields(), TEST_IP);
       const url = new URL(result.success!.appleWalletDownloadUrl!);
       const serial = url.pathname.split("/").pop()!;
       const token = url.searchParams.get("t")!;
@@ -264,7 +308,7 @@ describe("/enroll — auto-registro público de clientes", () => {
     });
 
     it("un token incorrecto para un serial real: ok:false, sin datos", async () => {
-      const result = await enrollCustomerForSlug(businessASlug, validFields());
+      const result = await enrollCustomerForSlug(businessASlug, validFields(), TEST_IP);
       const serial = new URL(result.success!.appleWalletDownloadUrl!).pathname.split("/").pop()!;
 
       const download = await downloadEnrollmentApplePass(serial, "token-incorrecto-cualquiera");
@@ -272,8 +316,8 @@ describe("/enroll — auto-registro público de clientes", () => {
     });
 
     it("el token real de un pase de un negocio no autentica contra el serial de otro negocio", async () => {
-      const resultA = await enrollCustomerForSlug(businessASlug, validFields());
-      const resultB = await enrollCustomerForSlug(businessBSlug, validFields());
+      const resultA = await enrollCustomerForSlug(businessASlug, validFields(), TEST_IP);
+      const resultB = await enrollCustomerForSlug(businessBSlug, validFields(), TEST_IP);
 
       const tokenA = new URL(resultA.success!.appleWalletDownloadUrl!).searchParams.get("t")!;
       const serialB = new URL(resultB.success!.appleWalletDownloadUrl!).pathname.split("/").pop()!;

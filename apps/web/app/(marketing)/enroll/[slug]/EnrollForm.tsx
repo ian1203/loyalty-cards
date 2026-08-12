@@ -9,7 +9,7 @@ import { Checkbox } from "../../../../components/ui/checkbox";
 import { Input } from "../../../../components/ui/input";
 import { Label } from "../../../../components/ui/label";
 import { enrollCustomerAction } from "./actions";
-import type { EnrollActionState } from "./logic";
+import { HONEYPOT_FIELD, type EnrollActionState } from "./logic";
 
 const initialState: EnrollActionState = {};
 
@@ -64,6 +64,17 @@ export function EnrollForm({ businessSlug }: { businessSlug: string }) {
 
   return (
     <form action={formAction} className="flex flex-col gap-5 rounded-xl border bg-card p-6 shadow-token-sm">
+      {/* Honeypot — un humano nunca ve ni llena esto (fuera de pantalla,
+          no display:none/visibility:hidden: algunos bots sí revisan el
+          estilo computado antes de decidir si un input es "real"; posición
+          absoluta fuera del viewport pasa esa revisión igual). aria-hidden
+          + tabIndex=-1 + autoComplete="off" para que tampoco interfiera
+          con lectores de pantalla ni autocompletado real del navegador. */}
+      <div className="absolute -left-[9999px] top-auto h-px w-px overflow-hidden" aria-hidden="true">
+        <Label htmlFor="enroll-company">Empresa</Label>
+        <Input id="enroll-company" name={HONEYPOT_FIELD} tabIndex={-1} autoComplete="off" />
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-first-name">Nombre</Label>
