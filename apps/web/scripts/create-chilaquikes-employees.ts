@@ -14,7 +14,7 @@
 // signInWithPassword({email, password}) — mismo mecanismo que usa
 // /login real), no por username. Identificador: <sucursal>@chilaquikes.
 // pragmia-data.com, consistente con el dominio real de contacto de
-// Pragmia (info@pragmia-data.com, ver CLAUDE.md).
+// Pragmia (admin@pragmia-data.com, ver CLAUDE.md).
 //
 // Idempotencia: si un email ya existe en auth.users, NO se le genera
 // contraseña nueva (evitaría romper el acceso de alguien que ya la está
