@@ -399,6 +399,38 @@ describe("Fase 2 — aislamiento y autorización de /rewards y /customers", () =
       expect(duplicate.error).toBe("Ya existe un cliente con ese teléfono en tu negocio.");
     });
 
+    it("perfil opcional (cumpleaños/ocupación): se guardan si se dan, quedan null si no", async () => {
+      const withProfile = await createCustomerForSession(
+        sessionOwnerA,
+        form({ fullName: `Con perfil ${suffix}`, dateOfBirth: "1990-05-20", occupation: "Maestra" }),
+      );
+      expect(withProfile.success).toBeDefined();
+      const [rowWithProfile] = await adminDb
+        .select()
+        .from(customers)
+        .where(and(eq(customers.businessId, businessAId), eq(customers.fullName, `Con perfil ${suffix}`)));
+      expect(rowWithProfile.dateOfBirth).toBe("1990-05-20");
+      expect(rowWithProfile.occupation).toBe("Maestra");
+
+      const withoutProfile = await createCustomerForSession(
+        sessionOwnerA,
+        form({ fullName: `Sin perfil ${suffix}` }),
+      );
+      expect(withoutProfile.success).toBeDefined();
+      const [rowWithoutProfile] = await adminDb
+        .select()
+        .from(customers)
+        .where(and(eq(customers.businessId, businessAId), eq(customers.fullName, `Sin perfil ${suffix}`)));
+      expect(rowWithoutProfile.dateOfBirth).toBeNull();
+      expect(rowWithoutProfile.occupation).toBeNull();
+
+      const invalidDate = await createCustomerForSession(
+        sessionOwnerA,
+        form({ fullName: `Fecha inválida ${suffix}`, dateOfBirth: "no-es-una-fecha" }),
+      );
+      expect(invalidDate.error).toBe("La fecha de nacimiento no es válida.");
+    });
+
     it("el MISMO teléfono en OTRO negocio sí se permite (el dedupe es por tenant, no global)", async () => {
       const result = await createCustomerForSession(
         sessionOwnerB,

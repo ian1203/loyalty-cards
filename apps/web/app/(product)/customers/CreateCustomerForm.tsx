@@ -54,7 +54,24 @@ export function CreateCustomerForm() {
             placeholder="maria@ejemplo.com"
           />
         </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="customer-birthday">Cumpleaños (opcional)</Label>
+          <Input id="customer-birthday" name="dateOfBirth" type="date" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="customer-occupation">Ocupación (opcional)</Label>
+          <Input
+            id="customer-occupation"
+            name="occupation"
+            maxLength={120}
+            placeholder="Maestra"
+          />
+        </div>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Cumpleaños y ocupación son opcionales — solo los guardamos para conocer mejor a tus
+        clientes, nunca se comparten ni se usan para nada más todavía.
+      </p>
       <div>
         <Button type="submit" disabled={pending}>
           {pending ? "Guardando…" : "Dar de alta"}
