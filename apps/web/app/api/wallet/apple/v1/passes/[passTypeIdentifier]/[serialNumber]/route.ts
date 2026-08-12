@@ -1,3 +1,4 @@
+import { resolveClientIp } from "../../../../../../../../lib/clientIp";
 import { getLatestPass } from "../../../../logic";
 
 // Ver el comentario en app/api/health/route.ts: toda ruta de esta app
@@ -13,6 +14,7 @@ export async function GET(request: Request, { params }: { params: Promise<Params
     passTypeIdentifier,
     serialNumber,
     authorizationHeader: request.headers.get("authorization"),
+    clientIp: resolveClientIp(request.headers),
   });
 
   return new Response(result.body ? (result.body as BodyInit) : null, {

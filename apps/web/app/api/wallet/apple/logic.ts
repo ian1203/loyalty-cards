@@ -8,6 +8,7 @@
 import { and, eq, gt } from "drizzle-orm";
 import { deviceRegistrations, walletPasses, withTenantContext } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
+import { checkRateLimit } from "../../../../lib/rateLimit";
 import { getApplePassTypeIdentifier } from "../../../../lib/wallet/adapters";
 import { verifyBusinessIdForPassToken } from "../../../../lib/wallet/passAuth";
 import { generateApplePkpassForCustomer } from "../../../../lib/wallet/passGeneration";
@@ -39,7 +40,18 @@ export async function registerDeviceForPass(input: {
   serialNumber: string;
   authorizationHeader: string | null;
   pushToken: string;
+  clientIp: string;
 }): Promise<WalletApiResult> {
+  // Rate limit por IP ANTES de tocar el token — sin sesión acá (protocolo
+  // público de Apple), la IP es la única señal disponible (ver
+  // lib/rateLimit.ts). Corre antes de extractBearerToken/verifyBusinessIdForPassToken
+  // a propósito: protege contra fuerza bruta del authenticationToken, no
+  // solo contra abuso post-autenticación.
+  const rate = await checkRateLimit("apple_webservice_ip", input.clientIp);
+  if (!rate.allowed) {
+    return { status: 429, headers: NO_STORE };
+  }
+
   const token = extractBearerToken(input.authorizationHeader);
   if (!token || input.passTypeIdentifier !== getApplePassTypeIdentifier()) {
     return UNAUTHORIZED;
@@ -81,7 +93,13 @@ export async function unregisterDeviceForPass(input: {
   passTypeIdentifier: string;
   serialNumber: string;
   authorizationHeader: string | null;
+  clientIp: string;
 }): Promise<WalletApiResult> {
+  const rate = await checkRateLimit("apple_webservice_ip", input.clientIp);
+  if (!rate.allowed) {
+    return { status: 429, headers: NO_STORE };
+  }
+
   const token = extractBearerToken(input.authorizationHeader);
   if (!token || input.passTypeIdentifier !== getApplePassTypeIdentifier()) {
     return UNAUTHORIZED;
@@ -179,7 +197,13 @@ export async function getLatestPass(input: {
   passTypeIdentifier: string;
   serialNumber: string;
   authorizationHeader: string | null;
+  clientIp: string;
 }): Promise<WalletApiResult> {
+  const rate = await checkRateLimit("apple_webservice_ip", input.clientIp);
+  if (!rate.allowed) {
+    return { status: 429, headers: NO_STORE };
+  }
+
   const token = extractBearerToken(input.authorizationHeader);
   if (!token || input.passTypeIdentifier !== getApplePassTypeIdentifier()) {
     return UNAUTHORIZED;

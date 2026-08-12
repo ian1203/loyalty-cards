@@ -12,6 +12,20 @@ overrides:
   # sin este override coexistían 2 versiones (0.34.5 de next, 0.35.3 de
   # packages/wallet) y la nuestra era la rota.
   sharp: 0.34.5
+packageExtensions:
+  # drizzle-orm declara @upstash/redis como peer OPCIONAL (su propio driver
+  # KV, que no usamos — usamos @upstash/redis directo con @upstash/ratelimit,
+  # sin pasar por drizzle). Al agregar @upstash/redis a apps/web, pnpm
+  # detecta ese peer opcional satisfecho y crea una instancia de drizzle-orm
+  # peer-calificada SOLO para apps/web, distinta de la que usa packages/db —
+  # dos copias físicas de "el mismo" drizzle-orm que TypeScript trata como
+  # tipos nominales distintos (rompía SQL<unknown> entre @loyalty/db y
+  # drizzle-orm importado directo en apps/web/tests). Fijar el rango del
+  # peer a una versión que @upstash/redis nunca satisface evita que pnpm
+  # lo tome en cuenta para la calificación — vuelve a una sola instancia.
+  drizzle-orm@0.45.2:
+    peerDependencies:
+      "@upstash/redis": "0.0.0-unused"
 supportedArchitectures:
   os:
     - current

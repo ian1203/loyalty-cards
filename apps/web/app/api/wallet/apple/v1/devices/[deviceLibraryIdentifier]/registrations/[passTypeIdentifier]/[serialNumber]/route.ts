@@ -1,3 +1,4 @@
+import { resolveClientIp } from "../../../../../../../../../../lib/clientIp";
 import { registerDeviceForPass, unregisterDeviceForPass } from "../../../../../../logic";
 
 // Ver el comentario en app/api/health/route.ts: toda ruta de esta app
@@ -20,6 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<Param
     serialNumber,
     authorizationHeader: request.headers.get("authorization"),
     pushToken: String(body.pushToken ?? ""),
+    clientIp: resolveClientIp(request.headers),
   });
 
   return new Response(result.body ? JSON.stringify(result.body) : null, {
@@ -36,6 +38,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<Par
     passTypeIdentifier,
     serialNumber,
     authorizationHeader: request.headers.get("authorization"),
+    clientIp: resolveClientIp(request.headers),
   });
 
   return new Response(null, { status: result.status, headers: result.headers });

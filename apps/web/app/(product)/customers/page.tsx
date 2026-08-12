@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { withTenantContext } from "@loyalty/db";
 import { Button } from "../../../components/ui/button";
 import {
   Card,
@@ -22,7 +21,7 @@ import { EmptyState } from "../../../components/EmptyState";
 import { PageHeader } from "../../../components/PageHeader";
 import { requireTenantSession } from "../../../lib/supabase/session";
 import { CreateCustomerForm } from "./CreateCustomerForm";
-import { searchCustomers } from "./logic";
+import { searchCustomersForSession } from "./logic";
 
 export default async function CustomersPage({
   searchParams,
@@ -45,9 +44,8 @@ export default async function CustomersPage({
   const rawQ = (await searchParams).q;
   const q = (typeof rawQ === "string" ? rawQ : "").trim().slice(0, 100);
 
-  const rows = await withTenantContext(session.businessId, (tx) =>
-    searchCustomers(tx, session, q),
-  );
+  const searchResult = await searchCustomersForSession(session, q);
+  const rows = searchResult.ok ? searchResult.rows : [];
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
@@ -69,7 +67,7 @@ export default async function CustomersPage({
         <CardHeader>
           <CardTitle>Directorio</CardTitle>
           <CardDescription>
-            Busca por nombre, teléfono o email dentro de tu negocio.
+            Busca por nombre, teléfono o email exacto dentro de tu negocio.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -91,12 +89,14 @@ export default async function CustomersPage({
             ) : null}
           </form>
 
-          {rows.length === 0 ? (
+          {!searchResult.ok ? (
+            <EmptyState title="Demasiadas búsquedas" description={searchResult.error} />
+          ) : rows.length === 0 ? (
             <EmptyState
               title={q ? "Sin resultados" : "Todavía no hay clientes"}
               description={
                 q
-                  ? `Nadie coincide con "${q}" en tu negocio — revisa la ortografía o prueba otro término.`
+                  ? `Nadie coincide exactamente con "${q}" en tu negocio — revisa la ortografía o el dato completo.`
                   : "Da de alta al primero con el formulario de arriba para empezar a sellar tarjetas."
               }
             />
