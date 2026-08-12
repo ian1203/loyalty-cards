@@ -239,8 +239,8 @@ original en `wallet-bi-plans.md`, raíz del repo — ese archivo NO se
 edita, sigue diciendo el nombre viejo a propósito, es la fuente de copy
 histórica). Ahora es **Pragmia** en toda la UI y el contenido
 (`apps/web/lib/marketing/content.ts`, módulo tipado — nunca strings
-sueltos en JSX). Contacto real: WhatsApp `+52 229 482 8125`
-(`CONTACT.whatsappNumberDigits`, wa.me), correo `info@pragmia-data.com`.
+sueltos en JSX). Contacto real: WhatsApp `+52 229 339 1514`
+(`CONTACT.whatsappNumberDigits`, wa.me), correo `admin@pragmia-data.com`.
 Regla permanente: cero menciones a "Wallet BI"/"IGA Analytics" en
 cualquier archivo bajo `apps/web/app/` o `apps/web/lib/` — solo
 comentarios de código que referencian el nombre del `.md` fuente pueden

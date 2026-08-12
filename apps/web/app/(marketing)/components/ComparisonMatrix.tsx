@@ -11,8 +11,9 @@ import {
 import { COMPARISON_FOOTNOTE, COMPARISON_MATRIX } from "../../../lib/marketing/content";
 
 // Ícono en vez de "Sí"/"No" (estándar en tablas de pricing, más escaneable).
-// "No" en muted, no en destructive/rojo: la ausencia de una función en un
-// plan más chico no es un error, es una diferenciación de producto normal.
+// "No" en destructive/rojo a propósito (pedido explícito): resalta más a
+// la vista que el check verde, para que la diferencia entre planes se
+// note de un vistazo.
 function BooleanCell({ value }: { value: string }) {
   const isYes = value === "Sí";
   return (
@@ -20,7 +21,7 @@ function BooleanCell({ value }: { value: string }) {
       {isYes ? (
         <CheckIcon className="size-4 text-success" aria-hidden="true" />
       ) : (
-        <XIcon className="size-4 text-muted-foreground/50" aria-hidden="true" />
+        <XIcon className="size-4 text-destructive" aria-hidden="true" />
       )}
       <span className="sr-only">{value}</span>
     </span>

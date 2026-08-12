@@ -225,9 +225,9 @@ export const CAMPAIGN_EXAMPLES: string[] = [
 
 // wa.me exige el número en formato internacional sin "+" ni espacios.
 export const CONTACT = {
-  whatsappNumberDisplay: "+52 229 482 8125",
-  whatsappNumberDigits: "522294828125",
-  email: "info@pragmia-data.com",
+  whatsappNumberDisplay: "+52 229 339 1514",
+  whatsappNumberDigits: "522293391514",
+  email: "admin@pragmia-data.com",
   location: "Veracruz, México",
   salesMessage:
     "Somos de Veracruz y desarrollamos un programa de lealtad para que tus clientes guarden su tarjeta en Apple Wallet o Google Wallet, sin descargar una app. Puedes actualizar promociones, enviar cupones personales y revisar cuántos clientes regresan. ¿Te enseño una demo de 10 minutos?",
