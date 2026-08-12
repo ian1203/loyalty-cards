@@ -20,14 +20,15 @@ type Rule = {
   isActive: boolean;
 };
 
-// Input de sellos por recompensa, compartido entre alta y edición. Cuando
-// `readOnly` es true (esta recompensa es la única activa — ver
+// Sellos por recompensa, compartido entre alta y edición. Cuando `readOnly`
+// es true (esta recompensa es la única activa — ver
 // isSoleActiveRule/willBeSoleActiveRule en page.tsx), el valor SIEMPRE es
-// programStampsRequired y no se deja editar: readOnly (no disabled) para
-// que el valor igual se mande en el submit, así el server nunca recibe un
-// número distinto al del programa para el caso de una sola recompensa.
-// Cuando es editable, el tope máximo se marca en vivo (borde rojo) antes
-// de guardar — el rechazo real sigue viviendo en el server
+// programStampsRequired: se muestra como texto plano (nunca un <input>
+// deshabilitado, que se lee como un campo roto en vez de información) y
+// viaja al submit vía un input hidden — el server nunca recibe un número
+// distinto al del programa para el caso de una sola recompensa. Cuando es
+// editable, el tope máximo se marca en vivo (borde rojo) antes de
+// guardar — el rechazo real sigue viviendo en el server
 // (saveRewardRuleForSession), esto es solo la señal visual temprana.
 function StampsField({
   id,
@@ -44,11 +45,17 @@ function StampsField({
   const exceeds = !readOnly && value > programStampsRequired;
 
   if (readOnly) {
+    // Sin htmlFor: no hay ningún control enfocable al que asociar el
+    // label (a diferencia del <input> del caso editable) — un <p> no es
+    // un elemento "labelable".
     return (
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor={id}>Sellos</Label>
-        <Input id={id} name="stampsRequired" type="number" value={programStampsRequired} readOnly />
-        <p className="text-xs text-muted-foreground">Igual al ciclo del programa.</p>
+        <Label>Sellos</Label>
+        <input type="hidden" name="stampsRequired" value={programStampsRequired} />
+        <p className="flex h-9 items-center gap-1 text-sm">
+          {programStampsRequired}
+          <span className="text-xs text-muted-foreground">(igual al ciclo del programa)</span>
+        </p>
       </div>
     );
   }
