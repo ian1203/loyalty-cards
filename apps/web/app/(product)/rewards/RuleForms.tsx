@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId, useState } from "react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { cn } from "../../../lib/utils";
 import { useActionToast } from "../../../lib/useActionToast";
 import { saveRewardRuleAction, toggleRewardRuleAction } from "./actions";
 import type { RewardsActionState } from "./logic";
@@ -19,9 +20,71 @@ type Rule = {
   isActive: boolean;
 };
 
-export function NewRuleForm() {
+// Input de sellos por recompensa, compartido entre alta y edición. Cuando
+// `readOnly` es true (esta recompensa es la única activa — ver
+// isSoleActiveRule/willBeSoleActiveRule en page.tsx), el valor SIEMPRE es
+// programStampsRequired y no se deja editar: readOnly (no disabled) para
+// que el valor igual se mande en el submit, así el server nunca recibe un
+// número distinto al del programa para el caso de una sola recompensa.
+// Cuando es editable, el tope máximo se marca en vivo (borde rojo) antes
+// de guardar — el rechazo real sigue viviendo en el server
+// (saveRewardRuleForSession), esto es solo la señal visual temprana.
+function StampsField({
+  id,
+  defaultValue,
+  programStampsRequired,
+  readOnly,
+}: {
+  id: string;
+  defaultValue: number;
+  programStampsRequired: number;
+  readOnly: boolean;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  const exceeds = !readOnly && value > programStampsRequired;
+
+  if (readOnly) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={id}>Sellos</Label>
+        <Input id={id} name="stampsRequired" type="number" value={programStampsRequired} readOnly />
+        <p className="text-xs text-muted-foreground">Igual al ciclo del programa.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>Sellos</Label>
+      <Input
+        id={id}
+        name="stampsRequired"
+        type="number"
+        min={1}
+        max={programStampsRequired}
+        value={value}
+        onChange={(e) => setValue(Number(e.currentTarget.value))}
+        required
+        aria-invalid={exceeds}
+        className={cn(exceeds && "border-destructive text-destructive focus-visible:ring-destructive/50")}
+      />
+      {exceeds ? (
+        <p className="text-xs text-destructive">Máximo {programStampsRequired} (el ciclo del programa).</p>
+      ) : null}
+    </div>
+  );
+}
+
+export function NewRuleForm({
+  programStampsRequired,
+  willBeSoleActiveRule,
+}: {
+  programStampsRequired: number;
+  willBeSoleActiveRule: boolean;
+}) {
   const [state, formAction, pending] = useActionState(saveRewardRuleAction, initialState);
   useActionToast(state, initialState);
+  const stampsId = useId();
 
   return (
     <form action={formAction} className="flex flex-col gap-4 rounded-lg border border-dashed p-4">
@@ -36,18 +99,12 @@ export function NewRuleForm() {
             required
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="new-rule-stamps">Sellos</Label>
-          <Input
-            id="new-rule-stamps"
-            name="stampsRequired"
-            type="number"
-            min={1}
-            max={100}
-            defaultValue={10}
-            required
-          />
-        </div>
+        <StampsField
+          id={stampsId}
+          defaultValue={willBeSoleActiveRule ? programStampsRequired : Math.min(10, programStampsRequired)}
+          programStampsRequired={programStampsRequired}
+          readOnly={willBeSoleActiveRule}
+        />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="new-rule-description">Descripción (opcional)</Label>
@@ -67,7 +124,17 @@ export function NewRuleForm() {
   );
 }
 
-export function RuleRow({ rule, canEdit }: { rule: Rule; canEdit: boolean }) {
+export function RuleRow({
+  rule,
+  canEdit,
+  programStampsRequired,
+  isSoleActiveRule,
+}: {
+  rule: Rule;
+  canEdit: boolean;
+  programStampsRequired: number;
+  isSoleActiveRule: boolean;
+}) {
   const [editState, editAction, editPending] = useActionState(saveRewardRuleAction, initialState);
   const [toggleState, toggleAction, togglePending] = useActionState(
     toggleRewardRuleAction,
@@ -118,18 +185,12 @@ export function RuleRow({ rule, canEdit }: { rule: Rule; canEdit: boolean }) {
             maxLength={500}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`rule-stamps-${rule.id}`}>Sellos</Label>
-          <Input
-            id={`rule-stamps-${rule.id}`}
-            name="stampsRequired"
-            type="number"
-            min={1}
-            max={100}
-            defaultValue={rule.stampsRequired}
-            required
-          />
-        </div>
+        <StampsField
+          id={`rule-stamps-${rule.id}`}
+          defaultValue={rule.stampsRequired}
+          programStampsRequired={programStampsRequired}
+          readOnly={isSoleActiveRule}
+        />
         <Button type="submit" variant="outline" size="sm" disabled={editPending}>
           {editPending ? "Guardando…" : "Guardar"}
         </Button>

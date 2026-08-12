@@ -56,6 +56,8 @@ export default async function RewardsPage() {
     return { program: program ?? null, rules };
   });
 
+  const activeRulesCount = rules.filter((rule) => rule.isActive).length;
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <PageHeader
@@ -113,10 +115,26 @@ export default async function RewardsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {program ? (
+            <p className="text-xs text-muted-foreground">
+              El número de sellos de una recompensa no puede ser mayor al total del ciclo ({program.stampsRequired}
+              ).
+            </p>
+          ) : null}
           {rules.length > 0 ? (
             <div>
               {rules.map((rule) => (
-                <RuleRow key={rule.id} rule={rule} canEdit={canEdit} />
+                <RuleRow
+                  key={rule.id}
+                  rule={rule}
+                  canEdit={canEdit}
+                  programStampsRequired={program?.stampsRequired ?? rule.stampsRequired}
+                  // Solo-lectura (forzada a igualar al programa) cuando ESTA
+                  // regla es la única activa — ver el diagnóstico de
+                  // /rewards: con 2+ activas sí tiene sentido un costo
+                  // menor por recompensa intermedia.
+                  isSoleActiveRule={rule.isActive && activeRulesCount === 1}
+                />
               ))}
             </div>
           ) : !canEdit || !program ? (
@@ -129,7 +147,15 @@ export default async function RewardsPage() {
               }
             />
           ) : null}
-          {canEdit && program ? <NewRuleForm /> : null}
+          {canEdit && program ? (
+            <NewRuleForm
+              programStampsRequired={program.stampsRequired}
+              // Si todavía no hay ninguna regla activa, la que se está por
+              // crear va a nacer como la única activa (isActive default
+              // true) — mismo criterio que isSoleActiveRule arriba.
+              willBeSoleActiveRule={activeRulesCount === 0}
+            />
+          ) : null}
         </CardContent>
       </Card>
     </div>

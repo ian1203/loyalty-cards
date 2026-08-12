@@ -47,6 +47,11 @@ function ownerGateError(session: TenantSession | null): string | null {
 
 class RuleNotFoundError extends Error {}
 class ProgramMissingError extends Error {}
+class RuleExceedsProgramCycleError extends Error {
+  constructor(public readonly programStampsRequired: number) {
+    super("rule stampsRequired no puede superar el stampsRequired del programa");
+  }
+}
 
 // PROPAGACIÓN A WALLET — comportamiento actual, documentado tras una
 // auditoría explícita (no es un bug, es el diseño de hoy): tanto
@@ -177,6 +182,26 @@ export async function saveRewardRuleForSession(
     await withTenantContext(session.businessId, async (tx) => {
       const actor = await resolveActor(tx, session);
 
+      // Resuelto SIEMPRE, tanto en alta como en edición — necesario para
+      // validar el tope (ver RuleExceedsProgramCycleError abajo). Decisión
+      // de producto: program.stampsRequired es el número que define el
+      // ciclo completo; ninguna recompensa puede pedir más sellos que eso
+      // (el ciclo ya se reinició antes de llegar ahí — ver
+      // evaluateRedemption en packages/core/src/loyalty.ts, que usa
+      // rule.stampsRequired, no el del programa, para decidir el canje).
+      const [program] = await tx
+        .select()
+        .from(loyaltyPrograms)
+        .where(eq(loyaltyPrograms.businessId, session.businessId))
+        .orderBy(asc(loyaltyPrograms.createdAt))
+        .limit(1);
+      if (!program) {
+        throw new ProgramMissingError();
+      }
+      if (stampsRequired > program.stampsRequired) {
+        throw new RuleExceedsProgramCycleError(program.stampsRequired);
+      }
+
       if (ruleId) {
         const rule = await findInTenant(tx, session, rewardRules, ruleId);
         if (!rule) {
@@ -199,16 +224,6 @@ export async function saveRewardRuleForSession(
           metadata: { name, stampsRequired },
         });
         return;
-      }
-
-      const [program] = await tx
-        .select()
-        .from(loyaltyPrograms)
-        .where(eq(loyaltyPrograms.businessId, session.businessId))
-        .orderBy(asc(loyaltyPrograms.createdAt))
-        .limit(1);
-      if (!program) {
-        throw new ProgramMissingError();
       }
 
       const [created] = await tx
@@ -235,6 +250,11 @@ export async function saveRewardRuleForSession(
     }
     if (error instanceof ProgramMissingError) {
       return { error: "Primero configura el programa de sellos." };
+    }
+    if (error instanceof RuleExceedsProgramCycleError) {
+      return {
+        error: `El número de sellos de una recompensa no puede superar los sellos del ciclo completo (${error.programStampsRequired}).`,
+      };
     }
     console.error("saveRewardRuleForSession:", error);
     return { error: "No se pudo guardar la recompensa. Intenta de nuevo." };
