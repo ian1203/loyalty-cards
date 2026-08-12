@@ -99,8 +99,10 @@ export async function searchCustomersForSession(
 
 const MAX_NAME_LENGTH = 120;
 const MAX_EMAIL_LENGTH = 254;
+const MAX_OCCUPATION_LENGTH = 120;
 const PHONE_RE = /^[+0-9][0-9 ()-]{4,19}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 class DuplicateCustomerError extends Error {
   constructor(readonly field: "teléfono" | "email") {
@@ -140,6 +142,26 @@ export async function createCustomerForSession(
     return { error: "El email no tiene un formato válido." };
   }
   const email = rawEmail || null;
+
+  // Campos opcionales de perfil (nullable en schema, sin uso todavía — solo
+  // captura y almacenamiento, ver CLAUDE.md). dateOfBirth guarda la fecha
+  // real (no edad calculada) para poder correr campañas de cumpleaños
+  // después, nunca calculada acá.
+  const rawDateOfBirth = String(formData.get("dateOfBirth") ?? "").trim();
+  let dateOfBirth: string | null = null;
+  if (rawDateOfBirth) {
+    const parsed = new Date(`${rawDateOfBirth}T00:00:00Z`);
+    if (!DATE_RE.test(rawDateOfBirth) || Number.isNaN(parsed.getTime()) || parsed.getTime() > Date.now()) {
+      return { error: "La fecha de nacimiento no es válida." };
+    }
+    dateOfBirth = rawDateOfBirth;
+  }
+
+  const rawOccupation = String(formData.get("occupation") ?? "").trim();
+  if (rawOccupation.length > MAX_OCCUPATION_LENGTH) {
+    return { error: "La ocupación no puede superar 120 caracteres." };
+  }
+  const occupation = rawOccupation || null;
 
   try {
     await withTenantContext(session.businessId, async (tx) => {
@@ -193,6 +215,8 @@ export async function createCustomerForSession(
           phone,
           email,
           walletToken,
+          dateOfBirth,
+          occupation,
         })
         .returning();
 
