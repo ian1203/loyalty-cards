@@ -12,7 +12,7 @@ const ICONS = [QrCodeIcon, WalletIcon, ScanLineIcon, TagIcon, BarChart3Icon, Spa
 // real detrás del producto en vez de una fila de "Step 1/2/3" abstracta.
 export function HowItWorksStamps() {
   return (
-    <section className="mx-auto max-w-5xl px-6 py-20 sm:py-28">
+    <section id="como-funciona" className="scroll-mt-20 mx-auto max-w-5xl px-6 py-20 sm:py-28">
       <RevealOnScroll>
         <h2 className="max-w-lg text-3xl font-bold tracking-tight text-balance sm:text-4xl">Cómo funciona</h2>
       </RevealOnScroll>

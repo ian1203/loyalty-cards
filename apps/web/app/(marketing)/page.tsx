@@ -3,12 +3,10 @@ import { CheckIcon } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { CardPreviewer } from "./components/CardPreviewer";
 import { ComparisonMatrix } from "./components/ComparisonMatrix";
-import { ComponentsBento } from "./components/ComponentsBento";
 import { HowItWorksStamps } from "./components/HowItWorksStamps";
 import { LeadForm } from "./components/LeadForm";
 import { PricingPlans } from "./components/PricingPlans";
-import { ProblemSection } from "./components/ProblemSection";
-import { ProductShowcase } from "./components/ProductShowcase";
+import { ProductAndProblem } from "./components/ProductAndProblem";
 import { RevealOnScroll } from "./components/RevealOnScroll";
 import { TrustBar } from "./components/TrustBar";
 import { WalletCardMockup } from "./components/WalletCardMockup";
@@ -44,11 +42,6 @@ export default function MarketingHomePage() {
       </section>
 
       <TrustBar />
-      <ProductShowcase />
-      <ProblemSection />
-      <HowItWorksStamps />
-      <ComponentsBento />
-      <CardPreviewer />
 
       <section id="precios" className="scroll-mt-20 border-t bg-muted/10">
         <div className="mx-auto max-w-5xl px-6 py-20 sm:py-28">
@@ -82,7 +75,11 @@ export default function MarketingHomePage() {
         </div>
       </section>
 
-      <section className="border-t bg-muted/20">
+      <HowItWorksStamps />
+      <ProductAndProblem />
+      <CardPreviewer />
+
+      <section id="para-quien-es" className="scroll-mt-20 border-t bg-muted/20">
         <div className="mx-auto max-w-5xl px-6 py-20 sm:py-28">
           <RevealOnScroll>
             <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Para quién es</h2>
@@ -97,7 +94,7 @@ export default function MarketingHomePage() {
         </div>
       </section>
 
-      <section className="border-t bg-muted/20">
+      <section id="contacto" className="scroll-mt-20 border-t bg-muted/20">
         <div className="mx-auto max-w-3xl px-6 py-20 text-center sm:py-28">
           <RevealOnScroll>
             <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
