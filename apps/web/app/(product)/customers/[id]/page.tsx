@@ -1,7 +1,15 @@
 import { notFound, redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import QRCode from "qrcode";
-import { customerBalances, customers, loyaltyPrograms, walletPasses, withTenantContext } from "@loyalty/db";
+import {
+  customerBalances,
+  customers,
+  locations,
+  loyaltyPrograms,
+  transactions,
+  walletPasses,
+  withTenantContext,
+} from "@loyalty/db";
 import { Badge } from "../../../../components/ui/badge";
 import { Button } from "../../../../components/ui/button";
 import {
@@ -83,6 +91,28 @@ export default async function CustomerDetailPage({
         ),
       );
 
+    // "Sucursal de alta" no se captura en ningún lado hoy (ni el alta
+    // manual ni /enroll piden sucursal) — en vez de agregar un campo nuevo
+    // o inferir por IP (impreciso y una señal de ubicación que no
+    // necesitamos pedir), se usa la sucursal de su PRIMER sello real
+    // (transactions ya la registra por cada visita) como proxy honesto:
+    // ningún dato nuevo, ninguna captura nueva, ninguna inferencia turbia.
+    const [firstStampLocation] = await tx
+      .select({ locationName: locations.name })
+      .from(transactions)
+      .innerJoin(
+        locations,
+        and(eq(locations.id, transactions.locationId), eq(locations.businessId, session.businessId)),
+      )
+      .where(
+        and(
+          eq(transactions.businessId, session.businessId),
+          eq(transactions.customerId, customer.id),
+        ),
+      )
+      .orderBy(asc(transactions.createdAt))
+      .limit(1);
+
     const balances = await tx
       .select({
         currentStamps: customerBalances.currentStamps,
@@ -107,14 +137,14 @@ export default async function CustomerDetailPage({
         ),
       );
 
-    return { customer, balances, qrSvg, walletPlatforms };
+    return { customer, balances, qrSvg, walletPlatforms, firstStampLocation };
   });
 
   if (!data) {
     notFound();
   }
 
-  const { customer, balances, qrSvg, walletPlatforms } = data;
+  const { customer, balances, qrSvg, walletPlatforms, firstStampLocation } = data;
   const platformLabels = { apple: "Apple Wallet", google: "Google Wallet" } as const;
 
   return (
@@ -189,6 +219,10 @@ export default async function CustomerDetailPage({
               <dd className="font-medium">
                 {customer.createdAt.toLocaleDateString("es-MX", { dateStyle: "long" })}
               </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Sucursal (primer sello)</dt>
+              <dd className="font-medium">{firstStampLocation?.locationName ?? "Sin sellos todavía"}</dd>
             </div>
           </dl>
         </CardContent>
