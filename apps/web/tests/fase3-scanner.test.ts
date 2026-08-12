@@ -229,7 +229,7 @@ describe("Fase 3 — scanner: sellado y canje", () => {
 
     const customerB = await createCustomerForSession(
       sessionOwnerB,
-      form({ fullName: `Cliente B ${suffix}` }),
+      form({ fullName: `Cliente B ${suffix}`, phone: "+52 555 700 0001", dateOfBirth: "1990-01-01" }),
     );
     if (!customerB.success) throw new Error(`setup cliente B: ${customerB.error}`);
     const [customerBRow] = await adminDb
@@ -264,7 +264,7 @@ describe("Fase 3 — scanner: sellado y canje", () => {
     if (!suspProgram.success) throw new Error(`setup programa suspendido: ${suspProgram.error}`);
     const suspCustomer = await createCustomerForSession(
       sessionSuspendedOwner,
-      form({ fullName: "Cliente Susp" }),
+      form({ fullName: "Cliente Susp", phone: "+52 555 700 0002", dateOfBirth: "1990-01-01" }),
     );
     if (!suspCustomer.success) throw new Error(`setup cliente suspendido: ${suspCustomer.error}`);
     const [suspCustomerRow] = await adminDb
@@ -316,8 +316,16 @@ describe("Fase 3 — scanner: sellado y canje", () => {
 
   // Helper: crea un cliente fresco en el negocio A para un test que no
   // quiere compartir balance con otros tests.
+  let freshCustomerACounter = 0;
   async function freshCustomerA(name: string) {
-    const result = await createCustomerForSession(sessionOwnerA, form({ fullName: name }));
+    const result = await createCustomerForSession(
+      sessionOwnerA,
+      form({
+        fullName: name,
+        phone: `+5282${String(freshCustomerACounter++).padStart(6, "0")}`,
+        dateOfBirth: "1990-01-01",
+      }),
+    );
     if (!result.success) throw new Error(`freshCustomerA: ${result.error}`);
     const [row] = await adminDb
       .select()

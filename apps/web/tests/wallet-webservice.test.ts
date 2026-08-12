@@ -75,7 +75,10 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
       sessionA,
       form({ name: "Programa A", stampsRequired: "6", cooldownMinutes: "0", isActive: "on" }),
     );
-    const customerA = await createCustomerForSession(sessionA, form({ fullName: `Cliente A ${suffix}` }));
+    const customerA = await createCustomerForSession(
+      sessionA,
+      form({ fullName: `Cliente A ${suffix}`, phone: "+52 555 810 0001", dateOfBirth: "1990-01-01" }),
+    );
     if (!customerA.success) throw new Error(`setup cliente A: ${customerA.error}`);
     const [customerARow] = await adminDb.select().from(customers).where(eq(customers.businessId, businessAId));
     const [passARow] = await adminDb
@@ -104,7 +107,10 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
       sessionB,
       form({ name: "Programa B", stampsRequired: "6", cooldownMinutes: "0", isActive: "on" }),
     );
-    const customerB = await createCustomerForSession(sessionB, form({ fullName: `Cliente B ${suffix}` }));
+    const customerB = await createCustomerForSession(
+      sessionB,
+      form({ fullName: `Cliente B ${suffix}`, phone: "+52 555 810 0002", dateOfBirth: "1990-01-01" }),
+    );
     if (!customerB.success) throw new Error(`setup cliente B: ${customerB.error}`);
     const [customerBRow] = await adminDb.select().from(customers).where(eq(customers.businessId, businessBId));
     const [passBRow] = await adminDb

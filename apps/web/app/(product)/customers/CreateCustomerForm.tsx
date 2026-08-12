@@ -35,13 +35,14 @@ export function CreateCustomerForm() {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="customer-phone">Teléfono (opcional)</Label>
+          <Label htmlFor="customer-phone">Teléfono</Label>
           <Input
             id="customer-phone"
             name="phone"
             type="tel"
             maxLength={20}
             placeholder="+52 555 111 2233"
+            required
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -55,8 +56,8 @@ export function CreateCustomerForm() {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="customer-birthday">Cumpleaños (opcional)</Label>
-          <Input id="customer-birthday" name="dateOfBirth" type="date" />
+          <Label htmlFor="customer-birthday">Cumpleaños</Label>
+          <Input id="customer-birthday" name="dateOfBirth" type="date" required />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="customer-occupation">Ocupación (opcional)</Label>
@@ -69,8 +70,8 @@ export function CreateCustomerForm() {
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Cumpleaños y ocupación son opcionales — solo los guardamos para conocer mejor a tus
-        clientes, nunca se comparten ni se usan para nada más todavía.
+        Ocupación es opcional — solo la guardamos para conocer mejor a tus clientes, nunca se
+        comparte ni se usa para nada más todavía.
       </p>
       <div>
         <Button type="submit" disabled={pending}>

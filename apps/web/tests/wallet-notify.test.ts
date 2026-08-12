@@ -196,8 +196,16 @@ describe("notifyWalletOfTransaction — hook post-sello, Apple + Google, impls f
     __resetWalletAdaptersForTests();
   });
 
+  let freshCustomerCounter = 0;
   async function freshCustomer(name: string) {
-    const result = await createCustomerForSession(sessionOwner, form({ fullName: name }));
+    const result = await createCustomerForSession(
+      sessionOwner,
+      form({
+        fullName: name,
+        phone: `+5283${String(freshCustomerCounter++).padStart(6, "0")}`,
+        dateOfBirth: "1990-01-01",
+      }),
+    );
     if (!result.success) throw new Error(`freshCustomer: ${result.error}`);
     const [row] = await adminDb
       .select()

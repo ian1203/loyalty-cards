@@ -1,7 +1,15 @@
 import { notFound, redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import QRCode from "qrcode";
-import { customerBalances, customers, loyaltyPrograms, withTenantContext } from "@loyalty/db";
+import {
+  customerBalances,
+  customers,
+  locations,
+  loyaltyPrograms,
+  transactions,
+  walletPasses,
+  withTenantContext,
+} from "@loyalty/db";
 import { Badge } from "../../../../components/ui/badge";
 import { Button } from "../../../../components/ui/button";
 import {
@@ -64,8 +72,46 @@ export default async function CustomerDetailPage({
       fullName: row.fullName,
       phone: row.phone,
       email: row.email,
+      dateOfBirth: row.dateOfBirth,
+      occupation: row.occupation,
       createdAt: row.createdAt,
     };
+
+    // Plataforma(s) de Wallet reales del cliente — no un guess por
+    // user-agent (eso es solo para elegir qué botón mostrar en /enroll),
+    // sino wallet_passes.platform: solo existe una fila ahí una vez que
+    // ensureWalletPass() corrió de verdad para ese cliente+plataforma.
+    const walletPlatforms = await tx
+      .select({ platform: walletPasses.platform })
+      .from(walletPasses)
+      .where(
+        and(
+          eq(walletPasses.businessId, session.businessId),
+          eq(walletPasses.customerId, customer.id),
+        ),
+      );
+
+    // "Sucursal de alta" no se captura en ningún lado hoy (ni el alta
+    // manual ni /enroll piden sucursal) — en vez de agregar un campo nuevo
+    // o inferir por IP (impreciso y una señal de ubicación que no
+    // necesitamos pedir), se usa la sucursal de su PRIMER sello real
+    // (transactions ya la registra por cada visita) como proxy honesto:
+    // ningún dato nuevo, ninguna captura nueva, ninguna inferencia turbia.
+    const [firstStampLocation] = await tx
+      .select({ locationName: locations.name })
+      .from(transactions)
+      .innerJoin(
+        locations,
+        and(eq(locations.id, transactions.locationId), eq(locations.businessId, session.businessId)),
+      )
+      .where(
+        and(
+          eq(transactions.businessId, session.businessId),
+          eq(transactions.customerId, customer.id),
+        ),
+      )
+      .orderBy(asc(transactions.createdAt))
+      .limit(1);
 
     const balances = await tx
       .select({
@@ -91,14 +137,15 @@ export default async function CustomerDetailPage({
         ),
       );
 
-    return { customer, balances, qrSvg };
+    return { customer, balances, qrSvg, walletPlatforms, firstStampLocation };
   });
 
   if (!data) {
     notFound();
   }
 
-  const { customer, balances, qrSvg } = data;
+  const { customer, balances, qrSvg, walletPlatforms, firstStampLocation } = data;
+  const platformLabels = { apple: "Apple Wallet", google: "Google Wallet" } as const;
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -142,10 +189,40 @@ export default async function CustomerDetailPage({
               <dd className="font-medium">{customer.email ?? "—"}</dd>
             </div>
             <div>
+              <dt className="text-muted-foreground">Cumpleaños</dt>
+              <dd className="font-medium">
+                {customer.dateOfBirth
+                  ? new Date(`${customer.dateOfBirth}T00:00:00Z`).toLocaleDateString("es-MX", {
+                      day: "numeric",
+                      month: "long",
+                      timeZone: "UTC",
+                    })
+                  : "—"}
+              </dd>
+            </div>
+            {customer.occupation ? (
+              <div>
+                <dt className="text-muted-foreground">Ocupación</dt>
+                <dd className="font-medium">{customer.occupation}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="text-muted-foreground">Wallet</dt>
+              <dd className="font-medium">
+                {walletPlatforms.length > 0
+                  ? walletPlatforms.map((w) => platformLabels[w.platform]).join(" · ")
+                  : "Sin pase todavía"}
+              </dd>
+            </div>
+            <div>
               <dt className="text-muted-foreground">Alta</dt>
               <dd className="font-medium">
                 {customer.createdAt.toLocaleDateString("es-MX", { dateStyle: "long" })}
               </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Sucursal (primer sello)</dt>
+              <dd className="font-medium">{firstStampLocation?.locationName ?? "Sin sellos todavía"}</dd>
             </div>
           </dl>
         </CardContent>
