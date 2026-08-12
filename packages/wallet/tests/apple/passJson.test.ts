@@ -113,11 +113,33 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     expect(pass.storeCard.backFields).toEqual([{ key: "poweredBy", label: "", value: "Powered by Pragmia" }]);
   });
 
-  it("sin nombre de cliente (null), secondaryFields queda vacío — nunca 'undefined' ni placeholder", () => {
+  it("sin nombre de cliente (null), secondaryFields queda con SOLO el slot de poweredBy/rewardsAvailable — nunca 'undefined' ni vacío del todo", () => {
     const pass = buildPassJson({ ...baseInput, customerFirstName: null }) as {
-      storeCard: { secondaryFields: unknown[] };
+      storeCard: { secondaryFields: Array<{ key: string }> };
     };
-    expect(pass.storeCard.secondaryFields).toEqual([]);
+    expect(pass.storeCard.secondaryFields).toEqual([{ key: "poweredBy", label: "", value: "Powered by Pragmia" }]);
+  });
+
+  it("'Powered by Pragmia' vive en secondaryFields (cara del pase) cuando no hay 2+ recompensas — pedido explícito de que vuelva a verse al frente", () => {
+    const passNoCount = buildPassJson(baseInput) as { storeCard: { secondaryFields: Array<{ key: string; value: string }> } };
+    expect(passNoCount.storeCard.secondaryFields).toContainEqual({
+      key: "poweredBy",
+      label: "",
+      value: "Powered by Pragmia",
+    });
+
+    const passOne = buildPassJson({ ...baseInput, availableRewardsCount: 1 }) as {
+      storeCard: { secondaryFields: Array<{ key: string }> };
+    };
+    expect(passOne.storeCard.secondaryFields.map((f) => f.key)).toContain("poweredBy");
+  });
+
+  it("con 2+ recompensas disponibles, 'Recompensas disponibles' TOMA el slot de poweredBy en secondaryFields (no conviven)", () => {
+    const pass = buildPassJson({ ...baseInput, availableRewardsCount: 2 }) as {
+      storeCard: { secondaryFields: Array<{ key: string }> };
+    };
+    expect(pass.storeCard.secondaryFields.map((f) => f.key)).not.toContain("poweredBy");
+    expect(pass.storeCard.secondaryFields.map((f) => f.key)).toContain("rewardsAvailable");
   });
 
   it("nunca incluye email — PassJsonInput ni siquiera acepta teléfono/email como campo (garantía de tipo)", () => {

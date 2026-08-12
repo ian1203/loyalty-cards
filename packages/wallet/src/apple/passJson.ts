@@ -125,17 +125,20 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
   const primaryFields: Array<{ key: string; label: string; value: string }> = [];
 
   const availableRewardsCount = input.availableRewardsCount ?? 0;
+  // Último slot de secondaryFields: "Recompensas disponibles" (solo con
+  // MÁS DE UNA desbloqueada — con exactamente 1, auxiliaryFields ya
+  // muestra su nombre, ver abajo, así que repetirlo ahí sería la misma
+  // redundancia que ya se evitó en otros campos) cuando aplica; "Powered
+  // by Pragmia" el resto del tiempo — pedido explícito de que la marca
+  // vuelva a verse en la cara del pase (backFields, más abajo, la sigue
+  // teniendo también, sin condición — ese panel no compite por espacio).
   const secondaryFields = [
     ...(input.customerFirstName
       ? [{ key: "customer", label: "Cliente", value: input.customerFirstName }]
       : []),
-    // Solo con MÁS DE UNA recompensa desbloqueada — con exactamente 1,
-    // auxiliaryFields ya muestra su nombre (ver abajo), así que un
-    // "Recompensas disponibles: 1" ahí sería la misma redundancia que ya
-    // se evitó en otros campos de este pase.
-    ...(availableRewardsCount > 1
-      ? [{ key: "rewardsAvailable", label: "Recompensas disponibles", value: String(availableRewardsCount) }]
-      : []),
+    availableRewardsCount > 1
+      ? { key: "rewardsAvailable", label: "Recompensas disponibles", value: String(availableRewardsCount) }
+      : { key: "poweredBy", label: "", value: "Powered by Pragmia" },
   ];
 
   // "Powered by Pragmia" vive SIEMPRE en backFields ahora (ver
