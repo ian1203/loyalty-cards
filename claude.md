@@ -468,10 +468,18 @@ correrlo. Sigue siendo el mismo tenant local de siempre, no un negocio
 hosted nuevo.
 
 ## Fase actual: sin definir todavía
-FASE 2b (`/enroll` público para que el cliente final se dé de alta solo,
-con su propio QR) y reportes/analítica son los candidatos — ninguna de las
-dos está acotada. No las empieces sin pedir el alcance primero — misma
-regla que rigió Fase 0 → 1 → 2 → 3 → 4.
+FASE 2b (`/enroll` público) **ya se construyó y está en producción** —
+esta sección quedó desactualizada, no se editó cuando se hizo (`apps/web/
+app/(marketing)/enroll/[slug]/`, alta pública real con dedupe por
+teléfono). Reportes/analítica sigue siendo el único candidato sin
+empezar. Tampoco documentado aquí todavía (trabajo real ya hecho en
+sesiones no reflejadas en este archivo — ver `git log` como fuente de
+verdad más actual que esta sección): rate limiting distribuido
+(`apps/web/lib/rateLimit.ts`, Upstash), offboarding real de empleados
+(`/team`), captura de cumpleaños/ocupación en el alta, y notificación por
+proximidad (Apple `locations`, Google `merchantLocations`) activa para
+Chilaquikes. No empieces reportes/analítica sin pedir el alcance primero
+— misma regla que rigió Fase 0 → 1 → 2 → 3 → 4.
 
 ## Arquitectura (decidida, no re-litigar)
 - Monorepo, TypeScript-first. Frontend: Next.js. DB: PostgreSQL (Supabase/Neon).
