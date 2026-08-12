@@ -16,7 +16,8 @@ export type RateLimiterName =
   | "scanner_stamp_employee"
   | "scanner_stamp_business"
   | "customer_search_employee"
-  | "apple_webservice_ip";
+  | "apple_webservice_ip"
+  | "enroll_public_ip";
 
 // Límites propuestos, no pedidos por número en el ticket — punto de
 // partida a ajustar con tráfico real (ver plan). Dos ejes independientes
@@ -29,6 +30,11 @@ const LIMITS: Record<RateLimiterName, { windowSeconds: number; max: number }> = 
   scanner_stamp_business: { windowSeconds: 60, max: 200 },
   customer_search_employee: { windowSeconds: 10, max: 10 },
   apple_webservice_ip: { windowSeconds: 60, max: 60 },
+  // Por IP, no por empleado (ruta pública sin sesión) — 5 cada 10 min
+  // alcanza para un humano llenando el form (reintentos por typo
+  // incluidos) sin friccionar altas legítimas, y cierra el volumen real
+  // en la enumeración por teléfono (ver EnrollDuplicatePhoneError).
+  enroll_public_ip: { windowSeconds: 600, max: 5 },
 };
 
 type Logger = { warn: (...args: unknown[]) => void };

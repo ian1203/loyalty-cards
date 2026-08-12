@@ -8,8 +8,18 @@ import {
   EnrollBusinessNotFoundError,
   EnrollDuplicatePhoneError,
   enrollCustomerPublic,
+  getActiveBusinessBySlug,
 } from "@loyalty/db/enroll";
+import { checkRateLimit } from "../../../../lib/rateLimit";
 import { buildWalletArtifactsForNewEnrollment } from "../../../../lib/wallet/publicEnrollWallet";
+import { HONEYPOT_FIELD } from "./honeypot";
+
+// Narrowing, no eliminación total, del timing entre "teléfono duplicado"
+// (rechaza en el INSERT, nunca llega a generar wallet) y "alta nueva"
+// (SÍ genera .pkpass/link real, una llamada de red real a Apple/Google —
+// ver buildWalletArtifactsForNewEnrollment más abajo). Sin este delay el
+// timing por sí solo delataría el caso, incluso con el mismo mensaje.
+const DUPLICATE_RESPONSE_DELAY_MS = 250;
 
 export type EnrollActionState = {
   error?: string;
@@ -60,10 +70,49 @@ function calculateAge(dateOfBirth: Date, now: Date): number {
   return age;
 }
 
+// Misma respuesta, sin importar si el teléfono ya era cliente o no —
+// cierra el oráculo de enumeración de EnrollDuplicatePhoneError (antes
+// devolvía un mensaje que confirmaba explícitamente "ese teléfono ya es
+// cliente"). businessName SÍ se resuelve (getActiveBusinessBySlug: lookup
+// público ya establecido como no-oráculo, vacío tanto si el slug no
+// existe como si el negocio está suspendido) para que el mensaje de
+// confirmación se vea igual de completo que un alta real — sin él, un
+// "success" con businessName vacío sería su propia señal distinguible.
+// Sin wallet links: no hay forma segura de re-emitir el pase de un
+// cliente que YA existe sin verificar que quien llena el form de verdad
+// es su dueño, y EnrollConfirmation (EnrollForm.tsx) ya maneja el caso
+// "sin wallet todavía" con un mensaje neutro ("pide al personal que te
+// ayude") — mismo componente, cero UI nueva.
+async function buildNeutralConfirmation(businessSlug: string): Promise<EnrollActionState> {
+  await new Promise((resolve) => setTimeout(resolve, DUPLICATE_RESPONSE_DELAY_MS));
+  const business = await getActiveBusinessBySlug(businessSlug);
+  return {
+    success: {
+      businessName: business?.name ?? "tu negocio",
+      programName: null,
+      appleWalletDownloadUrl: null,
+      googleSaveLink: null,
+    },
+  };
+}
+
 export async function enrollCustomerForSlug(
   businessSlug: string,
   formData: FormData,
+  clientIp: string,
 ): Promise<EnrollActionState> {
+  // Honeypot: un humano nunca llena este campo (oculto, ver EnrollForm.tsx).
+  // Rechazo en silencio, sin tocar la DB — la MISMA respuesta neutra que
+  // un alta real, para no darle al bot ninguna señal de que fue detectado.
+  if (String(formData.get(HONEYPOT_FIELD) ?? "").trim() !== "") {
+    return buildNeutralConfirmation(businessSlug);
+  }
+
+  const rate = await checkRateLimit("enroll_public_ip", clientIp);
+  if (!rate.allowed) {
+    return { error: `Demasiados intentos. Espera ${Math.ceil(rate.retryAfterSeconds / 60)} min e intenta de nuevo.` };
+  }
+
   const firstName = String(formData.get("firstName") ?? "").trim();
   if (!firstName || firstName.length > MAX_NAME_LENGTH) {
     return { error: "Ingresa tu nombre." };
@@ -132,9 +181,7 @@ export async function enrollCustomerForSlug(
     });
   } catch (error) {
     if (error instanceof EnrollDuplicatePhoneError) {
-      return {
-        error: "Ya existe un registro con ese teléfono en este negocio. Si es tuyo, pide tu tarjeta al personal.",
-      };
+      return buildNeutralConfirmation(businessSlug);
     }
     if (error instanceof EnrollBusinessNotFoundError) {
       return { error: "No pudimos encontrar este negocio. Verifica el enlace." };
