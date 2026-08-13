@@ -8,7 +8,7 @@ import { TrendingUpIcon, UsersIcon } from "lucide-react";
 // negocio del hero (una cafetería), no una captura de un negocio real.
 export function DashboardGlance() {
   return (
-    <div className="w-full max-w-sm overflow-hidden rounded-2xl border bg-card shadow-token-lg">
+    <div className="w-full max-w-sm overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-token-lg">
       <div className="flex items-center gap-1.5 border-b bg-muted/50 px-4 py-2.5">
         <span className="size-2 rounded-full bg-destructive/40" aria-hidden="true" />
         <span className="size-2 rounded-full bg-warning/50" aria-hidden="true" />
@@ -30,7 +30,7 @@ export function DashboardGlance() {
               Visitas, esta semana
             </p>
             <p className="font-display text-xl font-bold leading-none">
-              342 <span className="text-xs font-medium text-success">+18%</span>
+              342 <span className="text-sm font-bold text-success">+18%</span>
             </p>
           </div>
         </div>
