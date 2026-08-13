@@ -6,7 +6,7 @@
 // llama. Los tests de Paso 5 también, con sesiones reales producidas por
 // getVerifiedSession().
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, or, sql } from "drizzle-orm";
 import {
   customerBalances,
   customers,
@@ -22,7 +22,49 @@ export type CustomerActionState = {
   success?: string;
 };
 
-const SEARCH_LIMIT = 50;
+// Paginación real (LIMIT/OFFSET) — suficiente para el volumen actual y
+// esperado a corto plazo, sin keyset/cursor (no se necesita esa
+// complejidad todavía). El tamaño de página es elegido por el dueño en la
+// UI y vive solo en el query string (?pageSize=), nunca en DB: no es una
+// preferencia crítica que valga la pena persistir por usuario.
+export const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+export const DEFAULT_PAGE_SIZE: PageSize = 25;
+
+export function parsePageSize(raw: string | undefined): PageSize {
+  const n = Number(raw);
+  return (PAGE_SIZE_OPTIONS as readonly number[]).includes(n) ? (n as PageSize) : DEFAULT_PAGE_SIZE;
+}
+
+export function parsePage(raw: string | undefined): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 ? n : 1;
+}
+
+// pageSize acá es un number llano, no el literal PageSize — la UI/rutas
+// solo pueden pedir 25/50/100 (validado en parsePageSize, la frontera real
+// con input no confiable), pero estas funciones internas no tienen por qué
+// heredar esa restricción (útil también para tests con páginas chicas).
+export type PaginationParams = { page: number; pageSize: number };
+
+// WHERE compartido entre searchCustomers (filas) y countCustomers (total) —
+// un solo lugar para la semántica de "match exacto, tenant-scoped", para
+// que ambas queries respondan sobre exactamente el mismo conjunto
+// filtrado (el total de páginas debe salir de los resultados de la
+// búsqueda, no del total sin filtrar del negocio).
+function customerSearchWhere(session: TenantSession, q: string) {
+  const qLower = q.toLowerCase();
+  return and(
+    eq(customers.businessId, session.businessId),
+    q
+      ? or(
+          eq(sql`lower(${customers.fullName})`, qLower),
+          eq(sql`lower(${customers.phone})`, qLower),
+          eq(sql`lower(${customers.email})`, qLower),
+        )
+      : undefined,
+  );
+}
 
 // Búsqueda del directorio — el MISMO código que usa la página (y el test de
 // no-fuga del Paso 5). `q` es input del cliente y se usa SOLO como filtro
@@ -36,13 +78,18 @@ const SEARCH_LIMIT = 50;
 // Proyección explícita SIN wallet_token (hallazgo de la revisión de
 // seguridad): la UI no lo necesita y así un refactor futuro que pase estas
 // filas a un Client Component no puede exponer el token opaco por accidente.
+//
+// pagination es opcional (default página 1 / DEFAULT_PAGE_SIZE) para no
+// romper los callers existentes (tests de Fase 2 que llaman con 3
+// argumentos posicionales).
 export async function searchCustomers(
   tx: TenantTransaction,
   session: TenantSession,
   rawQ: string,
+  pagination: PaginationParams = { page: 1, pageSize: DEFAULT_PAGE_SIZE },
 ) {
   const q = rawQ.trim().slice(0, 100);
-  const qLower = q.toLowerCase();
+  const offset = (pagination.page - 1) * pagination.pageSize;
 
   return tx
     .select({
@@ -54,33 +101,45 @@ export async function searchCustomers(
       createdAt: customers.createdAt,
     })
     .from(customers)
-    .where(
-      and(
-        eq(customers.businessId, session.businessId),
-        q
-          ? or(
-              eq(sql`lower(${customers.fullName})`, qLower),
-              eq(sql`lower(${customers.phone})`, qLower),
-              eq(sql`lower(${customers.email})`, qLower),
-            )
-          : undefined,
-      ),
-    )
+    .where(customerSearchWhere(session, q))
     .orderBy(desc(customers.createdAt))
-    .limit(SEARCH_LIMIT);
+    .limit(pagination.pageSize)
+    .offset(offset);
+}
+
+// COUNT tenant-scoped sobre el MISMO filtro que searchCustomers — nunca se
+// trae todo el directorio al cliente solo para contarlo.
+export async function countCustomers(
+  tx: TenantTransaction,
+  session: TenantSession,
+  rawQ: string,
+): Promise<number> {
+  const q = rawQ.trim().slice(0, 100);
+  const [row] = await tx
+    .select({ value: count() })
+    .from(customers)
+    .where(customerSearchWhere(session, q));
+  return row.value;
 }
 
 export type CustomerSearchResult =
-  | { ok: true; rows: Awaited<ReturnType<typeof searchCustomers>> }
+  | {
+      ok: true;
+      rows: Awaited<ReturnType<typeof searchCustomers>>;
+      total: number;
+      page: number;
+      pageSize: number;
+    }
   | { ok: false; error: string; code: "rate_limited" };
 
 // Wrapper que agrega el rate limit ANTES de pagar el costo de una conexión
 // Postgres (checkRateLimit es una llamada de red a Upstash, más barata que
-// abrir una tx). searchCustomers en sí queda sin tocar — los tests de
-// Fase 2 la llaman directo con un tx ya abierto.
+// abrir una tx). searchCustomers/countCustomers en sí quedan sin tocar —
+// los tests de Fase 2 las llaman directo con un tx ya abierto.
 export async function searchCustomersForSession(
   session: TenantSession,
   rawQ: string,
+  pagination: PaginationParams = { page: 1, pageSize: DEFAULT_PAGE_SIZE },
 ): Promise<CustomerSearchResult> {
   const rate = await checkRateLimit("customer_search_employee", session.authUserId);
   if (!rate.allowed) {
@@ -91,10 +150,15 @@ export async function searchCustomersForSession(
     };
   }
 
-  const rows = await withTenantContext(session.businessId, (tx) =>
-    searchCustomers(tx, session, rawQ),
-  );
-  return { ok: true, rows };
+  // Secuencial, NUNCA Promise.all — un tx es una sola conexión Postgres,
+  // no soporta queries concurrentes (regla real de CLAUDE.md, ver
+  // dashboard/logic.ts).
+  const { rows, total } = await withTenantContext(session.businessId, async (tx) => {
+    const rows = await searchCustomers(tx, session, rawQ, pagination);
+    const total = await countCustomers(tx, session, rawQ);
+    return { rows, total };
+  });
+  return { ok: true, rows, total, page: pagination.page, pageSize: pagination.pageSize };
 }
 
 const MAX_NAME_LENGTH = 120;
