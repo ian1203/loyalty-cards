@@ -2,7 +2,16 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { AlertCircleIcon, LoaderCircleIcon } from "lucide-react";
+import { Alert, AlertDescription } from "../../components/ui/alert";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Logo } from "../../components/Logo";
 import { createClient } from "../../lib/supabase/browser";
+
+const MIN_PASSWORD_LENGTH = 6;
 
 // A donde cae el dueño después de hacer clic en el link de invitación.
 // Supabase redirige ahí con la sesión temporal codificada en el FRAGMENTO de
@@ -71,27 +80,67 @@ export default function SetPasswordPage() {
     router.refresh();
   }
 
+  // Link inválido/expirado: nada de formulario, ese estado nunca se puede
+  // enviar (sessionReady jamás llega a true) — mejor un mensaje claro que un
+  // form completo con el botón deshabilitado sin explicación.
+  const linkInvalid = !sessionReady && error !== null;
+
   return (
-    <main>
-      <h1>Elige tu contraseña</h1>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="password">Contraseña</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            minLength={6}
-            value={password}
-            onChange={(event) => setPassword(event.currentTarget.value)}
-            required
-          />
-        </div>
-        <button type="submit" disabled={pending || !sessionReady}>
-          {pending ? "Guardando…" : "Guardar y entrar"}
-        </button>
-        {error ? <p role="alert">{error}</p> : null}
-      </form>
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-muted/50 to-background px-4 py-12">
+      <div className="flex w-full max-w-sm flex-col items-center gap-8">
+        <Logo />
+        <Card className="w-full shadow-token-md">
+          <CardHeader>
+            <CardTitle>Elige tu contraseña</CardTitle>
+            <CardDescription>
+              {linkInvalid
+                ? "No pudimos verificar tu invitación."
+                : "Último paso para activar tu cuenta."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {linkInvalid ? (
+              <Alert variant="destructive">
+                <AlertCircleIcon />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : !sessionReady ? (
+              <div className="flex flex-col items-center gap-2 py-6 text-sm text-muted-foreground">
+                <LoaderCircleIcon className="size-5 animate-spin" />
+                Verificando tu invitación…
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="password">Contraseña</Label>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={MIN_PASSWORD_LENGTH}
+                    value={password}
+                    onChange={(event) => setPassword(event.currentTarget.value)}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Mínimo {MIN_PASSWORD_LENGTH} caracteres.
+                  </p>
+                </div>
+                {error ? (
+                  <Alert variant="destructive">
+                    <AlertCircleIcon />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                ) : null}
+                <Button type="submit" disabled={pending} className="mt-1">
+                  {pending ? "Guardando…" : "Guardar y entrar"}
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </main>
   );
 }
