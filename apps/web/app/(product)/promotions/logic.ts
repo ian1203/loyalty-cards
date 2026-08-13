@@ -8,24 +8,14 @@ import { businesses, promoBroadcasts, withTenantContext } from "@loyalty/db";
 import { resolveActor, writeAuditLog, type TenantSession } from "../../../lib/tenant";
 import { notifyWalletOfPromoBroadcast } from "../../../lib/wallet/promoNotify";
 import { scheduleAfterResponse } from "../../../lib/wallet/scheduleAfterResponse";
+import { DAILY_LIMIT, MAX_PROMO_MESSAGE_LENGTH, MONTHLY_LIMIT_BY_PLAN } from "./constants";
 
 export type PromotionsActionState = {
   error?: string;
   success?: string;
 };
 
-export const MAX_PROMO_MESSAGE_LENGTH = 180;
-
-// Límites por plan (ver tabla de precios, fila "Notificaciones de
-// Wallet") — propuestos, no un número documentado por Apple/Google,
-// ajustable con uso real igual que el resto de límites de la plataforma.
-// "basico" no aparece: se bloquea por completo antes de llegar a esta
-// tabla (ver planGateError).
-export const DAILY_LIMIT = 1;
-export const MONTHLY_LIMIT_BY_PLAN: Record<"negocio" | "intelligence", number> = {
-  negocio: 5,
-  intelligence: 10,
-};
+export { DAILY_LIMIT, MAX_PROMO_MESSAGE_LENGTH, MONTHLY_LIMIT_BY_PLAN } from "./constants";
 
 // Envío de broadcast: SOLO el dueño (mismo criterio/copia local que
 // rewards/logic.ts y team/logic.ts — "cada feature mantiene su propia

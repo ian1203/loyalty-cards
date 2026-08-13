@@ -6,7 +6,8 @@ import { Label } from "../../../components/ui/label";
 import { Textarea } from "../../../components/ui/textarea";
 import { useActionToast } from "../../../lib/useActionToast";
 import { sendPromoBroadcastAction } from "./actions";
-import { MAX_PROMO_MESSAGE_LENGTH, type PromotionsActionState } from "./logic";
+import { MAX_PROMO_MESSAGE_LENGTH } from "./constants";
+import type { PromotionsActionState } from "./logic";
 
 const initialState: PromotionsActionState = {};
 
