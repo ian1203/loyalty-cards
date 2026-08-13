@@ -12,16 +12,26 @@ const ICONS = [CreditCardIcon, TagsIcon, UserRoundSearchIcon, TrendingUpIcon, Da
 // y la prueba visual del producto ahora comparten un solo fondo/padding en
 // vez de pagar dos veces py-20/28. Sigue siendo el ÚNICO bloque navy
 // full-bleed de toda la página (regla que traía ProblemSection original).
+//
+// max-w-7xl (no max-w-5xl como el resto de la página, a propósito): el
+// celular (~300px) y la tarjeta de dashboard (~380px) necesitan ~700px
+// lado a lado SIN solaparse — con max-w-5xl (1024px) el contenido
+// disponible en el viewport más angosto donde arranca el layout de 2
+// columnas (justo 1024px) es de solo 976px, insuficiente para eso más una
+// columna de texto legible (verificado con Playwright: a 1024px con
+// max-w-5xl no hay forma de que ambas piezas quepan completas sin
+// recortarse una a la otra). Ver la sección "< xl" abajo para el rango
+// donde tampoco alcanza ni con más ancho.
 export function ProductAndProblem() {
   return (
     <section id="producto" className="scroll-mt-20 bg-primary py-20 text-primary-foreground sm:py-28">
-      <div className="mx-auto max-w-5xl px-6">
-        <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[0.85fr_1.2fr] lg:gap-16">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="grid grid-cols-1 items-center gap-12 xl:grid-cols-[1fr_1.5fr] xl:gap-16">
           <RevealOnScroll>
             <h2 className="max-w-lg text-3xl font-bold tracking-tight text-balance sm:text-4xl">
               La tarjeta física ya no alcanza.
             </h2>
-            <div className="mt-10 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="mt-10 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-1">
               {PROBLEM_POINTS.map((point, i) => {
                 const Icon = ICONS[i % ICONS.length];
                 return (
@@ -42,18 +52,32 @@ export function ProductAndProblem() {
               Tu cliente guarda la tarjeta en su teléfono y ve su progreso en tiempo real. Tú ves, del otro lado,
               quién regresa y cuándo.
             </p>
-            <div className="relative mt-8 flex items-center justify-center py-4">
-              <div className="absolute right-0 top-6 hidden -rotate-3 opacity-95 sm:right-4 sm:block lg:right-0">
-                <DashboardGlance />
-              </div>
-              <div className="relative z-10 -translate-x-2 rotate-[-2deg] sm:-translate-x-6 lg:-translate-x-16">
+
+            {/* < xl: mismo criterio que mobile — apilados, flujo normal,
+                cero overlap por construcción (nunca hay espacio suficiente
+                para mostrar ambos lado a lado sin solape antes de xl). */}
+            <div className="mt-8 flex flex-col items-center gap-6 xl:hidden">
+              <PhoneFrame>
+                <WalletCardMockup compact />
+              </PhoneFrame>
+              <DashboardGlance />
+            </div>
+
+            {/* >= xl: lado a lado en flujo normal (flex + gap), NO
+                absolute+overlap — cero riesgo de que uno tape al otro
+                porque ya no dependen de que el offset numérico alcance
+                justo la separación correcta. La ligera rotación de cada
+                uno es solo visual (transform no mueve la caja en el
+                flujo). */}
+            <div className="mt-8 hidden items-center justify-center gap-8 xl:flex">
+              <div className="relative z-10 rotate-[-2deg]">
                 <PhoneFrame>
                   <WalletCardMockup compact />
                 </PhoneFrame>
               </div>
-            </div>
-            <div className="mt-6 flex justify-center sm:hidden">
-              <DashboardGlance />
+              <div className="-rotate-3 opacity-95">
+                <DashboardGlance />
+              </div>
             </div>
           </RevealOnScroll>
         </div>
