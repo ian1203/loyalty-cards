@@ -177,9 +177,9 @@ export const COMPARISON_MATRIX: ComparisonRow[] = [
   // "Apple/Google Wallet" se quitó a propósito: ya se comunica arriba en la
   // página como parte esencial del servicio (TrustBar, hero) y ningún plan
   // lo excluye — la fila era redundante.
+  // Orden dentro del grupo booleano: primero las filas donde Básico
+  // también tiene Sí (agrupadas), después las filas donde Básico tiene No.
   { feature: "Puntos o sellos", basico: "Sí", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
-  { feature: "Notificaciones de Wallet", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
-  { feature: "Avisos por ubicación", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
   {
     feature: "Métricas básicas",
     basico: "Sí",
@@ -200,6 +200,8 @@ export const COMPARISON_MATRIX: ComparisonRow[] = [
     kind: "boolean",
     details: ["Clientes nuevos vs recurrentes", "Frecuencia y tiempo entre visitas", "Tasa de redención"],
   },
+  { feature: "Notificaciones de Wallet", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
+  { feature: "Avisos por ubicación", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
 ];
 
 export const COMPARISON_FOOTNOTE = "*Sujeto a política de uso razonable.";
