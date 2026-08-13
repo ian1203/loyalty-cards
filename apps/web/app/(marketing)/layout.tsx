@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "../../components/Logo";
 import { BRAND, CONTACT, SEO } from "../../lib/marketing/content";
+import { WhatsAppFloatButton } from "./components/WhatsAppFloatButton";
 
 // Layout de la superficie PÚBLICA de marketing — separado a propósito del
 // resto del producto (dashboard/admin/scanner/etc, fuera de este route
@@ -35,10 +36,12 @@ export const metadata: Metadata = {
 // en mobile el usuario sigue navegando por scroll, igual que antes. "Aviso
 // de privacidad" sigue sin estar en el header (se sentía invasivo arriba),
 // accesible desde el footer.
+// Orden idéntico al de las secciones reales en page.tsx (top a bottom):
+// precios, cómo funciona, producto, simulación, para quién es, contacto.
 const NAV_LINKS = [
+  { href: "/#precios", label: "Precios" },
   { href: "/#como-funciona", label: "Cómo funciona" },
   { href: "/#producto", label: "Producto" },
-  { href: "/#precios", label: "Precios" },
   { href: "/#simulacion", label: "Simulación" },
   { href: "/#para-quien-es", label: "Para quién es" },
   { href: "/#contacto", label: "Contacto" },
@@ -97,6 +100,8 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </footer>
+
+      <WhatsAppFloatButton />
     </div>
   );
 }

@@ -38,18 +38,17 @@ export type HowItWorksStep = {
   comingSoon?: boolean;
 };
 
+// Antes tenía un 6to paso ("Recomendaciones", comingSoon) — se quitó
+// entero (no solo el badge): Pragmia todavía no recomienda ninguna acción,
+// y el visitante de "Cómo funciona" quiere ver lo que el producto hace
+// hoy, no el roadmap (mismo criterio que la auditoría de la tabla de
+// comparación).
 export const HOW_IT_WORKS: HowItWorksStep[] = [
   { step: 1, title: "Alta", description: "El cliente se registra: escanea un QR o abre un enlace." },
   { step: 2, title: "Wallet", description: "Agrega su tarjeta a Apple Wallet o Google Wallet." },
   { step: 3, title: "Visitas", description: "Acumula beneficios (sellos por visita; puntos según mecánica)." },
   { step: 4, title: "Promociones", description: "Recibe promociones directamente en su tarjeta." },
   { step: 5, title: "Medición", description: "El negocio mide altas, visitas, recompensas y redenciones." },
-  {
-    step: 6,
-    title: "Recomendaciones",
-    description: "Pragmia recomienda la siguiente acción.",
-    comingSoon: true,
-  },
 ];
 
 export type PromoType = { name: string; description: string; comingSoon?: boolean };
@@ -137,6 +136,11 @@ export type ComparisonRow = {
   // check/x — nunca uses "boolean" con un valor que no sea exactamente
   // "Sí" o "No" (ej. "Básica"/"Completa" es "value", no "boolean").
   kind: "value" | "boolean";
+  // Sub-lista opcional que ComparisonMatrix despliega bajo el nombre de la
+  // fila (patrón <details> nativo, igual que el toggle de la tabla
+  // completa) — agrupa varias métricas puntuales bajo una sola fila en vez
+  // de una fila por métrica.
+  details?: string[];
 };
 
 // Auditado 2026-08-11 contra el código real (no contra el plan original) —
@@ -170,26 +174,32 @@ export const COMPARISON_MATRIX: ComparisonRow[] = [
     kind: "value",
   },
   // --- Características (Sí/No) ---
-  { feature: "Apple/Google Wallet", basico: "Sí", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
+  // "Apple/Google Wallet" se quitó a propósito: ya se comunica arriba en la
+  // página como parte esencial del servicio (TrustBar, hero) y ningún plan
+  // lo excluye — la fila era redundante.
   { feature: "Puntos o sellos", basico: "Sí", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
   { feature: "Notificaciones de Wallet", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
   { feature: "Avisos por ubicación", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
-  { feature: "Métricas generales", basico: "Sí", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
   {
-    feature: "Clientes nuevos vs recurrentes",
+    feature: "Métricas básicas",
+    basico: "Sí",
+    negocio: "Sí",
+    intelligence: "Sí",
+    kind: "boolean",
+    details: [
+      "Clientes totales registrados",
+      "Sellos/visitas totales registradas",
+      "Recompensas canjeadas (total)",
+    ],
+  },
+  {
+    feature: "Métricas avanzadas",
     basico: "No",
     negocio: "Sí",
     intelligence: "Sí",
     kind: "boolean",
+    details: ["Clientes nuevos vs recurrentes", "Frecuencia y tiempo entre visitas", "Tasa de redención"],
   },
-  {
-    feature: "Frecuencia y tiempo entre visitas",
-    basico: "No",
-    negocio: "Sí",
-    intelligence: "Sí",
-    kind: "boolean",
-  },
-  { feature: "Tasa de redención", basico: "No", negocio: "Sí", intelligence: "Sí", kind: "boolean" },
 ];
 
 export const COMPARISON_FOOTNOTE = "*Sujeto a política de uso razonable.";
