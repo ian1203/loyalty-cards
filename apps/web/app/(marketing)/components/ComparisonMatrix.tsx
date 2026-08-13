@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { COMPARISON_FOOTNOTE, COMPARISON_MATRIX } from "../../../lib/marketing/content";
+import { COMPARISON_FOOTNOTE, COMPARISON_MATRIX, type ComparisonRow } from "../../../lib/marketing/content";
 
 // Ícono en vez de "Sí"/"No" (estándar en tablas de pricing, más escaneable).
 // "No" en destructive/rojo a propósito (pedido explícito): resalta más a
@@ -25,6 +25,35 @@ function BooleanCell({ value }: { value: string }) {
       )}
       <span className="sr-only">{value}</span>
     </span>
+  );
+}
+
+// Nombre de la fila, con un desglose opcional (row.details) — mismo patrón
+// <details> nativo que ya usa el toggle de la tabla completa (cero JS,
+// cero dependencia nueva), anidado, con un group con nombre para no
+// interferir con el group-open del toggle exterior.
+function FeatureCell({ row }: { row: ComparisonRow }) {
+  if (!row.details?.length) {
+    return <TableCell className="font-medium">{row.feature}</TableCell>;
+  }
+
+  return (
+    <TableCell className="font-medium">
+      <details className="group/row">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 marker:content-none hover:text-primary">
+          {row.feature}
+          <ChevronDownIcon
+            className="size-3.5 text-muted-foreground transition-transform group-open/row:rotate-180"
+            aria-hidden="true"
+          />
+        </summary>
+        <ul className="mt-1.5 flex flex-col gap-0.5 text-xs font-normal text-muted-foreground">
+          {row.details.map((detail) => (
+            <li key={detail}>· {detail}</li>
+          ))}
+        </ul>
+      </details>
+    </TableCell>
   );
 }
 
@@ -68,7 +97,7 @@ export function ComparisonMatrix() {
               const isFirstBoolean = row.kind === "boolean" && COMPARISON_MATRIX[i - 1]?.kind !== "boolean";
               return (
                 <TableRow key={row.feature} className={isFirstBoolean ? "border-t-2 border-t-border" : undefined}>
-                  <TableCell className="font-medium">{row.feature}</TableCell>
+                  <FeatureCell row={row} />
                   <TableCell>{row.kind === "boolean" ? <BooleanCell value={row.basico} /> : row.basico}</TableCell>
                   <TableCell>{row.kind === "boolean" ? <BooleanCell value={row.negocio} /> : row.negocio}</TableCell>
                   <TableCell>

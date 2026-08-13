@@ -16,7 +16,7 @@ export function ProductAndProblem() {
   return (
     <section id="producto" className="scroll-mt-20 bg-primary py-20 text-primary-foreground sm:py-28">
       <div className="mx-auto max-w-5xl px-6">
-        <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[1fr_1.05fr] lg:gap-16">
+        <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[0.85fr_1.2fr] lg:gap-16">
           <RevealOnScroll>
             <h2 className="max-w-lg text-3xl font-bold tracking-tight text-balance sm:text-4xl">
               La tarjeta física ya no alcanza.
@@ -46,7 +46,7 @@ export function ProductAndProblem() {
               <div className="absolute right-0 top-6 hidden -rotate-3 opacity-95 sm:right-4 sm:block lg:right-0">
                 <DashboardGlance />
               </div>
-              <div className="relative z-10 -translate-x-2 rotate-[-2deg] sm:-translate-x-6">
+              <div className="relative z-10 -translate-x-2 rotate-[-2deg] sm:-translate-x-6 lg:-translate-x-16">
                 <PhoneFrame>
                   <WalletCardMockup compact />
                 </PhoneFrame>
