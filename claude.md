@@ -170,18 +170,74 @@ Google nunca quedaba registrado en `wallet_passes`, así que
 sello (corregido: `googleSaveLink.ts` ahora llama `ensureWalletPass` antes
 de armar el link). Cero hallazgos críticos/altos en ambas pasadas.
 
-**Residual de Fase 4** (no es código, son trámites externos — ver
-`docs/WALLET-SETUP.md` para el detalle completo): Apple Developer Program
-(de pago, ~$99/año, Pass Type ID + certificado de firma + llave APNs
-`.p8`), cuenta de servicio de Google Cloud + Wallet API + issuer ID
-(gratis, alcanza para modo demo `[TEST ONLY]`), y aprobación de
-publicación de Google (gratis, con revisión) para producción real sin esa
-marca. Sin esas credenciales, todo corre con las impls fake — válido
-estructuralmente, pero un iPhone real rechaza el certificado no confiable
-y Google Wallet mantiene la marca de prueba. Verificación en dispositivo
-real (instalar, sellar y ver la actualización en vivo) queda pendiente
-hasta que existan esas credenciales — ver la sección "Verificación
-pendiente" de `docs/WALLET-SETUP.md`.
+**Residual de Fase 4 — YA RESUELTO, credenciales reales en producción**
+(esta sección decía "pendiente"; quedó desactualizada sin que nadie la
+corrigiera al pasar — ver `docs/WALLET-SETUP.md` para el detalle
+completo y el checklist original). Apple Developer Program (Pass Type ID
++ certificado de firma + llave APNs `.p8`) y la cuenta de servicio de
+Google Cloud + Wallet API + issuer ID están cargados en el entorno de
+producción (Vercel) desde antes de esta sesión — ambas ramas reales
+activas, ya no fake. Google sigue en modo `[TEST ONLY]` (la aprobación de
+publicación, gratis pero con revisión de Google, no se ha pedido
+todavía — no bloquea nada del código, solo esa marca visual).
+Verificación en dispositivo real: **confirmada** con evidencia real, no
+solo con las impls fake — instalación de un `.pkpass` real en un iPhone,
+push automático tras un sello real (sin reinstalar, protocolo
+`GET /registrations` → `GET /passes/{serial}` real, ~6 min de latencia),
+y actualización de un Loyalty Object de Google confirmada con `GET` real
+contra la API tras un sello real. Genuinamente pendiente todavía (ver
+"Verificación pendiente" en `docs/WALLET-SETUP.md`): desregistro de
+dispositivo (borrar el pase en un iPhone y confirmar que
+`device_registrations` pierde la fila), instalación en un Android real
+(todo lo de Google se verificó por API directa, nunca en un dispositivo
+Android físico), y un cross-check visual de aislamiento entre tenants con
+credenciales reales (ya cubierto por tests automatizados con las impls
+fake; falta solo la confirmación visual).
+
+## Notificación por proximidad (geofence) — Apple + Google, en producción (no numerada)
+
+Primera activación real de lo que en Fase 4 era solo scaffolding: nueva
+columna `locations.latitude`/`longitude` (nullable, migración `0022`),
+backfill de las coordenadas reales de las 3 sucursales de CHILAQUIKES
+(Local + 2 foodtrucks). Apple: `passGeneration.ts` arma el array
+`locations` del pase con `relevantText` DINÁMICO (`buildRelevantText`,
+usa el nombre de la próxima recompensa + nombre del cliente reales del
+snapshot en el momento de generar el pase, nunca texto fijo) + un
+`iconPng` real derivado del logo del negocio. Google: `googleSaveLink.ts`
+pasa `merchantLocations` — como es un campo de la Loyalty CLASS (no del
+objeto), cada cambio exige un `classId` nuevo (mismo criterio de siempre:
+Google cachea agresivamente por classId, nunca un PATCH in-place de la
+clase vieja — ver `CURRENT_GOOGLE_LOYALTY_CLASS_VERSION` en
+`packages/wallet/src/google/loyaltyPayload.ts` y los scripts
+`packages/wallet/scripts/migrate-google-class-v*.ts`, uno por cada bump,
+cada uno con el snapshot de clientes reales que migró).
+
+**Reducido a solo la sede fija** (`_v7`, tras `_v6` que activó las 3):
+sin control server-side de frecuencia — ni Apple ni Google avisan a
+nuestro servidor cuando el geofence dispara; la evaluación es 100% local
+del dispositivo contra los datos ya sincronizados del pase, así que no
+hay ningún punto donde contar u observar el trigger para limitarlo (un
+"máximo 1 notificación/día" pedido explícitamente **no se implementó** —
+técnicamente no hay dónde engancharlo). Con el aviso persistiendo
+mientras el dispositivo esté dentro del radio, el negocio decidió que
+solo tiene sentido para el local fijo, no las 2 sucursales móviles
+(foodtrucks) — sus filas en `locations` conservan `latitude`/`longitude`
+en `NULL`, no se borraron.
+
+Separado de esto: `buildNotificationMessage`/`addMessage` (Google) sigue
+siendo scaffolding sin caller real todavía (ver el comentario en
+`packages/wallet/src/google/loyaltyPayload.ts`) — es la notificación PUSH
+disparada por el SERVIDOR tras un sello (mensaje de progreso), no el
+aviso nativo por ubicación que ya está activo. No confundir los dos.
+
+**Staff real por sucursal**: `apps/web/scripts/create-chilaquikes-employees.ts`
+(script de un solo uso, corrido contra producción) dio de alta las 3
+cuentas de staff reales de CHILAQUIKES, una por sucursal
+(`colon@chilaquikes.pragmia-data.com`, `torrente@…`, `calasanz@…`), cada
+una con `employees.primary_location_id` fijo a su sucursal — mismo patrón
+de contraseña generada localmente (nunca en texto plano en un log
+persistente) e idempotencia (un email que ya existe en `auth.users` no se
+toca) que los scripts de migración de Google.
 
 ## Superficie pública de marketing (paralela a las fases, no numerada)
 
@@ -281,6 +337,9 @@ profundidad deliberada, no un cambio de mecanismo. `AppShell.tsx`
 (título + descripción + acciones + breadcrumb `back`, reemplaza los
 links sueltos "← Dashboard" de antes). `/login` reconstruido con el
 sistema de diseño (mismo `signInWithPassword`, cero cambio de lógica).
+`/team` (offboarding de empleados, ver esa sección más abajo) se sumó
+después a este mismo route group y a `NAV_ITEMS` — el resto del párrafo
+de arriba describe el shell tal como quedó en el rediseño original.
 
 **Dashboard como overview real**: `apps/web/app/(product)/dashboard/logic.ts`
 trae las queries tenant-scoped nuevas (clientes activos/inactivos,
@@ -310,17 +369,51 @@ implementación.
 **Landing pública elevada** (`apps/web/app/(marketing)/`, sigue sin
 sesión/RLS/datos de tenant, sigue ○ Static en `next build` — ver regla de
 caché arriba, no cambió): además del hero y tokens de marca, la home
-ahora rompe la monotonía de "reja de tarjetas blancas" con secciones de
-layout variado: `ProductShowcase.tsx` (teléfono CSS + `WalletCardMockup`
-+ `DashboardGlance.tsx`, un vistazo estilizado SVG/CSS del dashboard real,
-NO una captura ni un fake de divs), `ProblemSection.tsx` (único bloque
-navy full-bleed de toda la página, rompe el fondo papel a propósito),
-`HowItWorksStamps.tsx` (línea de tiempo con el motivo real de sellos en
-vez de tarjetas numeradas genéricas), `ComponentsBento.tsx` (bento
-asimétrico 1+2, no 3 tarjetas idénticas). `WalletCardMockup.tsx` está
-parametrizado (`businessName`/`rewardLabel`/`stampsFilled`/
-`stampsRequired`/`accentColor`/`logoSrc`/`compact`) — antes tenía
-"Café Central" fijo a fuego.
+rompe la monotonía de "reja de tarjetas blancas" con secciones de layout
+variado. `WalletCardMockup.tsx` está parametrizado
+(`businessName`/`rewardLabel`/`stampsFilled`/`stampsRequired`/
+`accentColor`/`logoSrc`/`compact`) — antes tenía "Café Central" fijo a
+fuego.
+
+**Reestructura post-lanzamiento** (`apps/web/app/(marketing)/components/`,
+reemplaza por completo la sección original de arriba — `ProductShowcase.tsx`,
+`ProblemSection.tsx` y `ComponentsBento.tsx` **ya no existen**, fusionados
+en `ProductAndProblem.tsx`; `DashboardGlance.tsx` y `HowItWorksStamps.tsx`
+sí siguen): feedback real de marketing tras el lanzamiento. Precios pasa
+de ~8va a 3ra posición (muchos usuarios no llegaban al final), nav del
+header con anchors a cada sección (antes no coincidía con el orden real
+de scroll), botón flotante de WhatsApp (`WhatsAppFloatButton.tsx`, ícono
+SVG propio, sin dependencia nueva) al mismo número de contacto de
+siempre. `ComparisonMatrix.tsx` (antes tabla de 24 filas) se auditó
+contra el código real: quedaron 13 filas — se eliminaron las que no
+tienen ninguna implementación detrás (cupones, campañas, segmentación,
+exportación, asistente, etc.) en vez de dejarlas como promesa de roadmap;
+filas booleanas agrupadas con iconografía check/x y reordenadas, las X
+pasan de gris tenue a `text-destructive` (rojo, más visibles), CTA más
+notorio. "Avisos por ubicación" pasa a "Sí" sin badge de "próximamente"
+(Apple ya en producción real — ver sección de geofence arriba; Google
+también tiene `merchantLocations` activo, aunque su feature SEPARADA de
+notificación push server-triggered sigue siendo scaffolding). Contacto
+real actualizado: WhatsApp `+52 229 339 1514`, correo
+`admin@pragmia-data.com` (única fuente `CONTACT` en `content.ts`).
+
+Dos bugs reales de layout del hero (`#producto`) encontrados y corregidos
+con Playwright, no visibles por tipos/tests: el celular tapaba ~70% de la
+tarjeta de dashboard con el solape cortando texto a medias (fix: más aire
+en la composición); un segundo intento redujo el solape pero no lo
+eliminó (quedaban 189px tapando media tarjeta — a 1024px, el breakpoint
+de 2 columnas, solo había 976px disponibles para ~700px de contenido
+real) — fix definitivo: contenedor a `max-w-7xl` solo en esa sección,
+breakpoint de 2 columnas sube de `lg` a `xl`, y en `xl+` celular+dashboard
+van lado a lado en flujo normal (`flex`+`gap`) en vez de
+`absolute`+offset numérico, cero riesgo de overlap por construcción.
+`PhoneFrame.tsx`: la píldora del notch se veía mordida por la esquina
+redondeada del frame (estaba a 8px del padding-box real); sube y se
+angosta para un efecto Dynamic Island real. `DashboardGlance.tsx`: dos
+métricas heredaban `text-primary-foreground` (blanco) sobre el bloque
+navy — blanco sobre blanco, casi invisible (confirmado con
+`getComputedStyle`); fix con `text-card-foreground`, mismo token que ya
+usa `Card` de shadcn.
 
 **Previsualizador de tarjeta** (`CardPreviewer.tsx`, sección "Previsualiza
 tu tarjeta" en la home): widget 100% client-side, reusa
@@ -344,8 +437,9 @@ encontrados y corregidos ahí (no los hubiera visto typecheck/lint): texto
 de recompensa truncado dentro del marco de teléfono angosto, y el badge
 "Próximamente" desbordando el viewport en `HowItWorksStamps` en mobile.
 
-**Pendiente, explícitamente NO hecho todavía**: FASE 2b (`/enroll`
-público) y reportes/analítica siguen sin arrancar, ver abajo.
+**Pendiente en el momento de este párrafo, ya NO pendiente hoy**: FASE 2b
+(`/enroll` público) se construyó después — ver esa sección más abajo.
+Reportes/analítica sigue siendo el único candidato sin arrancar.
 
 ## Pulido de UX del scanner (branch `feat/design-overhaul`, no numerado)
 
@@ -467,19 +561,273 @@ imports extensionless de `logic.ts`/`testAuth.ts`), borrado después de
 correrlo. Sigue siendo el mismo tenant local de siempre, no un negocio
 hosted nuevo.
 
+## FASE 2b — `/enroll` público, en producción (no numerada)
+
+Auto-registro real: el cliente final se da de alta solo, sin staff de por
+medio, vía `apps/web/app/(marketing)/enroll/[slug]/` (misma route group
+`(marketing)` que la landing — sin sesión, pero a diferencia de la
+landing SÍ escribe datos de tenant, así que no puede ser estática:
+sale ƒ Dynamic en `next build`, esperado). `businessSlug` llega ya
+"bind"eado como argumento parcial de la Server Action desde
+`EnrollForm.tsx`, nunca de un campo de `formData` — no puede mandarse un
+slug distinto al de la URL que el visitante realmente abrió.
+
+**Seguridad del camino de escritura** (`packages/db/src/enroll.ts`,
+superficie separada del resto — cualquier import de `@loyalty/db/enroll`
+declara explícitamente "este código escribe clientes SIN sesión de
+tenant"): dos funciones Postgres `SECURITY DEFINER`
+(`packages/db/migrations/0014_public_enrollment_functions.sql`),
+`get_active_business_by_slug` (lookup público, resuelve el negocio
+EXCLUSIVAMENTE por slug con `status = 'active'`, nunca por un
+`business_id` que el visitante pudiera mandar — cero filas si el slug no
+existe o el negocio está suspendido, sin oráculo de existencia) y
+`enroll_customer_public` (el INSERT real). `app_user` nunca gana permiso
+de escritura directa sobre `customers`/`customer_balances` para este
+camino — toda la validación queda encapsulada DENTRO de la función misma
+(defensa en profundidad real: la función queda expuesta vía `GRANT
+EXECUTE` a `app_user`, así que no confía ciegamente en que el caller de
+`apps/web` ya validó). Migración `0015_enroll_age_gate.sql` (hallazgo
+MEDIO de revisión) replicó ahí el gate de mayoría de edad (18+, requerido
+porque el checkbox de consentimiento LFPDPPP lo firma el propio titular
+de los datos) que antes solo vivía en `apps/web` — inconsistente con el
+propio principio de la función. Campos: nombre, teléfono, email y fecha
+de nacimiento **obligatorios**; ocupación opcional. Dedupe de teléfono
+DENTRO del negocio (no global), respaldado por el mismo constraint
+parcial que el alta manual.
+
+**Endurecimiento posterior** (rate limiting + cierre de enumeración +
+honeypot, ver sección de seguridad más abajo para el resto del patrón):
+`enroll_public_ip` en `lib/rateLimit.ts` (5 cada 10 min por IP — la ÚNICA
+superficie pública sin sesión del sistema, por eso es el único límite por
+IP en vez de por empleado autenticado). `EnrollDuplicatePhoneError` dejó
+de confirmar "ese teléfono ya es cliente" (oráculo de enumeración real) —
+ahora responde EXACTAMENTE igual que un alta nueva (mismo `success`
+shape, sin links de wallet — no hay forma segura de reemitir el pase de
+alguien más sin verificar que el visitante es su dueño;
+`EnrollConfirmation` ya maneja "sin wallet todavía" con un mensaje
+neutro genérico), con un delay fijo de 250ms para acercar el timing al de
+un alta real (que sí hace una llamada de red real a Apple/Google — no
+elimina el gap de timing del todo, lo acerca). Honeypot: campo oculto
+fuera del viewport (no `display:none` — algunos bots revisan el estilo
+computado) en `EnrollForm.tsx`; si llega lleno, mismo rechazo silencioso
+con la misma respuesta neutra, sin tocar la DB, sin confirmarle al bot
+que fue detectado.
+
+Wallet en el auto-registro: `buildWalletArtifactsForNewEnrollment`
+(`lib/wallet/publicEnrollWallet.ts`) prepara AMBAS plataformas (Apple y
+Google) para todo cliente nuevo, siempre — el frontend
+(`detectWalletPlatform()` vía user-agent) solo decide cuál BOTÓN mostrarle
+al visitante después, el backend ya generó los dos artefactos de
+antemano (importante para lo que dice la sección de perfil de cliente más
+abajo sobre qué significa realmente `wallet_passes.platform`).
+
+## Endurecimiento de seguridad — rate limiting, offboarding, búsqueda exacta (no numerada)
+
+Ronda pedida explícitamente para el cliente real en producción, con
+"mínimo viable, no complicar" como criterio: priorizar lo que valida
+seguridad/RLS, no el pipeline perfecto (ver sección de CI/CD abajo,
+mismo criterio).
+
+**Rate limiting distribuido** (`apps/web/lib/rateLimit.ts`, Upstash
+Redis vía `@upstash/ratelimit`/`@upstash/redis`): reemplaza — sin
+borrarlo, queda como pre-filtro barato de un solo proceso detrás del
+chequeo real — al limitador en memoria que ya existía solo para el
+lookup del scanner. Fail-open uniforme (permite + advertencia logueada
+una sola vez por proceso) si Upstash no está configurado o falla en
+runtime — nunca fail-closed, evita que un Upstash caído tumbe el scanner
+completo. Cubre: scan/sellado (dos keys independientes, por empleado Y
+por negocio — una key compuesta nunca detectaría varios empleados
+comprometidos del mismo negocio actuando en paralelo), búsqueda de
+clientes (agresivo, por empleado), y los 3 endpoints autenticados del web
+service de Apple (por IP, ver `lib/clientIp.ts`, corre ANTES de
+`extractBearerToken`).
+
+**Piso de 30s entre sellos** (`MIN_STAMP_GAP_SECONDS` en
+`scanner/logic.ts`): `Math.max(program.cooldownSeconds, 30)` — convive
+con el cooldown configurable por programa, nunca lo acorta. Medida
+temporal hasta un cap de 1 sello/día (no implementado todavía).
+
+**Búsqueda de clientes a match exacto**: `searchCustomers` cambió de
+`ILIKE` con comodines a `eq(lower(...), lower(...))` — tradeoff de UX
+real y aceptado (buscar "Mari" ya no encuentra "María González"), pedido
+explícito para cerrar una superficie de enumeración sin rate limit
+agresivo previo.
+
+**Offboarding real de empleados** (`/team`, ruta nueva — no existía
+ninguna gestión de empleados antes de esta ronda): acción `Desactivar`
+(dueño/admin únicamente) que, en una sola transacción, apaga
+`employees.is_active` y `users.is_active`, audita, y — best-effort,
+DESPUÉS de que la transacción ya confirmó — bloquea el login futuro vía
+Admin API (`lib/employeeOffboarding.ts`, `banEmployeeAuth`). Esta es la
+**primera excepción documentada** a "cero `adminDb` fuera de `/admin`"
+para la superficie de Auth (no Postgres — `createAdminClient()` es la
+API de administración de Supabase Auth, distinta de `adminDb`, pero el
+mismo espíritu de la regla aplica): confinada a un solo archivo nombrado,
+con un test estático permanente en `prod-readiness.test.ts` que enumera
+los únicos archivos autorizados a importar `createAdminClient` — un uso
+futuro fuera de esa lista falla el test, no queda en un comentario. No
+revoca un access token YA emitido y vigente (imposible con JWT
+stateless, ver Arquitectura) — `requireOperationContext` ya protege
+sellar/canjear al instante; el resto de las rutas queda expuesto hasta
+que ese token expire (≤1h), riesgo aceptado explícitamente para esta
+ronda. Sin acción de reactivar todavía (deactivate-only, pedido así).
+
+Revisión `tenant-security-reviewer`: sin hallazgos críticos/altos (1
+MEDIO — cobertura del guard de `createAdminClient` en `components/`, y 1
+BAJO — supuesto de proxy de confianza en `x-forwarded-for` para
+`clientIp` — ambos corregidos antes de mergear).
+
+## CI/CD — GitHub Actions + branch protection (no numerada)
+
+CI corría desde el primer commit del repo pero fallaba siempre —
+confirmado con `gh run list` contra varios merges reales seguidos, no
+asumido. Causa raíz real: `postgres:16` suelto (con un stub manual del
+schema `auth` para que las MIGRACIONES corrieran) nunca tuvo un GoTrue
+real corriendo, así que cualquier test que hiciera login/`admin.createUser`
+real —la mayoría de `apps/web/tests`— fallaba con
+`NEXT_PUBLIC_SUPABASE_URL` sin resolver. El orden corepack→setup-node y
+el uso de `--env-file-if-exists` en el script de migrar YA estaban bien
+antes de este fix — no eran el problema real, a pesar de estar
+documentados como sospechosos.
+
+Fix: `.github/workflows/ci.yml` usa `supabase start` (Supabase CLI real,
+pinneada a la misma versión que local) en vez del contenedor suelto —
+mismo `supabase/config.toml`/puertos que local dev, recortado con `-x` a
+solo los contenedores que este proyecto usa (postgres/gotrue/kong/
+postgrest — sin storage/realtime/imgproxy/mailpit/studio/analytics/
+pooler). Env vars del job son las mismas claves JWT demo fijas de
+`.env.example` (no son secretos reales — Supabase CLI las genera
+idénticas en cualquier `supabase start` con el JWT secret default de
+cualquier máquina).
+
+**Branch protection**: ruleset activo en GitHub para `main` — requiere
+que el check `build-and-test` (el nombre del job en `ci.yml`, sin
+`name:` override, así que coincide exacto con lo que el ruleset busca)
+pase antes de permitir merge, más "up to date before merging" y bloqueo
+de force-push. Confirmado en vivo con una PR real: `mergeStateStatus`
+pasa de `BLOCKED` a `CLEAN` en cuanto el check termina en verde, sin
+intervención manual.
+
+## Perfil de cliente — cumpleaños, teléfono, ocupación (no numerada)
+
+Las columnas (`date_of_birth`, `occupation`, `phone` ya separado del
+usado para login) ya existían en el schema de una ronda anterior —
+nullable, sin default, cubiertas por la misma política RLS de fila única
+(`business_id`), sin policy nueva. Lo que faltó en su momento fue el
+punto de captura y de vista:
+
+- **Alta manual** (`/customers`): teléfono y cumpleaños son obligatorios
+  (mismo criterio que ya usaba `/enroll` desde antes — ver sección de
+  FASE 2b arriba); ocupación se queda opcional. Un ripple mecánico tocó
+  ~18 fixtures de test en 5 archivos (todas las que creaban clientes solo
+  con `fullName`).
+- **Ficha de cliente** (`/customers/[id]`): muestra cumpleaños (con año
+  completo — un bug de display, no de datos: el año siempre estuvo en la
+  columna `date`, nunca se mostraba), ocupación (si la dieron), y la
+  sucursal de su PRIMER SELLO real (`transactions.location_id`, ya se
+  registraba por cada visita) como proxy honesto de "sucursal de alta" —
+  deliberadamente NO se agregó un campo/migración nueva para esto, y
+  deliberadamente NO se usó geolocalización por IP (impreciso, y una
+  inferencia de ubicación que no hacía falta pedir — decisión explícita
+  tras plantear la alternativa).
+- **Wallet en la ficha — dos iteraciones hasta quedar honesto**:
+  `wallet_passes.platform` NO significa "el cliente usa esta
+  plataforma" — `/enroll` prepara Apple Y Google para todo cliente nuevo
+  sin importar su dispositivo real (ver FASE 2b arriba), y cada botón de
+  descarga manual crea su propia fila. La única señal de instalación
+  CONFIRMADA es Apple (`device_registrations`, solo tiene fila cuando el
+  dispositivo real llamó al web service de PassKit tras tocar
+  "Agregar") — Google no tiene ningún callback equivalente en este
+  código. Primera iteración: "Apple Wallet · Google Wallet (link
+  generado, sin confirmar)" — el calificador al final se leía como si
+  aplicara a ambos (hallazgo real: así lo interpretó el dueño del
+  negocio). Fix: cada wallet lleva su propio estado, "Apple Wallet
+  (confirmado)" / "Google Wallet (sin confirmar)".
+- **Bloque de entrega manual del pase** (los botones al pie de la
+  ficha): siguen siendo funcionalidad REAL, no un artefacto de
+  desarrollo — es el único mecanismo para que staff entregue el pase a
+  un cliente dado de alta manualmente (no vía `/enroll`). Solo se limpió
+  la copy stale de "Fase 4, en construcción, sin credenciales reales
+  todavía" (ya no aplica, ver la sección de Fase 4 arriba) y el sufijo
+  "(prueba)" de ambos botones.
+- Se borró `/api/debug-wallet-apple-locations-test`: ruta pública sin
+  auth que generaba un `.pkpass` real firmado con credenciales de
+  producción, quedó expuesta desde la sesión que activó el geofence —
+  su propio comentario ya decía "borrar una vez confirmada la prueba".
+
+Apple pass, dos ajustes de polish en el mismo período: "Powered by
+Pragmia" volvió a la cara del pase (`secondaryFields`, último slot —
+comparte lugar con "Recompensas disponibles" cuando hay 2+ desbloqueadas,
+no conviven; `backFields` lo sigue teniendo siempre, sin condición, ese
+panel no compite por espacio); y el strip visual (`strip-N.png`,
+`N` = sellos llenos) se regeneró para `stamps_required = 8` tras
+corregir el dato real de Chilaquikes en producción (era 6).
+
+## Motor de lealtad — tope de recompensa vs. ciclo del programa (no numerada)
+
+Bug real activo en producción, no solo teórico: `program.stampsRequired`
+(el grid del pase de Wallet + progreso) y `rule.stampsRequired` de cada
+recompensa (lo que `evaluateRedemption`/`applyRedemption` usan para
+decidir el canje) eran independientes sin validación entre sí. Con
+Chilaquikes en 8/6 (el programa pedía 8 sellos, la recompensa costaba
+6), un cliente veía "¡Ya puedes canjear!" con el grid todavía en 6 de 8
+sin llenar. Fix: `saveRewardRuleForSession` rechaza, tanto en alta como
+en edición, cualquier `stampsRequired` de recompensa mayor al del
+programa — el ciclo ya se reinició antes de llegar ahí. UI
+(`/rewards`): con exactamente una recompensa activa, su campo "Sellos"
+pasa a ser texto plano ("6 (igual al ciclo del programa)") en vez de un
+`<input readOnly>` que se leía como un campo editable roto — el valor
+sigue viajando al submit vía un input oculto, sin tocar validación. Con
+2+ recompensas activas (niveles reales) el campo sigue editable, con el
+tope marcado en vivo. El dato real de Chilaquikes en producción ya se
+corrigió por separado, directo contra la DB hosted.
+
+## Paginación real de `/customers` (no numerada)
+
+El directorio dejó de ser "trae 50 y ya" — `searchCustomers` acepta
+`{page, pageSize}` (default 1/25) con `.limit().offset()` real;
+`countCustomers` nueva hace un `COUNT` tenant-scoped sobre el MISMO
+`WHERE` que `searchCustomers` (factorizado en `customerSearchWhere`), así
+el total de páginas sale de los resultados YA FILTRADOS, nunca del total
+sin filtrar del negocio ni de traer todo al cliente para contarlo. Ambas
+queries corren SECUENCIALMENTE dentro del mismo `tx` (nunca
+`Promise.all` — regla ya establecida, un `tx` es una sola conexión).
+Selector de tamaño de página (25/50/100) y controles Anterior/Siguiente
+por navegación GET, sin JS de cliente. Buscar resetea a página 1 pero
+preserva el tamaño elegido.
+
+## `/set-password` — sistema de diseño (no numerada)
+
+Página de invitación (donde cae el dueño tras el link de email) seguía
+con HTML sin estilo desde antes del rediseño de producto — se le aplicó
+el mismo patrón que `/login` (Logo + Card de shadcn) y se agregaron los
+2 estados que faltaban: cargando (mientras se procesa el fragmento
+`#access_token` y se llama `setSession`) y link inválido/expirado (Alert
+dedicado, en vez de un formulario que nunca se puede enviar). Cero
+cambio a la lógica de auth ya documentada (flujo implícito, no PKCE —
+ver el comentario en el propio archivo). Verificado en vivo con
+Playwright y una sesión real (no simulada): los 3 estados, incluido el
+submit real (`updateUser` + redirect).
+
+## Datos de producción — limpieza de perfiles de prueba (no numerada)
+
+Auditoría de perfiles reales de producción encontró 3 cuentas que eran
+puramente de desarrollo mezcladas con las reales de CHILAQUIKES
+(`test@testdev.com`, `empleado@gmail.com`, ambas staff sin ficha de
+`employees`) y un negocio "Negocio de Prueba" completo (solo su dueño,
+`owner-prueba@iga-analytics.mx`, sin ningún cliente/programa/sucursal —
+vacío en la práctica). Se eliminaron de producción (fila de `public` +
+cuenta de `auth.users`, en ese orden) tras confirmar que no tenían
+ninguna fila referenciada en `transactions`/`redemptions` que pudiera
+romper una FK. Nota: el "Negocio de Prueba" LOCAL (no hosted, ver la
+sección de datos demo de Chilaquikes arriba) es un tenant completamente
+distinto — sigue existiendo, es intencional, vive solo en el Supabase
+local de cada desarrollador.
+
 ## Fase actual: sin definir todavía
-FASE 2b (`/enroll` público) **ya se construyó y está en producción** —
-esta sección quedó desactualizada, no se editó cuando se hizo (`apps/web/
-app/(marketing)/enroll/[slug]/`, alta pública real con dedupe por
-teléfono). Reportes/analítica sigue siendo el único candidato sin
-empezar. Tampoco documentado aquí todavía (trabajo real ya hecho en
-sesiones no reflejadas en este archivo — ver `git log` como fuente de
-verdad más actual que esta sección): rate limiting distribuido
-(`apps/web/lib/rateLimit.ts`, Upstash), offboarding real de empleados
-(`/team`), captura de cumpleaños/ocupación en el alta, y notificación por
-proximidad (Apple `locations`, Google `merchantLocations`) activa para
-Chilaquikes. No empieces reportes/analítica sin pedir el alcance primero
-— misma regla que rigió Fase 0 → 1 → 2 → 3 → 4.
+Reportes/analítica es el único candidato sin empezar y sin acotar. No lo
+empieces sin pedir el alcance primero — misma regla que rigió Fase 0 → 1
+→ 2 → 3 → 4 → 2b.
 
 ## Arquitectura (decidida, no re-litigar)
 - Monorepo, TypeScript-first. Frontend: Next.js. DB: PostgreSQL (Supabase/Neon).
