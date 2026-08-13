@@ -170,6 +170,7 @@ export async function generateApplePkpassForCustomer(
     walletToken: snapshot.walletToken,
     colors: { backgroundRgb, foregroundRgb, labelRgb },
     locations: appleLocations,
+    promoMessage: snapshot.businessLastPromoMessage,
   });
 
   const pkpass = await buildPkpass({

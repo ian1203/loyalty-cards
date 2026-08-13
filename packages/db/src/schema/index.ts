@@ -16,3 +16,4 @@ export * from "./walletPasses";
 export * from "./deviceRegistrations";
 export * from "./campaigns";
 export * from "./marketingLeads";
+export * from "./promoBroadcasts";

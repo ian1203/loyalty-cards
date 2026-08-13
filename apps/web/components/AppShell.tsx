@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   GiftIcon,
   LayoutDashboardIcon,
+  MegaphoneIcon,
   MenuIcon,
   ScanLineIcon,
   UserCogIcon,
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
   { href: "/rewards", label: "Programa", icon: GiftIcon },
   { href: "/customers", label: "Clientes", icon: UsersIcon },
+  { href: "/promotions", label: "Promociones", icon: MegaphoneIcon },
   { href: "/team", label: "Equipo", icon: UserCogIcon },
   { href: "/scanner", label: "Scanner", icon: ScanLineIcon },
 ] as const;
