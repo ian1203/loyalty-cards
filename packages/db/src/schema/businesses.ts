@@ -6,11 +6,24 @@ export const businessStatusEnum = pgEnum("business_status", [
   "suspended",
 ]);
 
+// Sin UI de asignación todavía (backfill manual contra la DB, mismo
+// criterio ya usado para corregir stamps_required de Chilaquikes) — ver
+// tabla de precios (wallet-bi-plans.md / apps/web/lib/marketing/content.ts).
+// Gate real de features de plan (ej. broadcast de promociones a Wallet):
+// "basico" nunca desbloquea, "negocio"/"intelligence" sí con límites
+// distintos entre sí.
+export const businessPlanEnum = pgEnum("business_plan", [
+  "basico",
+  "negocio",
+  "intelligence",
+]);
+
 export const businesses = pgTable("businesses", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   status: businessStatusEnum("status").notNull().default("active"),
+  plan: businessPlanEnum("plan").notNull().default("basico"),
   // URL pública del logo del negocio (para el form de /enroll y futuros
   // usos de marca) — nullable a propósito: un negocio sin logo cargado
   // simplemente no lo muestra, nunca un placeholder inventado. No es dato

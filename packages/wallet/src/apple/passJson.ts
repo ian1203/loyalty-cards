@@ -53,6 +53,20 @@ export type PassJsonInput = {
     relevantText?: string;
   }>;
   maxDistance?: number;
+  // Texto del broadcast de promociones más reciente del negocio (ver
+  // apps/web/app/(product)/promotions/logic.ts) — null si el negocio
+  // nunca envió uno (nunca un placeholder inventado, mismo criterio que
+  // el resto de campos opcionales de este archivo). Cuando está presente
+  // se agrega a backFields CON changeMessage: cambiar el VALOR de un
+  // campo que ya tiene changeMessage es lo que dispara el banner de lock
+  // screen vía el mismo pipeline de push vacío que ya usa
+  // notifyWalletOfTransaction (ver apple/apns.ts) — Apple sustituye "%@"
+  // por el valor nuevo. El primer envío de un negocio agrega el campo
+  // por primera vez (no es "cambio de valor" en sentido estricto), así
+  // que no hay garantía de banner esa primera vez — sí a partir del
+  // segundo envío en adelante (pendiente de confirmar contra un
+  // dispositivo real, ver plan).
+  promoMessage?: string | null;
 };
 
 // Texto del banner de lock screen al entrar en el geofence de una
@@ -175,7 +189,19 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
       // mismo campo, así que no queda ningún otro huérfano al fijarlo
       // siempre acá. Accesible al tocar el ícono de info, nunca al
       // frente — un solo lugar, sin depender de ningún estado.
-      backFields: [{ key: "poweredBy", label: "", value: "Powered by Pragmia" }],
+      backFields: [
+        { key: "poweredBy", label: "", value: "Powered by Pragmia" },
+        ...(input.promoMessage
+          ? [
+              {
+                key: "promo",
+                label: "Última promoción",
+                value: input.promoMessage,
+                changeMessage: "%@",
+              },
+            ]
+          : []),
+      ],
     },
     barcodes: [
       {

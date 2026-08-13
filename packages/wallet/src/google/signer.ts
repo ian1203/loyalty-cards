@@ -37,6 +37,17 @@ export type GoogleWalletClient = {
   upsertLoyaltyClass(classId: string, payload: Record<string, unknown>): Promise<void>;
   upsertLoyaltyObject(objectId: string, payload: Record<string, unknown>): Promise<void>;
   addLoyaltyObjectMessage(objectId: string, message: LoyaltyObjectMessage): Promise<void>;
+  // Mensaje a nivel CLASE (a diferencia de addLoyaltyObjectMessage, que es
+  // por cliente) — un negocio tiene UNA clase (modelo "una clase por
+  // negocio", ver skill wallet-integration), así que un solo llamado
+  // aquí es lo que permite el broadcast de promociones a TODOS los
+  // clientes de ese negocio de una vez (ver
+  // apps/web/lib/wallet/promoNotify.ts). Semántica de fan-out real y si
+  // comparte cuota con el límite de 3/24h por objeto: sin confirmar
+  // contra la API real todavía (ver plan de la feature) — el método
+  // existe y firma correcto, pero la garantía de entrega a TODOS los
+  // objetos queda como verificación pendiente.
+  addLoyaltyClassMessage(classId: string, message: LoyaltyObjectMessage): Promise<void>;
   buildSaveLink(payload: GoogleSaveLinkPayload): Promise<string>;
 };
 
@@ -132,6 +143,18 @@ export function createRealGoogleWalletClient(
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(`Google Wallet API respondió ${res.status} en addMessage de ${objectId}: ${body}`);
+      }
+    },
+    async addLoyaltyClassMessage(classId, message) {
+      const accessToken = await fetchAccessToken(credentials, fetchImpl);
+      const res = await fetchImpl(`${WALLET_OBJECTS_BASE}/loyaltyClass/${classId}/addMessage`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`Google Wallet API respondió ${res.status} en addMessage de ${classId}: ${body}`);
       }
     },
     async buildSaveLink(payload) {

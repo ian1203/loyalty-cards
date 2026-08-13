@@ -1,10 +1,11 @@
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import {
   businesses,
   customerBalances,
   customers,
   locations,
   loyaltyPrograms,
+  promoBroadcasts,
   rewardRules,
   type TenantTransaction,
   type VerifiedBusinessId,
@@ -68,6 +69,15 @@ export type CustomerLoyaltySnapshot = {
   // merchantLocations). Vacío si el negocio no tiene ninguna sucursal con
   // lat/long todavía (nunca una ubicación inventada).
   businessLocations: Array<{ latitude: number; longitude: number }>;
+  // Texto del broadcast de promociones más reciente del negocio (ver
+  // app/(product)/promotions/logic.ts) — null si nunca envió uno. Nunca
+  // una columna duplicada en businesses: siempre el message más reciente
+  // de promo_broadcasts (fuente única, sin desincronización posible).
+  // Lo consume passGeneration.ts (backFields de Apple, ver
+  // packages/wallet/src/apple/passJson.ts) — Google no lo necesita acá
+  // (el mensaje de clase se manda una sola vez desde promoNotify.ts, no
+  // se re-arma en cada PATCH de objeto).
+  businessLastPromoMessage: string | null;
 };
 
 export async function loadCustomerLoyaltySnapshot(
@@ -142,6 +152,13 @@ export async function loadCustomerLoyaltySnapshot(
   const unlockedRewards = availableRewards(currentStamps, rules);
   const [firstAvailable] = unlockedRewards;
 
+  const [latestPromo] = await tx
+    .select({ message: promoBroadcasts.message })
+    .from(promoBroadcasts)
+    .where(eq(promoBroadcasts.businessId, businessId))
+    .orderBy(desc(promoBroadcasts.createdAt))
+    .limit(1);
+
   const locationRows = await tx
     .select({ latitude: locations.latitude, longitude: locations.longitude })
     .from(locations)
@@ -175,5 +192,6 @@ export async function loadCustomerLoyaltySnapshot(
     // drizzle sigue siendo `number | null` por columna — el cast refleja
     // lo que el WHERE ya garantiza, no lo cambia.
     businessLocations: locationRows as Array<{ latitude: number; longitude: number }>,
+    businessLastPromoMessage: latestPromo?.message ?? null,
   };
 }
