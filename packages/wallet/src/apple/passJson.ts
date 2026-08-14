@@ -152,7 +152,14 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
       : []),
     availableRewardsCount > 1
       ? { key: "rewardsAvailable", label: "Recompensas disponibles", value: String(availableRewardsCount) }
-      : { key: "poweredBy", label: "", value: "Powered by Pragmia" },
+      // key DISTINTO al de backFields (más abajo) a propósito — bug real
+      // encontrado vía POST /v1/log de un dispositivo real durante la
+      // verificación del broadcast de promociones: Apple exige keys
+      // únicos en TODO el pase, no solo dentro de cada grupo de campos.
+      // Ambos compartían literalmente "poweredBy" desde antes de esta
+      // sesión — "will be treated as an error in a future release" según
+      // el device log, hoy solo warning tolerado.
+      : { key: "poweredBySecondary", label: "", value: "Powered by Pragmia" },
   ];
 
   // "Powered by Pragmia" vive SIEMPRE en backFields ahora (ver
