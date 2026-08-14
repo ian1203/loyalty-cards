@@ -40,7 +40,13 @@ function pickWalletButton(
   return null;
 }
 
-export function EnrollForm({ businessSlug }: { businessSlug: string }) {
+export function EnrollForm({
+  businessSlug,
+  showOccupation,
+}: {
+  businessSlug: string;
+  showOccupation: boolean;
+}) {
   const enrollForSlug = enrollCustomerAction.bind(null, businessSlug);
   const [state, formAction, pending] = useActionState(enrollForSlug, initialState);
 
@@ -112,17 +118,19 @@ export function EnrollForm({ businessSlug }: { businessSlug: string }) {
             onChange={(e) => setDateOfBirth(e.currentTarget.value)}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="enroll-occupation">Ocupación (opcional)</Label>
-          <Input
-            id="enroll-occupation"
-            name="occupation"
-            maxLength={120}
-            placeholder="Estudiante"
-            value={occupation}
-            onChange={(e) => setOccupation(e.currentTarget.value)}
-          />
-        </div>
+        {showOccupation ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="enroll-occupation">Ocupación (opcional)</Label>
+            <Input
+              id="enroll-occupation"
+              name="occupation"
+              maxLength={120}
+              placeholder="Estudiante"
+              value={occupation}
+              onChange={(e) => setOccupation(e.currentTarget.value)}
+            />
+          </div>
+        ) : null}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="enroll-email">Correo</Label>
           <Input

@@ -1,0 +1,1 @@
+ALTER TABLE "businesses" ADD COLUMN "enroll_show_occupation" boolean DEFAULT true NOT NULL;

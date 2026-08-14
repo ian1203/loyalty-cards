@@ -169,6 +169,20 @@
       "when": 1786646013150,
       "tag": "0023_sparkling_toad",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786726016109,
+      "tag": "0024_flawless_machine_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786726100000,
+      "tag": "0025_enroll_business_field_config",
+      "breakpoints": true
     }
   ]
 }

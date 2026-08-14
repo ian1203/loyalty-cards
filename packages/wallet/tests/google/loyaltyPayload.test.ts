@@ -93,23 +93,31 @@ describe("buildLoyaltyClassPayload — plantilla por negocio, sin datos de clien
     expect(cls.heroImage.sourceUri.uri).toBe("https://example.com/hero.jpg");
   });
 
-  // Sin esto, accountName (ya poblado en el Loyalty Object) solo aparece en
-  // el panel de detalles al tocar el pase, nunca en la cara visible —
-  // confirmado contra la documentación oficial de Google (Customize Google
-  // Wallet Passes — Loyalty cards): una fila con fieldPath
-  // "object.accountName" en cardRowTemplateInfos la saca a la cara.
-  it("classTemplateInfo saca accountName a la cara de la tarjeta (si no, solo vive en el panel de detalles)", () => {
+  // Sin esto, accountName/loyaltyPoints.balance (ya poblados en el Loyalty
+  // Object) solo aparecen en el panel de detalles al tocar el pase, nunca
+  // en la cara visible — confirmado contra la documentación oficial de
+  // Google (Customize Google Wallet Passes — Loyalty cards) y contra la
+  // API real: una fila twoItems con ambos fieldPath en
+  // cardRowTemplateInfos los saca a la cara, uno a cada lado. _v8: antes
+  // (oneItem) solo mostraba el nombre — el conteo de sellos quedaba
+  // escondido detrás de un tap, pedido explícito de que fuera visible sin
+  // eso.
+  it("classTemplateInfo saca accountName Y el conteo de sellos a la cara de la tarjeta (si no, solo viven en el panel de detalles)", () => {
     const cls = buildLoyaltyClassPayload(classInput) as {
       classTemplateInfo: {
         cardTemplateOverride: {
           cardRowTemplateInfos: Array<{
-            oneItem: { item: { firstValue: { fields: Array<{ fieldPath: string }> } } };
+            twoItems: {
+              startItem: { firstValue: { fields: Array<{ fieldPath: string }> } };
+              endItem: { firstValue: { fields: Array<{ fieldPath: string }> } };
+            };
           }>;
         };
       };
     };
     const rows = cls.classTemplateInfo.cardTemplateOverride.cardRowTemplateInfos;
-    expect(rows[0].oneItem.item.firstValue.fields[0].fieldPath).toBe("object.accountName");
+    expect(rows[0].twoItems.startItem.firstValue.fields[0].fieldPath).toBe("object.accountName");
+    expect(rows[0].twoItems.endItem.firstValue.fields[0].fieldPath).toBe("object.loyaltyPoints.balance");
   });
 
   it("sin merchantLocations, la clase no lleva ese campo (nunca un array vacío fantasma)", () => {

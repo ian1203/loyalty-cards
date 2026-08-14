@@ -211,16 +211,22 @@ async function buildHeroStripAt3x(
   const width = STRIP_BASE_WIDTH * scale;
   const height = STRIP_BASE_HEIGHT * scale;
 
+  // Alto del parche = alto TOTAL del canvas (nunca HERO_PATCH_SIZE fijo):
+  // bug real encontrado con el primer uso real de --hero (IRIZ) — con un
+  // parche cuadrado de 300px tileado también en Y, 369px (@3x) no es
+  // múltiplo de 300, así que la segunda fila mostraba solo los primeros
+  // 69px de una copia nueva del mismo parche — una costura dura donde el
+  // patrón se cortaba en seco y volvía a arrancar desde su propio borde
+  // superior. Con el parche ya del alto exacto del canvas, tilesY es
+  // siempre 1 — cero costura vertical posible, para cualquier hero.
+  const patchWidth = HERO_PATCH_SIZE;
   const patch = await sharp(heroPath)
-    .extract({ left: patchX, top: patchY, width: HERO_PATCH_SIZE, height: HERO_PATCH_SIZE })
+    .extract({ left: patchX, top: patchY, width: patchWidth, height })
     .toBuffer();
-  const tilesX = Math.ceil(width / HERO_PATCH_SIZE) + 1;
-  const tilesY = Math.ceil(height / HERO_PATCH_SIZE) + 1;
+  const tilesX = Math.ceil(width / patchWidth) + 1;
   const tileComposites: sharp.OverlayOptions[] = [];
-  for (let y = 0; y < tilesY; y++) {
-    for (let x = 0; x < tilesX; x++) {
-      tileComposites.push({ input: patch, left: x * HERO_PATCH_SIZE, top: y * HERO_PATCH_SIZE });
-    }
+  for (let x = 0; x < tilesX; x++) {
+    tileComposites.push({ input: patch, left: x * patchWidth, top: 0 });
   }
   const background = await sharp({
     create: { width, height, channels: 3, background: brandColor },

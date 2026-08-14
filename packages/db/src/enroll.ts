@@ -37,6 +37,7 @@ export type PublicBusinessLookup = {
   id: string;
   name: string;
   logoUrl: string | null;
+  enrollShowOccupation: boolean;
 };
 
 export class EnrollBusinessNotFoundError extends Error {
@@ -55,11 +56,16 @@ export class EnrollDuplicatePhoneError extends Error {
 // formulario) — 0 filas si el slug no existe o el negocio está
 // suspendido, nunca un error que sirva de oráculo de existencia.
 export async function getActiveBusinessBySlug(slug: string): Promise<PublicBusinessLookup | null> {
-  const result = await appDb.execute<{ id: string; name: string; logo_url: string | null }>(
-    sql`select * from get_active_business_by_slug(${slug})`,
-  );
+  const result = await appDb.execute<{
+    id: string;
+    name: string;
+    logo_url: string | null;
+    enroll_show_occupation: boolean;
+  }>(sql`select * from get_active_business_by_slug(${slug})`);
   const row = result.rows[0];
-  return row ? { id: row.id, name: row.name, logoUrl: row.logo_url } : null;
+  return row
+    ? { id: row.id, name: row.name, logoUrl: row.logo_url, enrollShowOccupation: row.enroll_show_occupation }
+    : null;
 }
 
 export async function enrollCustomerPublic(input: PublicEnrollInput): Promise<PublicEnrollResult> {
