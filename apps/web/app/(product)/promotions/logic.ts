@@ -59,6 +59,11 @@ export async function sendPromoBroadcastForSession(
     return { error: `El mensaje no puede superar los ${MAX_PROMO_MESSAGE_LENGTH} caracteres.` };
   }
 
+  // Asignado dentro de la tx, leído después del commit para pasarle un
+  // identificador de correlación real (fila de promo_broadcasts) al
+  // callback diferido — instrumentación de diagnóstico, ver promoNotify.ts.
+  let broadcastId: string | undefined;
+
   try {
     await withTenantContext(session.businessId, async (tx) => {
       // Lock de fila: serializa envíos concurrentes del mismo negocio
@@ -119,6 +124,7 @@ export async function sendPromoBroadcastForSession(
         entityId: created.id,
         metadata: { message },
       });
+      broadcastId = created.id;
     });
   } catch (error) {
     if (error instanceof PlanNotEligibleError) {
@@ -134,10 +140,21 @@ export async function sendPromoBroadcastForSession(
     return { error: "No se pudo enviar la promoción. Intenta de nuevo." };
   }
 
+  // broadcastId siempre queda asignado acá: si la tx hubiera lanzado antes
+  // del INSERT, ya habríamos retornado en el catch de arriba. Se copia a
+  // un const para que TypeScript preserve el narrowing dentro del closure
+  // de scheduleAfterResponse (un `let` no lo garantiza).
+  if (!broadcastId) {
+    throw new Error("broadcastId sin asignar tras una transacción exitosa — invariante roto.");
+  }
+  const confirmedBroadcastId = broadcastId;
+
   // Best-effort, DESPUÉS de que la transacción ya confirmó — mismo
   // contrato que notifyWalletOfTransaction, nunca revierte el envío ya
   // registrado.
-  scheduleAfterResponse(() => notifyWalletOfPromoBroadcast(session.businessId, message));
+  scheduleAfterResponse(() =>
+    notifyWalletOfPromoBroadcast(session.businessId, message, confirmedBroadcastId),
+  );
 
   return { success: "Promoción enviada." };
 }

@@ -70,6 +70,11 @@ export function buildApnsTimeoutMessage(
   return `APNs timeout en fase "${phase}" tras ${elapsedMs}ms (pushToken=${redactPushToken(pushToken)}) — ${detail}`;
 }
 
+// Host real de APNs — logueado tal cual antes de conectar (instrumentación
+// de diagnóstico: confirmar en logs, no de memoria, que nunca se está
+// hablando por accidente con el sandbox de Apple).
+const APNS_HOST = "https://api.push.apple.com";
+
 async function defaultHttp2Post({
   pushToken,
   headers,
@@ -80,12 +85,15 @@ async function defaultHttp2Post({
   body: string;
 }): Promise<{ status: number; body: string }> {
   const startedAt = Date.now();
+  console.info(
+    `[wallet:apns] conectando a ${APNS_HOST} — apns-topic=${headers["apns-topic"]}, pushToken=${redactPushToken(pushToken)}`,
+  );
   return new Promise((resolve, reject) => {
     let settled = false;
     let connectTimer: ReturnType<typeof setTimeout> | undefined;
     let requestTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const client = http2.connect("https://api.push.apple.com");
+    const client = http2.connect(APNS_HOST);
 
     const fail = (error: Error) => {
       if (settled) return;
@@ -155,24 +163,74 @@ async function defaultHttp2Post({
   });
 }
 
+// Decodifica el JWT ya firmado SOLO para logging de diagnóstico (kid/iss/
+// iat/exp) — nunca el token completo ni la private key. jose no expone un
+// "decode sin verificar" en este paquete tal como lo usamos acá, así que
+// se decodifica a mano (header y payload son JSON base64url, sin verificar
+// firma — no hace falta, ya lo firmamos nosotros mismos arriba).
+function decodeJwtPartsForLogging(jwt: string): {
+  kid: unknown;
+  iss: unknown;
+  iat: unknown;
+  hasExp: boolean;
+} {
+  const [headerB64, payloadB64] = jwt.split(".");
+  const header = JSON.parse(Buffer.from(headerB64, "base64url").toString("utf8")) as Record<string, unknown>;
+  const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8")) as Record<string, unknown>;
+  return { kid: header.kid, iss: payload.iss, iat: payload.iat, hasExp: "exp" in payload };
+}
+
 export function createRealApnsSender(
   credentials: ApnsCredentials,
   post: ApnsHttp2Post = defaultHttp2Post,
 ): ApnsSender {
   return async ({ pushToken, passTypeIdentifier }) => {
+    // Log de entrada a la función misma — evidencia de que el código SÍ
+    // llegó hasta acá, independiente de lo que pase después (instrumentación
+    // pedida explícitamente: descartar "nunca se intentó" de "se intentó y
+    // falló en algún punto").
+    console.info(
+      `[wallet:apns] createRealApnsSender invocado — pushToken=${redactPushToken(pushToken)}, passTypeIdentifier=${passTypeIdentifier}`,
+    );
+
     const jwt = await buildApnsAuthToken(credentials);
-    const { status, body } = await post({
-      pushToken,
-      headers: {
-        authorization: `bearer ${jwt}`,
-        "apns-topic": passTypeIdentifier,
-        "apns-push-type": "background",
-        "content-type": "application/json",
-      },
-      // Payload vacío: es literalmente lo que le dice al dispositivo "pedí
-      // el pase de nuevo", sin datos adentro (ver skill).
-      body: "{}",
-    });
+    const { kid, iss, iat, hasExp } = decodeJwtPartsForLogging(jwt);
+    console.info(
+      `[wallet:apns] JWT de auth construido — kid=${kid}, iss=${iss}, iat=${iat} (${iat ? new Date(Number(iat) * 1000).toISOString() : "sin iat"}), exp presente=${hasExp}`,
+    );
+
+    let response: { status: number; body: string };
+    try {
+      response = await post({
+        pushToken,
+        headers: {
+          authorization: `bearer ${jwt}`,
+          "apns-topic": passTypeIdentifier,
+          "apns-push-type": "background",
+          "content-type": "application/json",
+        },
+        // Payload vacío: es literalmente lo que le dice al dispositivo "pedí
+        // el pase de nuevo", sin datos adentro (ver skill).
+        body: "{}",
+      });
+    } catch (error) {
+      // La llamada SÍ se intentó pero la promesa de post() rechazó (timeout
+      // de apns.ts, error de conexión, etc.) — sin este catch, este caso es
+      // indistinguible en los logs de "nunca se intentó".
+      console.error(
+        `[wallet:apns] excepción durante la llamada HTTP a APNs (pushToken=${redactPushToken(pushToken)}):`,
+        error,
+      );
+      throw error;
+    }
+
+    const { status, body } = response;
+    // Log SIEMPRE, no solo en error — status 200 de éxito antes solo se
+    // inferia por ausencia de excepción, nunca se veía en los logs.
+    console.info(
+      `[wallet:apns] APNs respondió status=${status}${status >= 200 && status < 300 ? " (éxito)" : ` — body: ${body}`}`,
+    );
+
     if (status < 200 || status >= 300) {
       throw new Error(`APNs respondió ${status}: ${body}`);
     }

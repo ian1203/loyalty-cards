@@ -16,6 +16,13 @@ export async function GET(request: Request, { params }: { params: Promise<Params
     passesUpdatedSince,
   });
 
+  // Instrumentación de diagnóstico: confirmar si el dispositivo llega a
+  // preguntar "¿qué cambió?" tras recibir un push — sin esto no había
+  // ningún rastro en logs de que Apple/el dispositivo haya llamado acá.
+  console.info(
+    `[wallet:apple:registrations] GET deviceLibraryIdentifier=${deviceLibraryIdentifier}, passTypeIdentifier=${passTypeIdentifier}, passesUpdatedSince=${passesUpdatedSince ?? "(ninguno)"} → status=${result.status}, body=${JSON.stringify(result.body)}`,
+  );
+
   return new Response(result.body ? JSON.stringify(result.body) : null, {
     status: result.status,
     headers: result.headers,

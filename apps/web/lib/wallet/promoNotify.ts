@@ -37,7 +37,11 @@ async function withRetries(fn: () => Promise<void>, delaysMs: number[]): Promise
   throw lastError;
 }
 
-async function notifyAppleDevicesForBusiness(businessId: VerifiedBusinessId): Promise<void> {
+async function notifyAppleDevicesForBusiness(
+  businessId: VerifiedBusinessId,
+  broadcastId: string,
+): Promise<void> {
+  console.info(`[wallet:promoNotify:apple] broadcastId=${broadcastId} iniciando — businessId=${businessId}`);
   const registrations = await withTenantContext(businessId, async (tx) => {
     const applePasses = await tx
       .update(walletPasses)
@@ -65,7 +69,13 @@ async function notifyAppleDevicesForBusiness(businessId: VerifiedBusinessId): Pr
       );
   });
 
-  if (registrations.length === 0) return;
+  console.info(
+    `[wallet:promoNotify:apple] broadcastId=${broadcastId} encontró ${registrations.length} device_registrations`,
+  );
+  if (registrations.length === 0) {
+    console.info(`[wallet:promoNotify:apple] broadcastId=${broadcastId} sin dispositivos — no se intenta ningún push`);
+    return;
+  }
 
   const sender = getApnsSender();
   const passTypeIdentifier = getApplePassTypeIdentifier();
@@ -75,16 +85,21 @@ async function notifyAppleDevicesForBusiness(businessId: VerifiedBusinessId): Pr
   // debe impedir el push a los demás clientes del broadcast.
   await Promise.all(
     registrations.map((reg) =>
-      withRetries(() => sender({ pushToken: reg.pushToken, passTypeIdentifier }), RETRY_DELAYS_MS).catch(
-        (error) => {
+      withRetries(() => sender({ pushToken: reg.pushToken, passTypeIdentifier }), RETRY_DELAYS_MS)
+        .then(() => {
+          console.info(
+            `[wallet:promoNotify:apple] broadcastId=${broadcastId} push OK (walletPassId=${reg.walletPassId}, deviceLibraryIdentifier=${reg.deviceLibraryIdentifier})`,
+          );
+        })
+        .catch((error) => {
           console.error(
-            `[wallet:promoNotify:apple] push falló tras reintentos (walletPassId=${reg.walletPassId}, deviceLibraryIdentifier=${reg.deviceLibraryIdentifier}):`,
+            `[wallet:promoNotify:apple] broadcastId=${broadcastId} push falló tras reintentos (walletPassId=${reg.walletPassId}, deviceLibraryIdentifier=${reg.deviceLibraryIdentifier}):`,
             error,
           );
-        },
-      ),
+        }),
     ),
   );
+  console.info(`[wallet:promoNotify:apple] broadcastId=${broadcastId} terminó de procesar los ${registrations.length} dispositivos`);
 }
 
 async function notifyGoogleClassForBusiness(businessId: VerifiedBusinessId, message: string): Promise<void> {
@@ -120,10 +135,16 @@ async function notifyGoogleClassForBusiness(businessId: VerifiedBusinessId, mess
 export async function notifyWalletOfPromoBroadcast(
   businessId: VerifiedBusinessId,
   message: string,
+  broadcastId: string,
 ): Promise<void> {
+  // Instrumentación de diagnóstico: START/END del callback diferido
+  // (scheduleAfterResponse/after()) con un id único (la fila de
+  // promo_broadcasts) — sin esto no había forma de confirmar en los logs
+  // de Vercel si after() corrió de principio a fin o se cortó a medias.
+  console.info(`[wallet:promoNotify] broadcastId=${broadcastId} callback diferido INICIO — businessId=${businessId}`);
   try {
     await Promise.all([
-      notifyAppleDevicesForBusiness(businessId),
+      notifyAppleDevicesForBusiness(businessId, broadcastId),
       notifyGoogleClassForBusiness(businessId, message),
     ]);
   } catch (error) {
@@ -133,4 +154,5 @@ export async function notifyWalletOfPromoBroadcast(
     // de un envío ya confirmado.
     console.error("[wallet:promoNotify] fallo inesperado:", error);
   }
+  console.info(`[wallet:promoNotify] broadcastId=${broadcastId} callback diferido FIN`);
 }
