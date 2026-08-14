@@ -81,6 +81,16 @@ const MAX_STAMP_DIAMETER = 60;
 const HERO_LOGO_HEIGHT_RATIO = 0.62; // proporción de STRIP_BASE_HEIGHT
 const HERO_LOGO_TOP_PT = 14 / 3; // ~4.67pt @1x (14px medidos @3x)
 const HERO_BAND_HEIGHT_PT = 150 / 3; // 50pt @1x (150px medidos @3x)
+// Margen vertical del bloque de 2 filas dentro de la banda — bug real
+// encontrado en un dispositivo Apple real (Iriz, grid de 2 filas): sin
+// esto, el diámetro se calculaba para que el bloque (2*diámetro+gap)
+// ocupara EXACTAMENTE HERO_BAND_HEIGHT_PT, así que la fila de abajo
+// quedaba con su borde tocando el borde inferior del strip entero (y=123,
+// cero margen) — se veía "pegado abajo" en vez de centrado dentro de la
+// banda. Con este margen restado del alto disponible ANTES de calcular el
+// diámetro, el bloque de 2 filas queda con aire arriba y abajo, centrado
+// en bandCenterY igual que antes.
+const HERO_STAMP_ROW_VERTICAL_PADDING_PT = 6;
 const HERO_STAMP_BACKING_FILL = "#FFFFFF"; // disco blanco detrás de cada sello — mismo lenguaje visual que el fondo blanco liso de siempre, solo que individual
 const HERO_PATCH_SIZE = 300; // px, muestreado del source del hero a resolución nativa
 
@@ -230,7 +240,8 @@ function computeIrizStampGrid(stampsRequired: number): StampPosition[] {
 
   const horizontalDenom = topCount + (topCount - 1) * STAMP_GAP_RATIO;
   const horizontalMax = usableWidth / horizontalDenom;
-  const verticalMax = HERO_BAND_HEIGHT_PT / (2 + STAMP_GAP_RATIO);
+  const usableBandHeight = HERO_BAND_HEIGHT_PT - HERO_STAMP_ROW_VERTICAL_PADDING_PT * 2;
+  const verticalMax = usableBandHeight / (2 + STAMP_GAP_RATIO);
   const diameter = Math.min(MAX_STAMP_DIAMETER, horizontalMax, verticalMax);
 
   const rowGap = diameter * STAMP_GAP_RATIO;
