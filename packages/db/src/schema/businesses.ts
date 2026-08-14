@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { platformAdmins } from "./platformAdmins";
 
 export const businessStatusEnum = pgEnum("business_status", [
@@ -65,6 +65,14 @@ export const businesses = pgTable("businesses", {
   // real todavía no existe (bloqueado en Narciso al momento de este
   // commit). El código ya sabe usarla en cuanto tenga valor.
   googleWideLogoUri: text("google_wide_logo_uri"),
+  // Campo de /enroll público configurable por negocio — el primero de su
+  // tipo (antes el formulario era 100% fijo/compartido entre tenants).
+  // default true preserva el comportamiento actual de todo negocio
+  // existente (Chilaquikes) sin tocarlos; Iriz Style lo pone en false a
+  // mano tras el alta. Deliberadamente UN boolean, no una tabla de
+  // configuración genérica de campos — el pedido real era "quitar
+  // ocupación para Iriz", no un form builder.
+  enrollShowOccupation: boolean("enroll_show_occupation").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

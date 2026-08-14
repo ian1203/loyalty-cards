@@ -29,11 +29,17 @@ import type { RgbColor } from "../apple/placeholderIcon";
 // SOLO el local (foodtrucks quitados: sin control de frecuencia server-side,
 // el cliente decidió que el aviso persistente mientras estás dentro del
 // radio solo tiene sentido para la sede fija, no las 2 sucursales móviles)
-// es el motivo de _v7, ver scripts/migrate-google-class-v7.ts):
+// es el motivo de _v7, ver scripts/migrate-google-class-v7.ts;
+// cardRowTemplateInfos pasa de oneItem (solo accountName) a twoItems
+// (accountName + conteo de sellos) — pedido explícito de Iriz Style para
+// que el conteo de sellos sea visible en la CARA de la tarjeta, no solo al
+// tocar el pase; aplica a todo negocio con Google Wallet activo,
+// Chilaquikes incluido — es el motivo de _v8, ver
+// scripts/migrate-google-class-v8.ts):
 // Google cachea agresivamente por classId, así que un cambio de campos
 // visuales SIEMPRE necesita un classId nuevo, nunca un PATCH in-place de
 // la clase vieja.
-export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v7";
+export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v8";
 
 export function buildLoyaltyClassId(issuerId: string, businessId: string, version?: string): string {
   const suffix = version ? `_${version}` : "";
@@ -122,23 +128,32 @@ export function buildLoyaltyClassPayload(input: LoyaltyClassInput): Record<strin
       ? { heroImage: imageAsset(input.heroImageUri, input.businessName) }
       : {}),
     ...(input.merchantLocations?.length ? { merchantLocations: input.merchantLocations } : {}),
-    // Sin esto, accountName (ya poblado en el Loyalty Object — ver abajo)
-    // solo aparece en el panel de detalles al tocar el pase, nunca en la
-    // cara visible de la tarjeta — a diferencia de Apple, donde
-    // secondaryFields SÍ vive en la cara por defecto sin configuración
-    // extra. Confirmado contra la documentación oficial de Google
-    // (Customize Google Wallet Passes — Loyalty cards): una fila con
-    // fieldPath "object.accountName" en cardRowTemplateInfos la saca a la
-    // cara. oneItem (una sola columna) porque es el único dato que
-    // queremos ahí — no hay un segundo campo con el que emparejarlo.
+    // Sin esto, accountName/loyaltyPoints.balance (ya poblados en el
+    // Loyalty Object — ver abajo) solo aparecen en el panel de detalles al
+    // tocar el pase, nunca en la cara visible de la tarjeta — a diferencia
+    // de Apple, donde secondaryFields SÍ vive en la cara por defecto sin
+    // configuración extra. Confirmado contra la documentación oficial de
+    // Google (Customize Google Wallet Passes — Loyalty cards) y contra la
+    // API real (ver scripts/create-iriz-style-verification-class.ts, pase
+    // de verificación real que confirmó el shape twoItems antes de este
+    // cambio): una fila con dos fieldPath en cardRowTemplateInfos saca
+    // ambos campos a la cara, uno a cada lado. _v8 (antes oneItem, solo
+    // accountName): el conteo de sellos (object.loyaltyPoints.balance)
+    // ahora vive junto al nombre, pedido explícito para que no haga falta
+    // tocar el pase para verlo.
     classTemplateInfo: {
       cardTemplateOverride: {
         cardRowTemplateInfos: [
           {
-            oneItem: {
-              item: {
+            twoItems: {
+              startItem: {
                 firstValue: {
                   fields: [{ fieldPath: "object.accountName" }],
+                },
+              },
+              endItem: {
+                firstValue: {
+                  fields: [{ fieldPath: "object.loyaltyPoints.balance" }],
                 },
               },
             },
