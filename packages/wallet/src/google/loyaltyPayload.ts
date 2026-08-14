@@ -35,11 +35,28 @@ import type { RgbColor } from "../apple/placeholderIcon";
 // que el conteo de sellos sea visible en la CARA de la tarjeta, no solo al
 // tocar el pase; aplica a todo negocio con Google Wallet activo,
 // Chilaquikes incluido — es el motivo de _v8, ver
-// scripts/migrate-google-class-v8.ts):
+// scripts/migrate-google-class-v8.ts; programLogo de Iriz Style era el
+// wordmark blanco sobre transparencia (el mismo usado en el header del
+// pase de Apple, donde sí funciona porque el fondo es negro sólido) — en
+// la vista de "Pases" de Google Wallet el círculo del logo se renderiza
+// sobre chrome claro, así que quedaba invisible (mismo bug de fondo que
+// ya se había corregido para el avatar circular de /enroll, nunca portado
+// a Google). Confirmado con un GET real a la clase _v8 ya creada en
+// producción (un dispositivo real ya la había guardado): programLogo
+// seguía apuntando al wordmark roto pese a que businesses.google_logo_uri
+// ya se había corregido — la clase vieja nunca se actualiza sola.
+// programLogo pasa al mismo círculo negro con el wordmark contenido que
+// ya usa /enroll (apps/web/public/brand/iriz-icon.png, 660×660, cumple el
+// mínimo de Google) — es el motivo de _v9. Sin migración de Chilaquikes
+// esta vez: su contenido no cambia (nada en su clase se tocó), sus
+// clientes reales con pase ya guardado se quedan en _v8 sin verse
+// afectados; Iriz tampoco tiene clientes reales con pase de Google
+// guardado todavía (se dio de baja el único de prueba), así que tampoco
+// hace falta migrar nada ahí — el próximo alta real ya sale con _v9):
 // Google cachea agresivamente por classId, así que un cambio de campos
 // visuales SIEMPRE necesita un classId nuevo, nunca un PATCH in-place de
 // la clase vieja.
-export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v8";
+export const CURRENT_GOOGLE_LOYALTY_CLASS_VERSION = "v9";
 
 export function buildLoyaltyClassId(issuerId: string, businessId: string, version?: string): string {
   const suffix = version ? `_${version}` : "";
