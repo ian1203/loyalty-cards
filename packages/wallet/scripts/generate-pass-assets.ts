@@ -93,6 +93,7 @@ type Args = {
   heroPatchX: number;
   heroPatchY: number;
   heroCover: boolean;
+  noStripLogo: boolean;
   iconFallbackLetter?: string;
 };
 
@@ -117,26 +118,33 @@ function parseArgs(argv: string[]): Args {
   // nuevo sale limpio).
   const heroPatchX = Number.parseInt(get("--hero-patch-x") ?? "0", 10);
   const heroPatchY = Number.parseInt(get("--hero-patch-y") ?? "0", 10);
-  // --hero-cover: el --hero es una pieza de arte YA TERMINADA (wordmark
-  // incluido, ej. hero-iriz.png) en vez de una textura de fondo pura —
-  // bug real encontrado en producción (Iriz, primer uso real de --hero):
-  // el modo tileado (default) sampleaba un parche de 300px y lo repetía
-  // para llenar el ancho, así que en un dispositivo real se veía un
-  // mosaico de 3-4 copias en vez de UNA imagen continua (Google Wallet,
-  // que sí muestra el hero completo sin tilear, se veía correcto — la
-  // discrepancia fue la señal). Con --hero-cover: cover-crop del hero
-  // COMPLETO al tamaño exacto del canvas (sharp fit:"cover", sin tile,
-  // sin parche) y el --logo NO se compone encima (el hero ya trae su
-  // propio wordmark — componer el logo otra vez se vería duplicado/
-  // desalineado). --hero-patch-x/y no aplican en este modo.
+  // --hero-cover: un solo cover-crop del --hero COMPLETO al tamaño exacto
+  // del canvas (sharp fit:"cover", sin tile, sin parche) — para un hero de
+  // resolución suficiente que no necesita repetirse. Bug real encontrado
+  // en producción (Iriz, primer uso real de --hero): el modo tileado
+  // (default) sampleaba un parche de 300px y lo repetía para llenar el
+  // ancho, así que en un dispositivo real se veía un mosaico de 3-4 copias
+  // en vez de UNA imagen continua (Google Wallet, que sí muestra el hero
+  // completo sin tilear, se veía correcto — la discrepancia fue la
+  // señal). El --logo SIEMPRE se compone encima (tileado o cover) — usar
+  // --hero-cover solo si el --hero es una textura/patrón sin texto propio,
+  // nunca uno que ya traiga un wordmark incrustado (se vería duplicado).
+  // --hero-patch-x/y no aplican en este modo.
   const heroCover = argv.includes("--hero-cover");
+  // --no-strip-logo: el --hero es una textura/patrón con buen contraste
+  // propio (ej. cuentas huichol de Iriz) donde componer el wordmark
+  // blanco encima queda ilegible (confirmado visualmente — zonas claras
+  // del patrón bajan el contraste del texto). El header del pase
+  // (logo.png, sobre backgroundColor sólido) ya muestra el wordmark por
+  // separado, así que la marca no se pierde sin este overlay en el strip.
+  const noStripLogo = argv.includes("--no-strip-logo");
   // Un solo carácter (la letra que va en el círculo de fallback de
   // icon.png) — explícito, no derivado del slug: el slug no siempre
   // arranca con la letra que tiene sentido mostrar (ver CLAUDE.md).
   const iconFallbackLetter = get("--icon-fallback-letter");
   if (!slug || !logo || !stampsRequiredRaw) {
     throw new Error(
-      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--hero-cover] [--icon-fallback-letter <letra>]",
+      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--hero-cover] [--no-strip-logo] [--icon-fallback-letter <letra>]",
     );
   }
   const stampsRequired = Number.parseInt(stampsRequiredRaw, 10);
@@ -146,7 +154,18 @@ function parseArgs(argv: string[]): Args {
   // Gris oscuro por default — nunca invisible sobre el fondo blanco del
   // strip si un negocio corre este script sin marca cargada todavía.
   const brandColor = `#${(brandColorRaw ?? "1F1F1F").replace(/^#/, "")}`;
-  return { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY, heroCover, iconFallbackLetter };
+  return {
+    slug,
+    logo,
+    stampsRequired,
+    brandColor,
+    hero,
+    heroPatchX,
+    heroPatchY,
+    heroCover,
+    noStripLogo,
+    iconFallbackLetter,
+  };
 }
 
 function computeStampLayout(stampsRequired: number): { diameter: number; centersX: number[]; centerY: number } {
@@ -158,6 +177,84 @@ function computeStampLayout(stampsRequired: number): { diameter: number; centers
   const startX = (STRIP_BASE_WIDTH - totalWidth) / 2;
   const centersX = Array.from({ length: stampsRequired }, (_, i) => startX + diameter / 2 + i * (diameter + gap));
   return { diameter, centersX, centerY: STRIP_BASE_HEIGHT / 2 };
+}
+
+type StampPosition = { cx: number; cy: number; diameter: number };
+
+// Grid dinámico de sellos EXCLUSIVO del modo --hero — hoy solo lo invoca
+// buildHeroStripAt3x, que a su vez solo corre para negocios que pasan
+// --hero (hoy: únicamente Iriz Style). computeStampLayout (arriba) queda
+// COMPLETAMENTE intacto y es lo único que usa buildStripSvg (el fallback
+// sin --hero, el que sigue usando Chilaquikes en producción) — cero
+// riesgo de que este cambio altere su pase. Pedido explícito de Iriz,
+// dejado genérico por si su n cambia:
+//   n <= 5           → 1 fila centrada dentro de la banda reservada
+//                       (mismo criterio que computeStampLayout, pero
+//                       acotado a HERO_BAND_HEIGHT_PT, no al strip
+//                       completo).
+//   n >= 6, PAR       → 2 filas iguales (ceil(n/2) == floor(n/2)), grid
+//                       regular SIN intercalar — cada columna alineada
+//                       verticalmente entre ambas filas.
+//   n >= 6, IMPAR     → 2 filas desiguales (arriba = ceil(n/2), abajo =
+//                       floor(n/2) = arriba - 1) — la fila de abajo se
+//                       intercala en el punto medio horizontal entre
+//                       cada par de círculos consecutivos de arriba
+//                       (patrón panal), nunca alineada en columna con la
+//                       de arriba.
+// Con 2 filas el diámetro se ENCOGE (nunca se agranda HERO_BAND_HEIGHT_PT,
+// eso taparía más foto/patrón de fondo) — se toma el mínimo entre lo que
+// permite el ancho (fila más ancha) y lo que permite el alto (2 filas +
+// separación, dentro de la banda). Orden de llenado (filledCount):
+// primero la fila de arriba completa, izquierda a derecha, después la de
+// abajo — mismo criterio de lectura que una tarjeta física de 2 filas.
+function computeIrizStampGrid(stampsRequired: number): StampPosition[] {
+  const usableWidth = STRIP_BASE_WIDTH - STRIP_PADDING_X * 2;
+  const bandCenterY = STRIP_BASE_HEIGHT - HERO_BAND_HEIGHT_PT / 2;
+
+  const rowCenters = (count: number, diameter: number): number[] => {
+    const gap = diameter * STAMP_GAP_RATIO;
+    const totalWidth = count * diameter + (count - 1) * gap;
+    const startX = (STRIP_BASE_WIDTH - totalWidth) / 2;
+    return Array.from({ length: count }, (_, i) => startX + diameter / 2 + i * (diameter + gap));
+  };
+
+  if (stampsRequired <= 5) {
+    const denom = stampsRequired + (stampsRequired - 1) * STAMP_GAP_RATIO;
+    const diameter = Math.min(MAX_STAMP_DIAMETER, usableWidth / denom);
+    return rowCenters(stampsRequired, diameter).map((cx) => ({ cx, cy: bandCenterY, diameter }));
+  }
+
+  const topCount = Math.ceil(stampsRequired / 2);
+  const bottomCount = Math.floor(stampsRequired / 2);
+  const rowsEqual = topCount === bottomCount;
+
+  const horizontalDenom = topCount + (topCount - 1) * STAMP_GAP_RATIO;
+  const horizontalMax = usableWidth / horizontalDenom;
+  const verticalMax = HERO_BAND_HEIGHT_PT / (2 + STAMP_GAP_RATIO);
+  const diameter = Math.min(MAX_STAMP_DIAMETER, horizontalMax, verticalMax);
+
+  const rowGap = diameter * STAMP_GAP_RATIO;
+  const topRowY = bandCenterY - (diameter + rowGap) / 2;
+  const bottomRowY = bandCenterY + (diameter + rowGap) / 2;
+
+  const topCentersX = rowCenters(topCount, diameter);
+  const positions: StampPosition[] = topCentersX.map((cx) => ({ cx, cy: topRowY, diameter }));
+
+  if (rowsEqual) {
+    for (const cx of topCentersX) {
+      positions.push({ cx, cy: bottomRowY, diameter });
+    }
+  } else {
+    // bottomCount === topCount - 1 siempre que stampsRequired sea impar —
+    // topCount puntos dejan exactamente topCount-1 huecos entre
+    // consecutivos, uno por círculo de abajo.
+    for (let i = 0; i < bottomCount; i++) {
+      const cx = (topCentersX[i] + topCentersX[i + 1]) / 2;
+      positions.push({ cx, cy: bottomRowY, diameter });
+    }
+  }
+
+  return positions;
 }
 
 // Fallback de icon.png cuando el logo real NO aísla limpio a 29x29pt —
@@ -196,28 +293,20 @@ function buildStripSvg(filledCount: number, stampsRequired: number, brandColor: 
   </svg>`;
 }
 
-// Un "cover crop" directo del hero no deja margen para los sellos: con el
-// ratio real de Apple (312x123 = 2.54:1) contra un source típico ~2.667:1,
-// el crop usa ~100% de la altura del source, así que la fila de sellos
-// centrada cae encima del lockup del logo sin importar dónde se recorte
-// (confirmado con el cálculo y el render real en la sesión que aprobó
-// esto). En vez de recortar, se COMPONE: un parche de patrón puro
-// (muestreado de una zona SIN el lockup del hero, ver --hero-patch-x/y)
-// se tilea para armar un lienzo del tamaño exacto que se necesita, y el
-// lockup transparente (el mismo --logo, no el --hero) se compone encima
-// a tamaño grande — dejando una franja limpia reservada abajo para los
-// sellos en vez de competir por el mismo espacio.
-//
-// Se arma UNA vez a la resolución más alta (@3x) y se re-escala hacia
-// abajo para @2x/@1x — más simple y consistente entre escalas que
-// recalcular la composición 3 veces, y un downscale desde una imagen de
-// mayor resolución no pierde nitidez perceptible a estos tamaños.
+// Arma el strip completo (fondo del --hero, tileado o cover-crop según
+// --hero-cover — ver ambos modos abajo) + wordmark opcional (--logo, salvo
+// --no-strip-logo) + franja de sellos dedicada abajo. Se arma UNA vez a la
+// resolución más alta (@3x) y se re-escala hacia abajo para @2x/@1x — más
+// simple y consistente entre escalas que recalcular la composición 3
+// veces, y un downscale desde una imagen de mayor resolución no pierde
+// nitidez perceptible a estos tamaños.
 async function buildHeroStripAt3x(
   heroPath: string,
   logoPath: string,
   patchX: number,
   patchY: number,
   heroCover: boolean,
+  noStripLogo: boolean,
   filledCount: number,
   stampsRequired: number,
   brandColor: string,
@@ -227,37 +316,31 @@ async function buildHeroStripAt3x(
   const height = STRIP_BASE_HEIGHT * scale;
 
   let background: Buffer;
-  let logoComposite: sharp.OverlayOptions | null;
 
   if (heroCover) {
-    // El --hero YA es la pieza de arte final (wordmark incluido) — un
-    // solo cover-crop al tamaño exacto del canvas, SIN tile. Bug real
-    // encontrado en un dispositivo Apple real (Iriz): el modo tileado de
-    // abajo repetía un parche de 300px 3-4 veces para llenar el ancho,
-    // se veía como mosaico en vez de una imagen continua — Google Wallet
-    // (que muestra el hero completo, sin tilear) se veía correcto, esa
-    // discrepancia fue la señal de que el problema era el tile, no el
-    // asset. sharp fit:"cover" escala por el eje que menos recorte deja
-    // y centra el recorte del sobrante — para hero-iriz.png (2.33:1)
-    // contra el ratio real del strip (2.54:1) el recorte es mínimo
-    // (~32px de 821 en la fuente), lejos del wordmark que ya trae
-    // centrado. Sin composite de logoPath: el hero ya tiene su propio
-    // wordmark — componerlo de nuevo se vería duplicado/desalineado.
+    // El --hero es una TEXTURA/patrón (sin wordmark propio) — un solo
+    // cover-crop al tamaño exacto del canvas, SIN tile. Bug real
+    // encontrado en un dispositivo Apple real (Iriz, hero anterior con
+    // wordmark ya compuesto): el modo tileado de abajo repetía un parche
+    // de 300px 3-4 veces para llenar el ancho, se veía como mosaico en
+    // vez de una imagen continua — Google Wallet (que muestra el hero
+    // completo, sin tilear) se veía correcto, esa discrepancia fue la
+    // señal de que el problema era el tile, no el asset. sharp
+    // fit:"cover" escala por el eje que menos recorte deja y centra el
+    // recorte del sobrante.
     background = await sharp(heroPath)
       .resize({ width, height, fit: "cover" })
       .png()
       .toBuffer();
-    logoComposite = null;
   } else {
-    // Modo textura tileada (default, para un --hero que es un PATRÓN
-    // puro sin wordmark propio — el wordmark lo pone el --logo separado
-    // encima). Alto del parche = alto TOTAL del canvas (nunca
-    // HERO_PATCH_SIZE fijo): bug real corregido — con un parche cuadrado
-    // de 300px tileado también en Y, 369px (@3x) no es múltiplo de 300,
-    // así que la segunda fila mostraba solo los primeros 69px de una
-    // copia nueva del mismo parche — una costura dura. Con el parche ya
-    // del alto exacto del canvas, tilesY es siempre 1 — cero costura
-    // vertical posible.
+    // Modo textura TILEADA (para un --hero de baja resolución o que
+    // necesita repetirse para llenar el ancho). Alto del parche = alto
+    // TOTAL del canvas (nunca HERO_PATCH_SIZE fijo): bug real corregido —
+    // con un parche cuadrado de 300px tileado también en Y, 369px (@3x)
+    // no es múltiplo de 300, así que la segunda fila mostraba solo los
+    // primeros 69px de una copia nueva del mismo parche — una costura
+    // dura. Con el parche ya del alto exacto del canvas, tilesY es
+    // siempre 1 — cero costura vertical posible.
     const patchWidth = HERO_PATCH_SIZE;
     const patch = await sharp(heroPath)
       .extract({ left: patchX, top: patchY, width: patchWidth, height })
@@ -273,7 +356,17 @@ async function buildHeroStripAt3x(
       .composite(tileComposites)
       .png()
       .toBuffer();
+  }
 
+  // El wordmark (--logo) se compone encima por default (tileado o cover) —
+  // --no-strip-logo lo omite cuando el --hero tiene buen contraste propio
+  // y componer el wordmark blanco encima queda ilegible en las zonas
+  // claras del patrón (confirmado visualmente, ver comentario de
+  // --no-strip-logo arriba). El header del pase (logo.png, sobre
+  // backgroundColor sólido) sigue mostrando el wordmark siempre, con o
+  // sin este flag.
+  let logoComposite: sharp.OverlayOptions | null = null;
+  if (!noStripLogo) {
     const logoTargetHeight = Math.round(height * HERO_LOGO_HEIGHT_RATIO);
     const logoResized = await sharp(logoPath)
       .resize({ height: logoTargetHeight, fit: "inside" })
@@ -284,17 +377,19 @@ async function buildHeroStripAt3x(
     logoComposite = { input: logoResized, left: logoLeft, top: logoTop };
   }
 
-  const { diameter, centersX } = computeStampLayout(stampsRequired);
-  const r = (diameter / 2) * scale;
-  const bandHeightPx = HERO_BAND_HEIGHT_PT * scale;
-  const bandCenterY = height - bandHeightPx / 2;
-  const stampParts = centersX.map((cx, i) => {
-    const cxS = cx * scale;
-    const backing = `<circle cx="${cxS}" cy="${bandCenterY}" r="${r}" fill="${HERO_STAMP_BACKING_FILL}" />`;
+  // computeIrizStampGrid, NO computeStampLayout — ver el comentario de esa
+  // función: dinámico a 1 o 2 filas según stampsRequired, exclusivo de
+  // este modo (--hero), nunca alcanzado por Chilaquikes (buildStripSvg).
+  const stampPositions = computeIrizStampGrid(stampsRequired);
+  const stampParts = stampPositions.map((pos, i) => {
+    const cxS = pos.cx * scale;
+    const cyS = pos.cy * scale;
+    const r = (pos.diameter / 2) * scale;
+    const backing = `<circle cx="${cxS}" cy="${cyS}" r="${r}" fill="${HERO_STAMP_BACKING_FILL}" />`;
     const foreground =
       i < filledCount
-        ? `<circle cx="${cxS}" cy="${bandCenterY}" r="${r - 3 * scale}" fill="${brandColor}" />`
-        : `<circle cx="${cxS}" cy="${bandCenterY}" r="${r - 3 * scale}" fill="none" stroke="${EMPTY_STAMP_STROKE}" stroke-width="${2 * scale}" />`;
+        ? `<circle cx="${cxS}" cy="${cyS}" r="${r - 3 * scale}" fill="${brandColor}" />`
+        : `<circle cx="${cxS}" cy="${cyS}" r="${r - 3 * scale}" fill="none" stroke="${EMPTY_STAMP_STROKE}" stroke-width="${2 * scale}" />`;
     return backing + foreground;
   });
   const stampSvg = Buffer.from(
@@ -308,8 +403,18 @@ async function buildHeroStripAt3x(
 }
 
 async function main() {
-  const { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY, heroCover, iconFallbackLetter } =
-    parseArgs(process.argv.slice(2));
+  const {
+    slug,
+    logo,
+    stampsRequired,
+    brandColor,
+    hero,
+    heroPatchX,
+    heroPatchY,
+    heroCover,
+    noStripLogo,
+    iconFallbackLetter,
+  } = parseArgs(process.argv.slice(2));
   const outDir = path.join(PUBLIC_PASSES_DIR, slug);
   await mkdir(outDir, { recursive: true });
 
@@ -351,6 +456,7 @@ async function main() {
         heroPatchX,
         heroPatchY,
         heroCover,
+        noStripLogo,
         filledCount,
         stampsRequired,
         brandColor,
