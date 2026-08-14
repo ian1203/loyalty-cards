@@ -117,13 +117,18 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     const pass = buildPassJson({ ...baseInput, customerFirstName: null }) as {
       storeCard: { secondaryFields: Array<{ key: string }> };
     };
-    expect(pass.storeCard.secondaryFields).toEqual([{ key: "poweredBy", label: "", value: "Powered by Pragmia" }]);
+    expect(pass.storeCard.secondaryFields).toEqual([
+      { key: "poweredBySecondary", label: "", value: "Powered by Pragmia" },
+    ]);
   });
 
   it("'Powered by Pragmia' vive en secondaryFields (cara del pase) cuando no hay 2+ recompensas — pedido explícito de que vuelva a verse al frente", () => {
+    // key DISTINTO al de backFields ("poweredBy") a propósito — Apple exige
+    // keys únicos en TODO el pase, no solo dentro de cada grupo de campos
+    // (bug real encontrado vía POST /v1/log de un dispositivo real).
     const passNoCount = buildPassJson(baseInput) as { storeCard: { secondaryFields: Array<{ key: string; value: string }> } };
     expect(passNoCount.storeCard.secondaryFields).toContainEqual({
-      key: "poweredBy",
+      key: "poweredBySecondary",
       label: "",
       value: "Powered by Pragmia",
     });
@@ -131,14 +136,14 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     const passOne = buildPassJson({ ...baseInput, availableRewardsCount: 1 }) as {
       storeCard: { secondaryFields: Array<{ key: string }> };
     };
-    expect(passOne.storeCard.secondaryFields.map((f) => f.key)).toContain("poweredBy");
+    expect(passOne.storeCard.secondaryFields.map((f) => f.key)).toContain("poweredBySecondary");
   });
 
   it("con 2+ recompensas disponibles, 'Recompensas disponibles' TOMA el slot de poweredBy en secondaryFields (no conviven)", () => {
     const pass = buildPassJson({ ...baseInput, availableRewardsCount: 2 }) as {
       storeCard: { secondaryFields: Array<{ key: string }> };
     };
-    expect(pass.storeCard.secondaryFields.map((f) => f.key)).not.toContain("poweredBy");
+    expect(pass.storeCard.secondaryFields.map((f) => f.key)).not.toContain("poweredBySecondary");
     expect(pass.storeCard.secondaryFields.map((f) => f.key)).toContain("rewardsAvailable");
   });
 

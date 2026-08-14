@@ -216,7 +216,7 @@ export async function getLatestPass(input: {
 
   return withTenantContext(auth.businessId, async (tx) => {
     const [row] = await tx
-      .select({ customerId: walletPasses.customerId })
+      .select({ customerId: walletPasses.customerId, updatedAt: walletPasses.updatedAt })
       .from(walletPasses)
       .where(and(eq(walletPasses.id, auth.walletPassId), eq(walletPasses.businessId, auth.businessId)))
       .limit(1);
@@ -238,7 +238,19 @@ export async function getLatestPass(input: {
     return {
       status: 200,
       body: result.pkpass,
-      headers: { ...NO_STORE, "content-type": "application/vnd.apple.pkpass" },
+      // Last-Modified: exigido por el protocolo de PassKit — bug real
+      // encontrado vía POST /v1/log de un dispositivo real (mismo
+      // hallazgo que el de las keys duplicadas): sin este header, el
+      // dispositivo reporta "Server returned the pass data... but did
+      // not provide a 'last-modified' header" — walletPasses.updatedAt
+      // ya es el mismo timestamp que passesUpdatedSince usa para "qué
+      // cambió" (ver el comentario en notify.ts), así que es la fuente
+      // correcta, no un valor nuevo que mantener sincronizado aparte.
+      headers: {
+        ...NO_STORE,
+        "content-type": "application/vnd.apple.pkpass",
+        "last-modified": row.updatedAt.toUTCString(),
+      },
     };
   });
 }

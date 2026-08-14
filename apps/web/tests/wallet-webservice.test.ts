@@ -347,6 +347,11 @@ describe("web service público de Apple PassKit — tenant-scoped por authentica
       expect(result.status).toBe(200);
       expect(result.headers?.["cache-control"]).toBe("no-store");
       expect(result.headers?.["content-type"]).toBe("application/vnd.apple.pkpass");
+      // Bug real encontrado vía POST /v1/log de un dispositivo real durante
+      // la verificación del broadcast de promociones: sin este header, el
+      // dispositivo reporta "did not provide a 'last-modified' header".
+      expect(result.headers?.["last-modified"]).toBeDefined();
+      expect(Number.isNaN(Date.parse(result.headers?.["last-modified"] as string))).toBe(false);
       const body = result.body as Buffer;
       expect(body[0]).toBe(0x50);
       expect(body[1]).toBe(0x4b);
