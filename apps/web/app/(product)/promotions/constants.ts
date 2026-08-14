@@ -16,6 +16,6 @@ export const MAX_PROMO_MESSAGE_LENGTH = 180;
 // tabla (ver planGateError en logic.ts).
 export const DAILY_LIMIT = 1;
 export const MONTHLY_LIMIT_BY_PLAN: Record<"negocio" | "intelligence", number> = {
-  negocio: 5,
-  intelligence: 10,
+  negocio: 4,
+  intelligence: 8,
 };
