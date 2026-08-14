@@ -92,6 +92,7 @@ type Args = {
   hero?: string;
   heroPatchX: number;
   heroPatchY: number;
+  heroCover: boolean;
   iconFallbackLetter?: string;
 };
 
@@ -116,13 +117,26 @@ function parseArgs(argv: string[]): Args {
   // nuevo sale limpio).
   const heroPatchX = Number.parseInt(get("--hero-patch-x") ?? "0", 10);
   const heroPatchY = Number.parseInt(get("--hero-patch-y") ?? "0", 10);
+  // --hero-cover: el --hero es una pieza de arte YA TERMINADA (wordmark
+  // incluido, ej. hero-iriz.png) en vez de una textura de fondo pura —
+  // bug real encontrado en producción (Iriz, primer uso real de --hero):
+  // el modo tileado (default) sampleaba un parche de 300px y lo repetía
+  // para llenar el ancho, así que en un dispositivo real se veía un
+  // mosaico de 3-4 copias en vez de UNA imagen continua (Google Wallet,
+  // que sí muestra el hero completo sin tilear, se veía correcto — la
+  // discrepancia fue la señal). Con --hero-cover: cover-crop del hero
+  // COMPLETO al tamaño exacto del canvas (sharp fit:"cover", sin tile,
+  // sin parche) y el --logo NO se compone encima (el hero ya trae su
+  // propio wordmark — componer el logo otra vez se vería duplicado/
+  // desalineado). --hero-patch-x/y no aplican en este modo.
+  const heroCover = argv.includes("--hero-cover");
   // Un solo carácter (la letra que va en el círculo de fallback de
   // icon.png) — explícito, no derivado del slug: el slug no siempre
   // arranca con la letra que tiene sentido mostrar (ver CLAUDE.md).
   const iconFallbackLetter = get("--icon-fallback-letter");
   if (!slug || !logo || !stampsRequiredRaw) {
     throw new Error(
-      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--icon-fallback-letter <letra>]",
+      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--hero-cover] [--icon-fallback-letter <letra>]",
     );
   }
   const stampsRequired = Number.parseInt(stampsRequiredRaw, 10);
@@ -132,7 +146,7 @@ function parseArgs(argv: string[]): Args {
   // Gris oscuro por default — nunca invisible sobre el fondo blanco del
   // strip si un negocio corre este script sin marca cargada todavía.
   const brandColor = `#${(brandColorRaw ?? "1F1F1F").replace(/^#/, "")}`;
-  return { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY, iconFallbackLetter };
+  return { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY, heroCover, iconFallbackLetter };
 }
 
 function computeStampLayout(stampsRequired: number): { diameter: number; centersX: number[]; centerY: number } {
@@ -203,6 +217,7 @@ async function buildHeroStripAt3x(
   logoPath: string,
   patchX: number,
   patchY: number,
+  heroCover: boolean,
   filledCount: number,
   stampsRequired: number,
   brandColor: string,
@@ -211,37 +226,63 @@ async function buildHeroStripAt3x(
   const width = STRIP_BASE_WIDTH * scale;
   const height = STRIP_BASE_HEIGHT * scale;
 
-  // Alto del parche = alto TOTAL del canvas (nunca HERO_PATCH_SIZE fijo):
-  // bug real encontrado con el primer uso real de --hero (IRIZ) — con un
-  // parche cuadrado de 300px tileado también en Y, 369px (@3x) no es
-  // múltiplo de 300, así que la segunda fila mostraba solo los primeros
-  // 69px de una copia nueva del mismo parche — una costura dura donde el
-  // patrón se cortaba en seco y volvía a arrancar desde su propio borde
-  // superior. Con el parche ya del alto exacto del canvas, tilesY es
-  // siempre 1 — cero costura vertical posible, para cualquier hero.
-  const patchWidth = HERO_PATCH_SIZE;
-  const patch = await sharp(heroPath)
-    .extract({ left: patchX, top: patchY, width: patchWidth, height })
-    .toBuffer();
-  const tilesX = Math.ceil(width / patchWidth) + 1;
-  const tileComposites: sharp.OverlayOptions[] = [];
-  for (let x = 0; x < tilesX; x++) {
-    tileComposites.push({ input: patch, left: x * patchWidth, top: 0 });
-  }
-  const background = await sharp({
-    create: { width, height, channels: 3, background: brandColor },
-  })
-    .composite(tileComposites)
-    .png()
-    .toBuffer();
+  let background: Buffer;
+  let logoComposite: sharp.OverlayOptions | null;
 
-  const logoTargetHeight = Math.round(height * HERO_LOGO_HEIGHT_RATIO);
-  const logoResized = await sharp(logoPath)
-    .resize({ height: logoTargetHeight, fit: "inside" })
-    .toBuffer();
-  const logoMeta = await sharp(logoResized).metadata();
-  const logoLeft = Math.round((width - (logoMeta.width ?? 0)) / 2);
-  const logoTop = Math.round(HERO_LOGO_TOP_PT * scale);
+  if (heroCover) {
+    // El --hero YA es la pieza de arte final (wordmark incluido) — un
+    // solo cover-crop al tamaño exacto del canvas, SIN tile. Bug real
+    // encontrado en un dispositivo Apple real (Iriz): el modo tileado de
+    // abajo repetía un parche de 300px 3-4 veces para llenar el ancho,
+    // se veía como mosaico en vez de una imagen continua — Google Wallet
+    // (que muestra el hero completo, sin tilear) se veía correcto, esa
+    // discrepancia fue la señal de que el problema era el tile, no el
+    // asset. sharp fit:"cover" escala por el eje que menos recorte deja
+    // y centra el recorte del sobrante — para hero-iriz.png (2.33:1)
+    // contra el ratio real del strip (2.54:1) el recorte es mínimo
+    // (~32px de 821 en la fuente), lejos del wordmark que ya trae
+    // centrado. Sin composite de logoPath: el hero ya tiene su propio
+    // wordmark — componerlo de nuevo se vería duplicado/desalineado.
+    background = await sharp(heroPath)
+      .resize({ width, height, fit: "cover" })
+      .png()
+      .toBuffer();
+    logoComposite = null;
+  } else {
+    // Modo textura tileada (default, para un --hero que es un PATRÓN
+    // puro sin wordmark propio — el wordmark lo pone el --logo separado
+    // encima). Alto del parche = alto TOTAL del canvas (nunca
+    // HERO_PATCH_SIZE fijo): bug real corregido — con un parche cuadrado
+    // de 300px tileado también en Y, 369px (@3x) no es múltiplo de 300,
+    // así que la segunda fila mostraba solo los primeros 69px de una
+    // copia nueva del mismo parche — una costura dura. Con el parche ya
+    // del alto exacto del canvas, tilesY es siempre 1 — cero costura
+    // vertical posible.
+    const patchWidth = HERO_PATCH_SIZE;
+    const patch = await sharp(heroPath)
+      .extract({ left: patchX, top: patchY, width: patchWidth, height })
+      .toBuffer();
+    const tilesX = Math.ceil(width / patchWidth) + 1;
+    const tileComposites: sharp.OverlayOptions[] = [];
+    for (let x = 0; x < tilesX; x++) {
+      tileComposites.push({ input: patch, left: x * patchWidth, top: 0 });
+    }
+    background = await sharp({
+      create: { width, height, channels: 3, background: brandColor },
+    })
+      .composite(tileComposites)
+      .png()
+      .toBuffer();
+
+    const logoTargetHeight = Math.round(height * HERO_LOGO_HEIGHT_RATIO);
+    const logoResized = await sharp(logoPath)
+      .resize({ height: logoTargetHeight, fit: "inside" })
+      .toBuffer();
+    const logoMeta = await sharp(logoResized).metadata();
+    const logoLeft = Math.round((width - (logoMeta.width ?? 0)) / 2);
+    const logoTop = Math.round(HERO_LOGO_TOP_PT * scale);
+    logoComposite = { input: logoResized, left: logoLeft, top: logoTop };
+  }
 
   const { diameter, centersX } = computeStampLayout(stampsRequired);
   const r = (diameter / 2) * scale;
@@ -261,18 +302,14 @@ async function buildHeroStripAt3x(
   );
 
   return sharp(background)
-    .composite([
-      { input: logoResized, left: logoLeft, top: logoTop },
-      { input: stampSvg, left: 0, top: 0 },
-    ])
+    .composite([...(logoComposite ? [logoComposite] : []), { input: stampSvg, left: 0, top: 0 }])
     .png()
     .toBuffer();
 }
 
 async function main() {
-  const { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY, iconFallbackLetter } = parseArgs(
-    process.argv.slice(2),
-  );
+  const { slug, logo, stampsRequired, brandColor, hero, heroPatchX, heroPatchY, heroCover, iconFallbackLetter } =
+    parseArgs(process.argv.slice(2));
   const outDir = path.join(PUBLIC_PASSES_DIR, slug);
   await mkdir(outDir, { recursive: true });
 
@@ -313,6 +350,7 @@ async function main() {
         logoPath,
         heroPatchX,
         heroPatchY,
+        heroCover,
         filledCount,
         stampsRequired,
         brandColor,
