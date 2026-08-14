@@ -343,13 +343,13 @@ describe("sendPromoBroadcastForSession — broadcast de promociones a Wallet", (
     expect(getFakeApnsSentPushes().length).toBe(beforeApns + 1);
   });
 
-  it("sexto envío del mes en plan negocio: rechazado por el límite mensual (5), el conteo sigue en 5", async () => {
+  it("quinto envío del mes en plan negocio: rechazado por el límite mensual (4), el conteo sigue en 4", async () => {
     const now = new Date();
     const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    // 5 envíos ya sembrados EN DÍAS PASADOS del mismo mes (nunca "hoy" —
+    // 4 envíos ya sembrados EN DÍAS PASADOS del mismo mes (nunca "hoy" —
     // si cayeran hoy, el límite DIARIO (1) dispararía primero y este test
     // no distinguiría los dos límites).
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 4; i++) {
       const backdated = new Date(startOfMonth.getTime() + (i + 1) * 60_000);
       if (backdated.getTime() >= new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime()) {
         // Guard defensivo: si el mes es tan corto que esto cayera "hoy",
@@ -365,14 +365,14 @@ describe("sendPromoBroadcastForSession — broadcast de promociones a Wallet", (
       });
     }
 
-    const result = await sendPromoBroadcastForSession(sessionOwnerMonthly, form({ message: "Sexta del mes" }));
-    expect(result.error).toBe("Alcanzaste el límite de 5 promociones de tu plan este mes.");
+    const result = await sendPromoBroadcastForSession(sessionOwnerMonthly, form({ message: "Quinta del mes" }));
+    expect(result.error).toBe("Alcanzaste el límite de 4 promociones de tu plan este mes.");
 
     const rows = await adminDb
       .select()
       .from(promoBroadcasts)
       .where(eq(promoBroadcasts.businessId, businessMonthlyId));
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(4);
   });
 
   it("mensaje vacío: rechazado, cero filas", async () => {
