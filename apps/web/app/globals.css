@@ -190,6 +190,27 @@
   h1, h2, h3, h4 {
     @apply font-display;
   }
+
+  /* input[type="date"] nativo: Safari/iOS y Chrome Android renderizan los
+     segmentos internos (día/mes/año) dentro de un shadow DOM con su propio
+     padding fijo, independiente del padding que le demos al <input> — se
+     ve comprimido junto a inputs de texto normales pese a compartir la
+     misma clase de shadcn (Input: h-9 px-3 py-1). Bug real reportado en
+     /enroll (formulario público de registro) — normaliza los
+     pseudo-elementos de WebKit para que el texto respete el mismo padding
+     que el resto del form.
+     Pendiente de confirmar en un dispositivo real (iOS Safari/Chrome
+     Android) tras el deploy — no hay forma de renderizar el shadow DOM
+     nativo de WebKit desde Chromium/Playwright en este entorno. */
+  input[type="date"]::-webkit-datetime-edit {
+    padding: 0;
+  }
+  input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+  input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
 }
 
 @layer utilities {
