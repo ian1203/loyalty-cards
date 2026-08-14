@@ -210,18 +210,26 @@ export default async function CustomerDetailPage({
           <CardTitle>Datos del cliente</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* min-w-0 en cada celda: un grid item, sin esto, nunca se
+              encoge por debajo del ancho intrínseco de su contenido — un
+              email largo (una sola "palabra" sin espacios, ej.
+              zamoragamboamelissajuli@gmail.com) empujaba la columna y se
+              veía traslapado sobre Cumpleaños en vez de hacer wrap. Con
+              min-w-0 + break-words en la dd, el texto envuelve dentro de
+              su propia columna sin invadir la de al lado — bug real
+              encontrado en producción (Iriz Style). */}
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-            <div>
+            <div className="min-w-0">
               <dt className="text-muted-foreground">Teléfono</dt>
-              <dd className="font-medium">{customer.phone ?? "—"}</dd>
+              <dd className="font-medium break-words">{customer.phone ?? "—"}</dd>
             </div>
-            <div>
+            <div className="min-w-0">
               <dt className="text-muted-foreground">Email</dt>
-              <dd className="font-medium">{customer.email ?? "—"}</dd>
+              <dd className="font-medium break-words">{customer.email ?? "—"}</dd>
             </div>
-            <div>
+            <div className="min-w-0">
               <dt className="text-muted-foreground">Cumpleaños</dt>
-              <dd className="font-medium">
+              <dd className="font-medium break-words">
                 {customer.dateOfBirth
                   ? new Date(`${customer.dateOfBirth}T00:00:00Z`).toLocaleDateString("es-MX", {
                       day: "numeric",
@@ -233,26 +241,26 @@ export default async function CustomerDetailPage({
               </dd>
             </div>
             {customer.occupation ? (
-              <div>
+              <div className="min-w-0">
                 <dt className="text-muted-foreground">Ocupación</dt>
-                <dd className="font-medium">{customer.occupation}</dd>
+                <dd className="font-medium break-words">{customer.occupation}</dd>
               </div>
             ) : null}
-            <div>
+            <div className="min-w-0">
               <dt className="text-muted-foreground">Wallet</dt>
-              <dd className="font-medium">
+              <dd className="font-medium break-words">
                 {walletLabels.length > 0 ? walletLabels.join(" · ") : "Sin pase todavía"}
               </dd>
             </div>
-            <div>
+            <div className="min-w-0">
               <dt className="text-muted-foreground">Alta</dt>
-              <dd className="font-medium">
+              <dd className="font-medium break-words">
                 {customer.createdAt.toLocaleDateString("es-MX", { dateStyle: "long" })}
               </dd>
             </div>
-            <div>
+            <div className="min-w-0">
               <dt className="text-muted-foreground">Sucursal (primer sello)</dt>
-              <dd className="font-medium">{firstStampLocation?.locationName ?? "Sin sellos todavía"}</dd>
+              <dd className="font-medium break-words">{firstStampLocation?.locationName ?? "Sin sellos todavía"}</dd>
             </div>
           </dl>
         </CardContent>
