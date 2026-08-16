@@ -123,6 +123,7 @@ type Args = {
   heroPatchY: number;
   heroCover: boolean;
   noStripLogo: boolean;
+  emptyStampStroke: string;
   iconFallbackLetter?: string;
 };
 
@@ -167,13 +168,22 @@ function parseArgs(argv: string[]): Args {
   // (logo.png, sobre backgroundColor sólido) ya muestra el wordmark por
   // separado, así que la marca no se pierde sin este overlay en el strip.
   const noStripLogo = argv.includes("--no-strip-logo");
+  // Contorno de los sellos VACÍOS en modo --hero (buildHeroStripAt3x) —
+  // gris (#C4C4C4, el default de EMPTY_STAMP_STROKE) salvo que se pida
+  // otro color explícito. Deliberadamente SOLO afecta buildHeroStripAt3x
+  // (--hero, hoy: Iriz Style y wallet-verify-test) — buildStripSvg (el
+  // fallback sin --hero que sigue usando Chilaquikes) sigue con
+  // EMPTY_STAMP_STROKE hardcodeado, sin este flag, cero riesgo de que
+  // este cambio le llegue.
+  const emptyStampStrokeRaw = get("--empty-stamp-stroke");
+  const emptyStampStroke = emptyStampStrokeRaw ? `#${emptyStampStrokeRaw.replace(/^#/, "")}` : EMPTY_STAMP_STROKE;
   // Un solo carácter (la letra que va en el círculo de fallback de
   // icon.png) — explícito, no derivado del slug: el slug no siempre
   // arranca con la letra que tiene sentido mostrar (ver CLAUDE.md).
   const iconFallbackLetter = get("--icon-fallback-letter");
   if (!slug || !logo || !stampsRequiredRaw) {
     throw new Error(
-      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--hero-cover] [--no-strip-logo] [--icon-fallback-letter <letra>]",
+      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--hero-cover] [--no-strip-logo] [--empty-stamp-stroke <hex sin #>] [--icon-fallback-letter <letra>]",
     );
   }
   const stampsRequired = Number.parseInt(stampsRequiredRaw, 10);
@@ -193,6 +203,7 @@ function parseArgs(argv: string[]): Args {
     heroPatchY,
     heroCover,
     noStripLogo,
+    emptyStampStroke,
     iconFallbackLetter,
   };
 }
@@ -359,6 +370,7 @@ async function buildHeroStripAt3x(
   filledCount: number,
   stampsRequired: number,
   brandColor: string,
+  emptyStampStroke: string,
 ): Promise<Buffer> {
   const scale = 3;
   const width = STRIP_BASE_WIDTH * scale;
@@ -444,7 +456,7 @@ async function buildHeroStripAt3x(
     const foreground =
       i < filledCount
         ? `<circle cx="${cxS}" cy="${cyS}" r="${r - 3 * scale}" fill="${brandColor}" />`
-        : `<circle cx="${cxS}" cy="${cyS}" r="${r - 3 * scale}" fill="none" stroke="${EMPTY_STAMP_STROKE}" stroke-width="${2 * scale}" />`;
+        : `<circle cx="${cxS}" cy="${cyS}" r="${r - 3 * scale}" fill="none" stroke="${emptyStampStroke}" stroke-width="${2 * scale}" />`;
     return backing + foreground;
   });
   const stampSvg = Buffer.from(
@@ -468,6 +480,7 @@ async function main() {
     heroPatchY,
     heroCover,
     noStripLogo,
+    emptyStampStroke,
     iconFallbackLetter,
   } = parseArgs(process.argv.slice(2));
   const outDir = path.join(PUBLIC_PASSES_DIR, slug);
@@ -515,6 +528,7 @@ async function main() {
         filledCount,
         stampsRequired,
         brandColor,
+        emptyStampStroke,
       );
       await sharp(at3x).toFile(path.join(outDir, `strip-${filledCount}@3x.png`));
       await sharp(at3x)
