@@ -80,17 +80,23 @@ const MAX_STAMP_DIAMETER = 60;
 // elegida sobre la Variante 1, que dejaba menos aire a los sellos).
 const HERO_LOGO_HEIGHT_RATIO = 0.62; // proporción de STRIP_BASE_HEIGHT
 const HERO_LOGO_TOP_PT = 14 / 3; // ~4.67pt @1x (14px medidos @3x)
-const HERO_BAND_HEIGHT_PT = 150 / 3; // 50pt @1x (150px medidos @3x)
-// Margen vertical del bloque de 2 filas dentro de la banda — bug real
-// encontrado en un dispositivo Apple real (Iriz, grid de 2 filas): sin
-// esto, el diámetro se calculaba para que el bloque (2*diámetro+gap)
-// ocupara EXACTAMENTE HERO_BAND_HEIGHT_PT, así que la fila de abajo
-// quedaba con su borde tocando el borde inferior del strip entero (y=123,
-// cero margen) — se veía "pegado abajo" en vez de centrado dentro de la
-// banda. Con este margen restado del alto disponible ANTES de calcular el
-// diámetro, el bloque de 2 filas queda con aire arriba y abajo, centrado
-// en bandCenterY igual que antes.
-const HERO_STAMP_ROW_VERTICAL_PADDING_PT = 6;
+// Alto reservado para el logo compuesto en el strip cuando SÍ se
+// compone (sin --no-strip-logo) — HERO_LOGO_TOP_PT + la altura real que
+// ocupa a HERO_LOGO_HEIGHT_RATIO. computeIrizStampGrid lo resta del alto
+// total ANTES de calcular el grid de sellos, así que nunca compite por el
+// mismo espacio que el logo. Con --no-strip-logo (caso real de Iriz hoy:
+// el hero ya trae su propio wordmark, no hay logo separado en el strip)
+// este valor no se usa — el grid de sellos tiene el strip COMPLETO
+// disponible. Ajuste real (ver commit): los dos intentos anteriores de
+// este layout heredaban una "banda" de 50pt pensada para 1 fila (mitad
+// del strip sin ningún motivo real una vez que dejó de haber logo que
+// evitar) — los sellos de 2 filas salían diminutos (~21pt de diámetro) y
+// pegados al borde inferior. Sin esa restricción heredada, el grid usa
+// el alto real disponible y el diámetro más que se duplica.
+const HERO_LOGO_RESERVED_HEIGHT_PT = HERO_LOGO_TOP_PT + HERO_LOGO_HEIGHT_RATIO * STRIP_BASE_HEIGHT;
+// Margen vertical del bloque de sellos (1 o 2 filas) dentro del área que
+// se le asigna — nunca 0, para que no quede pegado a un borde.
+const STAMP_AREA_VERTICAL_MARGIN_PT = 8;
 const HERO_STAMP_BACKING_FILL = "#FFFFFF"; // disco blanco detrás de cada sello — mismo lenguaje visual que el fondo blanco liso de siempre, solo que individual
 const HERO_PATCH_SIZE = 300; // px, muestreado del source del hero a resolución nativa
 
@@ -196,12 +202,19 @@ type StampPosition = { cx: number; cy: number; diameter: number };
 // --hero (hoy: únicamente Iriz Style). computeStampLayout (arriba) queda
 // COMPLETAMENTE intacto y es lo único que usa buildStripSvg (el fallback
 // sin --hero, el que sigue usando Chilaquikes en producción) — cero
-// riesgo de que este cambio altere su pase. Pedido explícito de Iriz,
-// dejado genérico por si su n cambia:
-//   n <= 5           → 1 fila centrada dentro de la banda reservada
-//                       (mismo criterio que computeStampLayout, pero
-//                       acotado a HERO_BAND_HEIGHT_PT, no al strip
-//                       completo).
+// riesgo de que este cambio altere su pase.
+//
+// reservedTopPt: cuánto del alto TOTAL del strip (STRIP_BASE_HEIGHT) NO
+// está disponible para sellos porque ya lo ocupa el logo compuesto
+// encima (HERO_LOGO_RESERVED_HEIGHT_PT si buildHeroStripAt3x compone
+// logo, 0 si --no-strip-logo) — el grid usa TODO lo que sobra, no una
+// banda fija heredada del layout de 1 fila. El área asignada es
+// [reservedTopPt, STRIP_BASE_HEIGHT], con STAMP_AREA_VERTICAL_MARGIN_PT
+// de aire arriba y abajo del bloque para que nunca quede pegado a un
+// borde.
+//
+// Reglas (pedido explícito de Iriz, dejado genérico por si su n cambia):
+//   n <= 5           → 1 fila centrada en el área asignada.
 //   n >= 6, PAR       → 2 filas iguales (ceil(n/2) == floor(n/2)), grid
 //                       regular SIN intercalar — cada columna alineada
 //                       verticalmente entre ambas filas.
@@ -211,15 +224,17 @@ type StampPosition = { cx: number; cy: number; diameter: number };
 //                       cada par de círculos consecutivos de arriba
 //                       (patrón panal), nunca alineada en columna con la
 //                       de arriba.
-// Con 2 filas el diámetro se ENCOGE (nunca se agranda HERO_BAND_HEIGHT_PT,
-// eso taparía más foto/patrón de fondo) — se toma el mínimo entre lo que
-// permite el ancho (fila más ancha) y lo que permite el alto (2 filas +
-// separación, dentro de la banda). Orden de llenado (filledCount):
-// primero la fila de arriba completa, izquierda a derecha, después la de
-// abajo — mismo criterio de lectura que una tarjeta física de 2 filas.
-function computeIrizStampGrid(stampsRequired: number): StampPosition[] {
+// El diámetro se toma el MÁXIMO que quepa: el mínimo entre lo que permite
+// el ancho (fila más ancha) y lo que permite el alto disponible (1 o 2
+// filas + separación, dentro del área asignada) — nunca se encoge más de
+// lo necesario. Orden de llenado (filledCount): primero la fila de
+// arriba completa, izquierda a derecha, después la de abajo — mismo
+// criterio de lectura que una tarjeta física de 2 filas.
+function computeIrizStampGrid(stampsRequired: number, reservedTopPt: number): StampPosition[] {
   const usableWidth = STRIP_BASE_WIDTH - STRIP_PADDING_X * 2;
-  const bandCenterY = STRIP_BASE_HEIGHT - HERO_BAND_HEIGHT_PT / 2;
+  const areaHeight = STRIP_BASE_HEIGHT - reservedTopPt;
+  const areaCenterY = reservedTopPt + areaHeight / 2;
+  const usableAreaHeight = areaHeight - STAMP_AREA_VERTICAL_MARGIN_PT * 2;
 
   const rowCenters = (count: number, diameter: number): number[] => {
     const gap = diameter * STAMP_GAP_RATIO;
@@ -230,8 +245,10 @@ function computeIrizStampGrid(stampsRequired: number): StampPosition[] {
 
   if (stampsRequired <= 5) {
     const denom = stampsRequired + (stampsRequired - 1) * STAMP_GAP_RATIO;
-    const diameter = Math.min(MAX_STAMP_DIAMETER, usableWidth / denom);
-    return rowCenters(stampsRequired, diameter).map((cx) => ({ cx, cy: bandCenterY, diameter }));
+    const horizontalMax = usableWidth / denom;
+    const verticalMax = usableAreaHeight; // 1 sola fila: todo el alto disponible alcanza
+    const diameter = Math.min(MAX_STAMP_DIAMETER, horizontalMax, verticalMax);
+    return rowCenters(stampsRequired, diameter).map((cx) => ({ cx, cy: areaCenterY, diameter }));
   }
 
   const topCount = Math.ceil(stampsRequired / 2);
@@ -240,13 +257,12 @@ function computeIrizStampGrid(stampsRequired: number): StampPosition[] {
 
   const horizontalDenom = topCount + (topCount - 1) * STAMP_GAP_RATIO;
   const horizontalMax = usableWidth / horizontalDenom;
-  const usableBandHeight = HERO_BAND_HEIGHT_PT - HERO_STAMP_ROW_VERTICAL_PADDING_PT * 2;
-  const verticalMax = usableBandHeight / (2 + STAMP_GAP_RATIO);
+  const verticalMax = usableAreaHeight / (2 + STAMP_GAP_RATIO);
   const diameter = Math.min(MAX_STAMP_DIAMETER, horizontalMax, verticalMax);
 
   const rowGap = diameter * STAMP_GAP_RATIO;
-  const topRowY = bandCenterY - (diameter + rowGap) / 2;
-  const bottomRowY = bandCenterY + (diameter + rowGap) / 2;
+  const topRowY = areaCenterY - (diameter + rowGap) / 2;
+  const bottomRowY = areaCenterY + (diameter + rowGap) / 2;
 
   const topCentersX = rowCenters(topCount, diameter);
   const positions: StampPosition[] = topCentersX.map((cx) => ({ cx, cy: topRowY, diameter }));
@@ -391,7 +407,13 @@ async function buildHeroStripAt3x(
   // computeIrizStampGrid, NO computeStampLayout — ver el comentario de esa
   // función: dinámico a 1 o 2 filas según stampsRequired, exclusivo de
   // este modo (--hero), nunca alcanzado por Chilaquikes (buildStripSvg).
-  const stampPositions = computeIrizStampGrid(stampsRequired);
+  // reservedTopPt=0 con --no-strip-logo (nada que evitar, todo el strip
+  // disponible para sellos) — HERO_LOGO_RESERVED_HEIGHT_PT solo aplica
+  // cuando el logo SÍ se compone encima.
+  const stampPositions = computeIrizStampGrid(
+    stampsRequired,
+    noStripLogo ? 0 : HERO_LOGO_RESERVED_HEIGHT_PT,
+  );
   const stampParts = stampPositions.map((pos, i) => {
     const cxS = pos.cx * scale;
     const cyS = pos.cy * scale;
