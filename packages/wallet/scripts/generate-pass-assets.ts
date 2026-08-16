@@ -97,6 +97,19 @@ const HERO_LOGO_RESERVED_HEIGHT_PT = HERO_LOGO_TOP_PT + HERO_LOGO_HEIGHT_RATIO *
 // Margen vertical del bloque de sellos (1 o 2 filas) dentro del área que
 // se le asigna — nunca 0, para que no quede pegado a un borde.
 const STAMP_AREA_VERTICAL_MARGIN_PT = 8;
+// Ajuste de balance (2 filas) — el intento anterior maximizaba el
+// diámetro hasta llenar TODO el alto disponible (~82% del strip),
+// dejando el patrón de fondo reducido a un borde mínimo arriba/abajo.
+// STAMP_BLOCK_HEIGHT_RATIO fija cuánto del alto del ÁREA asignada ocupa
+// el bloque completo (2 filas + separación) — 0.48 deja el patrón
+// claramente visible arriba Y abajo del grid (~52% del área), en vez de
+// maximizar el diámetro a como dé lugar. STAMP_ROW_GAP_RATIO (separación
+// ENTRE filas) es deliberadamente mayor que STAMP_GAP_RATIO (separación
+// horizontal, entre sellos de una misma fila) — con el diámetro más
+// chico que exige el ratio de arriba, una separación proporcionalmente
+// mayor evita que las dos filas se vean pegadas/tocándose.
+const STAMP_BLOCK_HEIGHT_RATIO = 0.48;
+const STAMP_ROW_GAP_RATIO = 0.5;
 const HERO_STAMP_BACKING_FILL = "#FFFFFF"; // disco blanco detrás de cada sello — mismo lenguaje visual que el fondo blanco liso de siempre, solo que individual
 const HERO_PATCH_SIZE = 300; // px, muestreado del source del hero a resolución nativa
 
@@ -257,10 +270,19 @@ function computeIrizStampGrid(stampsRequired: number, reservedTopPt: number): St
 
   const horizontalDenom = topCount + (topCount - 1) * STAMP_GAP_RATIO;
   const horizontalMax = usableWidth / horizontalDenom;
-  const verticalMax = usableAreaHeight / (2 + STAMP_GAP_RATIO);
-  const diameter = Math.min(MAX_STAMP_DIAMETER, horizontalMax, verticalMax);
+  // Diámetro objetivo: el bloque completo (2 filas + separación) debe
+  // ocupar STAMP_BLOCK_HEIGHT_RATIO del área asignada, no "lo más grande
+  // que quepa" — de ahí despejar el diámetro usando STAMP_ROW_GAP_RATIO
+  // (la separación entre filas), nunca STAMP_GAP_RATIO (esa es horizontal,
+  // entre sellos de la misma fila). usableAreaHeight/(2+ratio) queda como
+  // techo de seguridad (nunca desborda el área con margen), pero en la
+  // práctica el ratio de bloque es la restricción real.
+  const targetBlockHeight = areaHeight * STAMP_BLOCK_HEIGHT_RATIO;
+  const ratioMax = targetBlockHeight / (2 + STAMP_ROW_GAP_RATIO);
+  const safetyMax = usableAreaHeight / (2 + STAMP_ROW_GAP_RATIO);
+  const diameter = Math.min(MAX_STAMP_DIAMETER, horizontalMax, ratioMax, safetyMax);
 
-  const rowGap = diameter * STAMP_GAP_RATIO;
+  const rowGap = diameter * STAMP_ROW_GAP_RATIO;
   const topRowY = areaCenterY - (diameter + rowGap) / 2;
   const bottomRowY = areaCenterY + (diameter + rowGap) / 2;
 
