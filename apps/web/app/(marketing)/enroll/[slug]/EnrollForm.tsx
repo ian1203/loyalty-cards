@@ -172,7 +172,7 @@ export function EnrollForm({
             name="shippingAddress"
             maxLength={300}
             rows={3}
-            placeholder="Calle, número, colonia, ciudad — para pedidos por WhatsApp"
+            placeholder="Calle, número, colonia, ciudad — para pedidos en línea"
             value={shippingAddress}
             onChange={(e) => setShippingAddress(e.currentTarget.value)}
           />
