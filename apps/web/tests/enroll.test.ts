@@ -11,7 +11,7 @@ import {
   walletPasses,
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
-import { enrollCustomerPublic } from "@loyalty/db/enroll";
+import { enrollCustomerPublic, getActiveBusinessBySlug } from "@loyalty/db/enroll";
 import { HONEYPOT_FIELD } from "../app/(marketing)/enroll/[slug]/honeypot";
 import { enrollCustomerForSlug, normalizePhone } from "../app/(marketing)/enroll/[slug]/logic";
 import { saveProgramForSession } from "../app/(product)/rewards/logic";
@@ -141,6 +141,33 @@ describe("/enroll — auto-registro público de clientes", () => {
     expect(balance.currentStamps).toBe(0);
   });
 
+  // Campo configurable por negocio (enroll_show_shipping_address) — sigue
+  // guardándose aunque el negocio no lo muestre en su form (mismo criterio
+  // que occupation: el flag es solo UI, la función SQL nunca lo valida),
+  // pero solo negocios que lo activaron (Iriz Style en prod) lo piden en
+  // la práctica.
+  it("guarda la dirección de envío cuando el visitante la escribe (campo opcional)", async () => {
+    const phone = `+52 229 ${Math.floor(1000000 + Math.random() * 8999999)}`;
+    const result = await enrollCustomerForSlug(
+      businessASlug,
+      validFields({ phone, shippingAddress: "Calle Falsa 123, Col. Centro" }),
+      TEST_IP,
+    );
+    expect(result.error).toBeUndefined();
+
+    const [row] = await adminDb.select().from(customers).where(eq(customers.phone, normalizePhone(phone)!));
+    expect(row.shippingAddress).toBe("Calle Falsa 123, Col. Centro");
+  });
+
+  it("enroll_show_shipping_address default false — getActiveBusinessBySlug lo refleja tal cual", async () => {
+    const lookup = await getActiveBusinessBySlug(businessASlug);
+    expect(lookup?.enrollShowShippingAddress).toBe(false);
+
+    await adminDb.update(businesses).set({ enrollShowShippingAddress: true }).where(eq(businesses.id, businessAId));
+    const afterToggle = await getActiveBusinessBySlug(businessASlug);
+    expect(afterToggle?.enrollShowShippingAddress).toBe(true);
+  });
+
   it("registra un cliente en un negocio activo SIN programa todavía (sin balance, sin error)", async () => {
     const result = await enrollCustomerForSlug(businessBSlug, validFields(), TEST_IP);
 
@@ -252,6 +279,7 @@ describe("/enroll — auto-registro público de clientes", () => {
         dateOfBirth: minor.toISOString().slice(0, 10),
         occupation: null,
         walletToken: `test-token-${Date.now()}`,
+        shippingAddress: null,
       }),
     ).rejects.toThrow();
 

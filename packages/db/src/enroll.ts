@@ -23,6 +23,7 @@ export type PublicEnrollInput = {
   dateOfBirth: string; // YYYY-MM-DD
   occupation: string | null;
   walletToken: string;
+  shippingAddress: string | null;
 };
 
 export type PublicEnrollResult = {
@@ -38,6 +39,7 @@ export type PublicBusinessLookup = {
   name: string;
   logoUrl: string | null;
   enrollShowOccupation: boolean;
+  enrollShowShippingAddress: boolean;
 };
 
 export class EnrollBusinessNotFoundError extends Error {
@@ -61,10 +63,17 @@ export async function getActiveBusinessBySlug(slug: string): Promise<PublicBusin
     name: string;
     logo_url: string | null;
     enroll_show_occupation: boolean;
+    enroll_show_shipping_address: boolean;
   }>(sql`select * from get_active_business_by_slug(${slug})`);
   const row = result.rows[0];
   return row
-    ? { id: row.id, name: row.name, logoUrl: row.logo_url, enrollShowOccupation: row.enroll_show_occupation }
+    ? {
+        id: row.id,
+        name: row.name,
+        logoUrl: row.logo_url,
+        enrollShowOccupation: row.enroll_show_occupation,
+        enrollShowShippingAddress: row.enroll_show_shipping_address,
+      }
     : null;
 }
 
@@ -87,7 +96,8 @@ export async function enrollCustomerPublic(input: PublicEnrollInput): Promise<Pu
         ${input.email},
         ${input.dateOfBirth}::date,
         ${input.occupation},
-        ${input.walletToken}
+        ${input.walletToken},
+        ${input.shippingAddress}
       )`,
     );
   } catch (error) {

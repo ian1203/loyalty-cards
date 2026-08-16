@@ -27,6 +27,11 @@ export const customers = pgTable(
     // cumpleaños después. Nullable: el alta manual (dueño/staff) no la pide.
     dateOfBirth: date("date_of_birth"),
     occupation: text("occupation"),
+    // Dirección de envío, para negocios que venden por WhatsApp (Iriz
+    // Style) — mismo criterio nullable que occupation: solo se pide cuando
+    // el negocio activó businesses.enrollShowShippingAddress, siempre
+    // opcional aun ahí, y el alta manual (/customers) tampoco la pide.
+    shippingAddress: text("shipping_address"),
     // now() solo cuando el cliente se auto-registra en /enroll y aceptó el
     // checkbox de consentimiento LFPDPPP — NULL para altas manuales, que no
     // pasan por ese consentimiento.

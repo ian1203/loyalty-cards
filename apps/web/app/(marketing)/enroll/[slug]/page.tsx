@@ -42,7 +42,11 @@ export default async function EnrollPage({ params }: { params: Promise<Params> }
           Regístrate y agrega tu tarjeta de sellos a tu celular en un minuto.
         </p>
       </header>
-      <EnrollForm businessSlug={slug} showOccupation={business.enrollShowOccupation} />
+      <EnrollForm
+        businessSlug={slug}
+        showOccupation={business.enrollShowOccupation}
+        showShippingAddress={business.enrollShowShippingAddress}
+      />
     </div>
   );
 }

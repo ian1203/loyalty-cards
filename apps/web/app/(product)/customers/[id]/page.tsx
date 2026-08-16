@@ -75,6 +75,7 @@ export default async function CustomerDetailPage({
       email: row.email,
       dateOfBirth: row.dateOfBirth,
       occupation: row.occupation,
+      shippingAddress: row.shippingAddress,
       createdAt: row.createdAt,
     };
 
@@ -244,6 +245,12 @@ export default async function CustomerDetailPage({
               <div className="min-w-0">
                 <dt className="text-muted-foreground">Ocupación</dt>
                 <dd className="font-medium break-words">{customer.occupation}</dd>
+              </div>
+            ) : null}
+            {customer.shippingAddress ? (
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">Dirección de envío</dt>
+                <dd className="font-medium break-words">{customer.shippingAddress}</dd>
               </div>
             ) : null}
             <div className="min-w-0">

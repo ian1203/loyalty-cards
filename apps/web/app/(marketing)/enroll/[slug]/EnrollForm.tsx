@@ -8,6 +8,7 @@ import { Button } from "../../../../components/ui/button";
 import { Checkbox } from "../../../../components/ui/checkbox";
 import { Input } from "../../../../components/ui/input";
 import { Label } from "../../../../components/ui/label";
+import { Textarea } from "../../../../components/ui/textarea";
 import { enrollCustomerAction } from "./actions";
 import { HONEYPOT_FIELD } from "./honeypot";
 import type { EnrollActionState } from "./logic";
@@ -43,9 +44,11 @@ function pickWalletButton(
 export function EnrollForm({
   businessSlug,
   showOccupation,
+  showShippingAddress,
 }: {
   businessSlug: string;
   showOccupation: boolean;
+  showShippingAddress: boolean;
 }) {
   const enrollForSlug = enrollCustomerAction.bind(null, businessSlug);
   const [state, formAction, pending] = useActionState(enrollForSlug, initialState);
@@ -63,6 +66,7 @@ export function EnrollForm({
   const [occupation, setOccupation] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [shippingAddress, setShippingAddress] = useState("");
   const [consent, setConsent] = useState(false);
 
   if (state.success) {
@@ -159,6 +163,21 @@ export function EnrollForm({
           />
         </div>
       </div>
+
+      {showShippingAddress ? (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="enroll-shipping-address">Dirección de envío (opcional)</Label>
+          <Textarea
+            id="enroll-shipping-address"
+            name="shippingAddress"
+            maxLength={300}
+            rows={3}
+            placeholder="Calle, número, colonia, ciudad — para pedidos por WhatsApp"
+            value={shippingAddress}
+            onChange={(e) => setShippingAddress(e.currentTarget.value)}
+          />
+        </div>
+      ) : null}
 
       <div className="flex items-start gap-2.5">
         <Checkbox
