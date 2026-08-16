@@ -73,6 +73,13 @@ export const businesses = pgTable("businesses", {
   // configuración genérica de campos — el pedido real era "quitar
   // ocupación para Iriz", no un form builder.
   enrollShowOccupation: boolean("enroll_show_occupation").notNull().default(true),
+  // Segundo campo configurable de /enroll, mismo criterio que
+  // enrollShowOccupation de arriba: default false preserva a todo negocio
+  // existente sin tocarlos, Iriz Style lo pone en true a mano tras el
+  // alta — pidió capturar dirección de envío (opcional) para clientes que
+  // compran por WhatsApp. Sigue siendo UN boolean por campo, no un form
+  // builder genérico.
+  enrollShowShippingAddress: boolean("enroll_show_shipping_address").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

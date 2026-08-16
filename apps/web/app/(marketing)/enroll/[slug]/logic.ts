@@ -34,6 +34,7 @@ export type EnrollActionState = {
 const MAX_NAME_LENGTH = 80;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_OCCUPATION_LENGTH = 120;
+const MAX_SHIPPING_ADDRESS_LENGTH = 300;
 // TLD de al menos 2 caracteres, sin punto vacío antes/después — el regex
 // anterior (sin el {2,}) dejaba pasar cosas como "a@b.c" o "a@.com".
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -159,6 +160,9 @@ export async function enrollCustomerForSlug(
   const rawOccupation = String(formData.get("occupation") ?? "").trim();
   const occupation = rawOccupation ? rawOccupation.slice(0, MAX_OCCUPATION_LENGTH) : null;
 
+  const rawShippingAddress = String(formData.get("shippingAddress") ?? "").trim();
+  const shippingAddress = rawShippingAddress ? rawShippingAddress.slice(0, MAX_SHIPPING_ADDRESS_LENGTH) : null;
+
   if (formData.get("consent") !== "on") {
     return { error: "Debes aceptar el aviso de privacidad para continuar." };
   }
@@ -178,6 +182,7 @@ export async function enrollCustomerForSlug(
       dateOfBirth: rawDob,
       occupation,
       walletToken,
+      shippingAddress,
     });
   } catch (error) {
     if (error instanceof EnrollDuplicatePhoneError) {

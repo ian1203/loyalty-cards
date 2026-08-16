@@ -16,3 +16,7 @@ chilaquikes-logo*.png
 CHILAQUIKES-respuestas.csv
 pragmia-logo/
 .vercel
+
+# QR estáticos de /enroll por negocio (incluye venv local) — se regeneran
+# a mano cuando haga falta, nunca al repo.
+qr-codes/
