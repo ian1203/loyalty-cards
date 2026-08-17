@@ -20,6 +20,7 @@ import {
   createBusinessWithRealOwner,
   createPlatformAdmin,
   form,
+  refreshSessionForCookieJar,
   signInAsCookieJar,
   supabaseAdminClient,
 } from "./support/testAuth";
@@ -310,6 +311,69 @@ describe("Impersonación de negocio — Panel de Admin de Plataforma", () => {
       // Antes del fix: esto resolvía como tenant_user real de businessB,
       // role "owner", impersonation: null — indistinguible del dueño real.
       expect(session.authenticated).toBe(false);
+    });
+  });
+
+  // Regresión de un bug real reportado en producción: "entré a Chilaquikes
+  // e Iriz y ninguna funcionó, me regresa a /admin". Causa real: el admin
+  // YA estaba logueado (JWT sin claims de impersonación) ANTES de llamar
+  // startImpersonation() — ese JWT ya emitido sigue firmado con los claims
+  // viejos hasta que se refresca (el hook de auth solo corre en
+  // login/refresh, nunca en cada request). Los tests de arriba nunca
+  // atraparon esto porque siempre hacían un LOGIN NUEVO después de
+  // impersonar (signInAsCookieJar), lo cual evita el problema por
+  // construcción — acá se prueba el flujo real: sesión YA existente,
+  // impersonar, refrescar EN EL MISMO jar (sin volver a loguearse, igual
+  // que refreshClaims() en impersonation-actions.ts).
+  describe("Flujo real: admin YA logueado que impersona (sin volver a loguearse)", () => {
+    let strayAdminAuthUserId: string;
+    let strayAdminEmail: string;
+    let strayAdminCookies: CookieMethodsServer;
+
+    beforeAll(async () => {
+      strayAdminEmail = `admin-imp-refresh-${suffix}@test.dev`;
+      strayAdminAuthUserId = await createPlatformAdmin(strayAdminEmail, password, "owner");
+      // Login ANTES de impersonar — este jar queda con un JWT sin ningún
+      // claim de impersonación, exactamente como un admin que ya tenía
+      // /admin abierto en el navegador.
+      strayAdminCookies = await signInAsCookieJar(strayAdminEmail, password);
+    });
+
+    afterAll(async () => {
+      await endImpersonation(strayAdminAuthUserId).catch(() => {});
+      await adminDb.delete(auditLogs).where(eq(auditLogs.actorAuthUserId, strayAdminAuthUserId));
+      await adminDb
+        .delete(platformImpersonationGrants)
+        .where(eq(platformImpersonationGrants.platformAdminAuthUserId, strayAdminAuthUserId));
+      await adminDb.delete(platformAdmins).where(eq(platformAdmins.authUserId, strayAdminAuthUserId));
+      await supabaseAdminClient().auth.admin.deleteUser(strayAdminAuthUserId);
+    });
+
+    it("sin refrescar, el JWT ya emitido sigue sin claims de impersonación (reproduce el bug)", async () => {
+      await startImpersonation(strayAdminAuthUserId, "owner", businessB.id);
+
+      const staleSession = await getVerifiedSession(strayAdminCookies);
+      expect(staleSession.authenticated).toBe(true);
+      if (!staleSession.authenticated) throw new Error("unreachable");
+      // Exactamente el bug reportado: sigue viéndose como platform_admin
+      // puro, sin business_id — (product)/layout.tsx lo rebotaría a /admin.
+      expect(staleSession.kind).toBe("platform_admin");
+    });
+
+    it("tras refrescar la sesión (mismo jar, sin login nuevo), el JWT trae los claims de impersonación", async () => {
+      await refreshSessionForCookieJar(strayAdminCookies);
+
+      const freshSession = await getVerifiedSession(strayAdminCookies);
+      expect(freshSession.authenticated).toBe(true);
+      if (!freshSession.authenticated || freshSession.kind !== "tenant_user") {
+        throw new Error(`se esperaba tenant_user tras refrescar, se obtuvo: ${JSON.stringify(freshSession)}`);
+      }
+      expect(freshSession.businessId).toBe(businessB.id);
+      expect(freshSession.role).toBe("owner");
+      expect(freshSession.impersonation).toEqual({
+        byPlatformAdminAuthUserId: strayAdminAuthUserId,
+        platformRole: "owner",
+      });
     });
   });
 });

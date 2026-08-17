@@ -80,6 +80,25 @@ export async function signInAsCookieJar(
   return jar;
 }
 
+// Fuerza un refresh de sesión SOBRE EL MISMO jar ya logueado — mismo
+// mecanismo que refreshClaims() en apps/web/app/admin/impersonation-actions.ts
+// (createServerClient ligado al jar + refreshSession(), sin argumentos,
+// toma el refresh_token ya guardado). A diferencia de signInAsCookieJar
+// (login NUEVO), esto prueba el camino real: un admin YA logueado que
+// impersona sin volver a loguearse — el escenario que reveló el bug real
+// de JWT con claims viejos.
+export async function refreshSessionForCookieJar(jar: CookieMethodsServer): Promise<void> {
+  const serverClient = createServerClient(
+    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    { cookies: jar },
+  );
+  const { error } = await serverClient.auth.refreshSession();
+  if (error) {
+    throw new Error(`No se pudo refrescar la sesión: ${error.message}`);
+  }
+}
+
 export async function createPlatformAdmin(
   email: string,
   password: string,

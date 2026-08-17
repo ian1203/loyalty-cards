@@ -1,10 +1,28 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { createClient } from "../../lib/supabase/server";
 import { getVerifiedSession, requirePlatformAdmin } from "../../lib/supabase/session";
 import { endImpersonation, startImpersonation } from "./impersonation";
 
 export type ImpersonationActionState = { error?: string };
+
+// getVerifiedSession() usa getClaims(), que verifica la firma del JWT que
+// el navegador YA TIENE — no vuelve a correr el hook de auth. El hook solo
+// se ejecuta en login/refresh (GoTrue lo llama justo antes de firmar cada
+// token nuevo), así que startImpersonation()/endImpersonation() por sí
+// solos SOLO cambian la DB — el access token ya emitido sigue firmado con
+// los claims viejos hasta que expire (≤1h) o se refresque. Sin forzar un
+// refresh acá, redirect("/dashboard") aterriza con un JWT que todavía dice
+// kind: "platform_admin" (sin business_id) y (product)/layout.tsx rebota
+// de vuelta a /admin — el bug real reportado. refreshSession() sin
+// argumentos toma el refresh_token de la sesión ya guardada en las
+// cookies (vía el mismo storage adapter que usa cualquier login real de
+// este repo) y persiste el token nuevo a través del mismo cookie jar.
+async function refreshClaims(): Promise<void> {
+  const supabase = await createClient();
+  await supabase.auth.refreshSession();
+}
 
 // Invocada desde la página de detalle de negocio en /admin, bind()eada con
 // el businessId — mismo motivo que enrollCustomerAction.bind(null, slug):
@@ -23,6 +41,7 @@ export async function startImpersonationAction(
   }
 
   await startImpersonation(admin.authUserId, admin.platformRole, businessId);
+  await refreshClaims();
   redirect("/dashboard");
 }
 
@@ -44,5 +63,6 @@ export async function endImpersonationAction(): Promise<void> {
   }
 
   await endImpersonation(session.impersonation.byPlatformAdminAuthUserId);
+  await refreshClaims();
   redirect("/admin");
 }
