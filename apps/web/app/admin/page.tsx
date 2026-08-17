@@ -19,7 +19,9 @@ import {
 import { EmptyState } from "../../components/EmptyState";
 import { PageHeader } from "../../components/PageHeader";
 import { getVerifiedSession } from "../../lib/supabase/session";
+import { listRecentPlatformActivity } from "./activity";
 import { CreateBusinessForm } from "./CreateBusinessForm";
+import { RecentActivity } from "./RecentActivity";
 import { listBusinesses } from "./businesses";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -47,6 +49,7 @@ export default async function AdminPage() {
   }
 
   const businesses = await listBusinesses();
+  const activity = await listRecentPlatformActivity();
 
   return (
     <div className="flex flex-col gap-8">
@@ -115,6 +118,8 @@ export default async function AdminPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <RecentActivity activity={activity} />
     </div>
   );
 }

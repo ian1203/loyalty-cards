@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { auditLogs, platformImpersonationGrants, roles, users } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
 import type { PlatformRole } from "../../lib/supabase/session";
+import { assertBusinessNotDeleted } from "./businesses";
 
 // Sin "use server" a propósito, mismo patrón que cualquier logic.ts de
 // feature: recibe la identidad del admin ya resuelta por
@@ -107,6 +108,13 @@ export async function startImpersonation(
   adminPlatformRole: PlatformRole,
   targetBusinessId: string,
 ): Promise<void> {
+  // Hallazgo real de una revisión ofensiva: un negocio "eliminado"
+  // (soft-delete) seguía siendo impersonable con normalidad — el
+  // businessId nunca se validaba acá. Fuera de la transacción a
+  // propósito: es una lectura de precondición, no parte del cambio
+  // atómico de abajo.
+  await assertBusinessNotDeleted(targetBusinessId);
+
   await adminDb.transaction(async (tx) => {
     // Invariante que el hook de auth necesita: a lo más UN grant activo
     // por admin a la vez (y por lo tanto, a lo más una fila de `users`

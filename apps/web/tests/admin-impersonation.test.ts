@@ -11,7 +11,8 @@ import {
   withTenantContext,
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
-import { setPlatformAdminActive } from "../app/admin/accounts";
+import { invitePlatformAdmin, setPlatformAdminActive } from "../app/admin/accounts";
+import { createLocationForBusiness, getBusinessDetail, softDeleteBusiness } from "../app/admin/businesses";
 import { endImpersonation, startImpersonation } from "../app/admin/impersonation";
 import { saveProgramForSession } from "../app/(product)/rewards/logic";
 import { getVerifiedSession } from "../lib/supabase/session";
@@ -436,6 +437,73 @@ describe("Impersonación de negocio — Panel de Admin de Plataforma", () => {
         byPlatformAdminAuthUserId: strayAdminAuthUserId,
         platformRole: "owner",
       });
+    });
+  });
+
+  // Regresión de un hallazgo real de una revisión ofensiva: invitar como
+  // admin de plataforma el email de alguien que YA es dueño/staff de un
+  // negocio le quita silenciosamente su acceso normal de tenant en su
+  // próximo login (getVerifiedSession corta en is_platform_admin primero).
+  describe("invitePlatformAdmin rechaza un email que ya es usuario de tenant", () => {
+    it("lanza al intentar invitar al dueño real de businessB, sin crear ninguna cuenta de plataforma", async () => {
+      await expect(
+        invitePlatformAdmin(adminOwnerAuthUserId, "owner", ownerBEmail, "viewer", "https://example.test"),
+      ).rejects.toThrow(/ya es dueño\/staff/i);
+
+      const [maybeAdmin] = await adminDb
+        .select()
+        .from(platformAdmins)
+        .where(eq(platformAdmins.authUserId, ownerBAuthUserId));
+      expect(maybeAdmin).toBeUndefined();
+    });
+  });
+
+  // Regresión de un hallazgo real de una revisión ofensiva: el soft-delete
+  // de un negocio era puramente cosmético — solo lo ocultaba de
+  // listBusinesses(), pero ninguna acción real (impersonar, cambiar
+  // estado, editar sucursales) comprobaba el status antes de operar.
+  describe("Un negocio eliminado (soft-delete) queda inaccesible por completo", () => {
+    let deletedBusinessId: string;
+
+    beforeAll(async () => {
+      const created = await createBusinessWithRealOwner({
+        businessName: `Admin Impersonation Deleted ${suffix}`,
+        slug: `admin-impersonation-deleted-${suffix}`,
+        ownerEmail: `admin-imp-deleted-owner-${suffix}@test.dev`,
+        ownerPassword: password,
+        createdByAuthUserId: adminOwnerAuthUserId,
+      });
+      deletedBusinessId = created.business.id;
+      await softDeleteBusiness(adminOwnerAuthUserId, "owner", deletedBusinessId);
+    });
+
+    afterAll(async () => {
+      await adminDb.delete(auditLogs).where(eq(auditLogs.businessId, deletedBusinessId));
+      await adminDb.delete(users).where(eq(users.businessId, deletedBusinessId));
+      await adminDb.delete(businesses).where(eq(businesses.id, deletedBusinessId));
+    });
+
+    it("getBusinessDetail ya no lo devuelve (equivalente a notFound)", async () => {
+      expect(await getBusinessDetail(deletedBusinessId)).toBeNull();
+    });
+
+    it("startImpersonation lo rechaza", async () => {
+      await expect(startImpersonation(adminOwnerAuthUserId, "owner", deletedBusinessId)).rejects.toThrow(
+        /eliminado/i,
+      );
+    });
+
+    it("setBusinessStatus lo rechaza (no se puede 'revivir' cambiando el estado)", async () => {
+      const { setBusinessStatus } = await import("../app/admin/businesses");
+      await expect(
+        setBusinessStatus(adminOwnerAuthUserId, "owner", deletedBusinessId, "active"),
+      ).rejects.toThrow(/eliminado/i);
+    });
+
+    it("createLocationForBusiness lo rechaza", async () => {
+      await expect(
+        createLocationForBusiness(adminOwnerAuthUserId, "owner", deletedBusinessId, { name: "No debería crearse" }),
+      ).rejects.toThrow(/eliminado/i);
     });
   });
 });

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { checkRateLimit } from "../../lib/rateLimit";
 import { createClient } from "../../lib/supabase/server";
 import { getVerifiedSession, requirePlatformAdmin } from "../../lib/supabase/session";
 import { endImpersonation, startImpersonation } from "./impersonation";
@@ -38,6 +39,20 @@ export async function startImpersonationAction(
   const admin = await requirePlatformAdmin();
   if (!admin) {
     return { error: "No autorizado." };
+  }
+
+  // Hallazgo real de una revisión ofensiva: sin este límite, CUALQUIER
+  // credencial de plataforma (owner o viewer — viewer impersona con
+  // acceso completo, ver impersonation.ts) puede recorrer listBusinesses()
+  // y llamar esta acción en loop para tomar control de escritura de TODOS
+  // los negocios de la plataforma en segundos, sin fricción alguna. Por
+  // admin (no por IP): el ataque real es una sesión ya autenticada
+  // abusando de su propio acceso, no un anónimo.
+  const rate = await checkRateLimit("admin_impersonation_start", admin.authUserId);
+  if (!rate.allowed) {
+    return {
+      error: `Demasiadas impersonaciones seguidas — espera ${rate.retryAfterSeconds}s.`,
+    };
   }
 
   await startImpersonation(admin.authUserId, admin.platformRole, businessId);

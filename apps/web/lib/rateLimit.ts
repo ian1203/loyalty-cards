@@ -17,7 +17,8 @@ export type RateLimiterName =
   | "scanner_stamp_business"
   | "customer_search_employee"
   | "apple_webservice_ip"
-  | "enroll_public_ip";
+  | "enroll_public_ip"
+  | "admin_impersonation_start";
 
 // Límites propuestos, no pedidos por número en el ticket — punto de
 // partida a ajustar con tráfico real (ver plan). Dos ejes independientes
@@ -35,6 +36,14 @@ const LIMITS: Record<RateLimiterName, { windowSeconds: number; max: number }> = 
   // incluidos) sin friccionar altas legítimas, y cierra el volumen real
   // en la enumeración por teléfono (ver EnrollDuplicatePhoneError).
   enroll_public_ip: { windowSeconds: 600, max: 5 },
+  // Por admin de plataforma — hallazgo real de una revisión ofensiva: sin
+  // esto, CUALQUIER credencial de plataforma (owner o viewer — viewer
+  // impersona con acceso completo, ver app/admin/impersonation.ts) puede
+  // recorrer listBusinesses() y llamar startImpersonationAction() en loop
+  // para tomar control de escritura de TODOS los negocios de la plataforma
+  // en segundos. 10 cada 5 min alcanza sobrado para soporte real (cambiar
+  // de negocio varias veces en una sesión) y cierra la enumeración masiva.
+  admin_impersonation_start: { windowSeconds: 300, max: 10 },
 };
 
 type Logger = { warn: (...args: unknown[]) => void };
