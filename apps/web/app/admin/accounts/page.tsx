@@ -1,5 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { UserPlusIcon } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
+import { PageHeader } from "../../../components/PageHeader";
 import { getVerifiedSession } from "../../../lib/supabase/session";
 import { listPlatformAdmins } from "../accounts";
 import { AccountsList } from "./AccountsList";
@@ -18,24 +20,28 @@ export default async function AdminAccountsPage() {
   const accounts = await listPlatformAdmins();
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-10 p-6">
-      <div className="flex flex-col gap-2">
-        <Link href="/admin" className="text-sm text-muted-foreground underline">
-          ← Negocios
-        </Link>
-        <h1 className="text-2xl font-semibold">Cuentas de plataforma</h1>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Cuentas de plataforma"
+        description="Quién tiene acceso al panel de admin y con qué rol."
+        back={{ href: "/admin", label: "Negocios" }}
+      />
 
-      <section className="flex flex-col gap-3">
-        <AccountsList accounts={accounts} ownAuthUserId={session.authUserId} />
-      </section>
+      <AccountsList accounts={accounts} ownAuthUserId={session.authUserId} />
 
       {session.platformRole === "owner" ? (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-medium">Invitar cuenta</h2>
-          <InviteAccountForm />
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <UserPlusIcon className="size-4.5 text-muted-foreground" />
+              Invitar cuenta
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <InviteAccountForm />
+          </CardContent>
+        </Card>
       ) : null}
-    </main>
+    </div>
   );
 }

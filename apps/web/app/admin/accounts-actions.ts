@@ -43,7 +43,7 @@ export async function invitePlatformAdminAction(
   }
 
   revalidatePath("/admin/accounts");
-  return { success: true };
+  return { success: `Invitación enviada a ${email}.` };
 }
 
 export async function setPlatformAdminActiveAction(
@@ -61,7 +61,7 @@ export async function setPlatformAdminActiveAction(
   }
 
   revalidatePath("/admin/accounts");
-  return { success: true };
+  return { success: isActive ? "Cuenta reactivada." : "Cuenta desactivada." };
 }
 
 export async function changePlatformAdminRoleAction(
@@ -79,5 +79,5 @@ export async function changePlatformAdminRoleAction(
   }
 
   revalidatePath("/admin/accounts");
-  return { success: true };
+  return { success: "Rol actualizado." };
 }

@@ -10,7 +10,7 @@ import {
   updateLocationForBusiness,
 } from "./businesses";
 
-export type AdminActionState = { error?: string; success?: boolean };
+export type AdminActionState = { error?: string; success?: string };
 
 function parseOptionalNumber(value: FormDataEntryValue | null): number | undefined {
   if (typeof value !== "string" || value.trim() === "") return undefined;
@@ -48,7 +48,7 @@ export async function createLocationAction(
   }
 
   revalidatePath(`/admin/businesses/${businessId}`);
-  return { success: true };
+  return { success: `Sucursal "${name}" creada.` };
 }
 
 export async function updateLocationAction(
@@ -77,7 +77,7 @@ export async function updateLocationAction(
   }
 
   revalidatePath(`/admin/businesses/${businessId}`);
-  return { success: true };
+  return { success: "Sucursal actualizada." };
 }
 
 export async function updateBrandingAction(
@@ -104,7 +104,7 @@ export async function updateBrandingAction(
   }
 
   revalidatePath(`/admin/businesses/${businessId}`);
-  return { success: true };
+  return { success: "Branding actualizado." };
 }
 
 export async function setBusinessStatusAction(
@@ -123,7 +123,7 @@ export async function setBusinessStatusAction(
 
   revalidatePath(`/admin/businesses/${businessId}`);
   revalidatePath("/admin");
-  return { success: true };
+  return { success: "Estado actualizado." };
 }
 
 export async function softDeleteBusinessAction(businessId: string): Promise<AdminActionState> {
@@ -138,5 +138,5 @@ export async function softDeleteBusinessAction(businessId: string): Promise<Admi
   }
 
   revalidatePath("/admin");
-  return { success: true };
+  return { success: "Negocio eliminado." };
 }

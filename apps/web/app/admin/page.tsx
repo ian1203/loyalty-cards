@@ -1,8 +1,24 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getVerifiedSession } from "../../lib/supabase/session";
+import { PlusIcon } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
-import { Button } from "../../components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../components/ui/table";
+import { EmptyState } from "../../components/EmptyState";
+import { PageHeader } from "../../components/PageHeader";
+import { getVerifiedSession } from "../../lib/supabase/session";
 import { CreateBusinessForm } from "./CreateBusinessForm";
 import { listBusinesses } from "./businesses";
 
@@ -11,6 +27,14 @@ const STATUS_LABEL: Record<string, string> = {
   suspended: "Suspendido",
   unpaid: "Pago pendiente",
 };
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant={status === "active" ? "secondary" : "destructive"}>
+      {STATUS_LABEL[status] ?? status}
+    </Badge>
+  );
+}
 
 export default async function AdminPage() {
   const session = await getVerifiedSession();
@@ -25,45 +49,72 @@ export default async function AdminPage() {
   const businesses = await listBusinesses();
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-10 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Panel de admin de plataforma</h1>
-        <Button asChild variant="outline">
-          <Link href="/admin/accounts">Cuentas de plataforma</Link>
-        </Button>
-      </div>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Negocios"
+        description="Todos los negocios activos en la plataforma."
+      />
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Negocios</h2>
-        <div className="flex flex-col divide-y rounded-lg border">
+      <Card>
+        <CardContent className="p-0">
           {businesses.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Sin negocios todavía.</p>
+            <EmptyState
+              className="py-12"
+              title="Sin negocios todavía"
+              description="Da de alta el primero desde el formulario de abajo."
+            />
           ) : (
-            businesses.map((business) => (
-              <Link
-                key={business.id}
-                href={`/admin/businesses/${business.id}`}
-                className="flex items-center justify-between gap-3 p-4 hover:bg-muted/40"
-              >
-                <div className="flex flex-col">
-                  <span className="font-medium">{business.name}</span>
-                  <span className="text-sm text-muted-foreground">{business.slug}</span>
-                </div>
-                <Badge variant={business.status === "active" ? "secondary" : "destructive"}>
-                  {STATUS_LABEL[business.status] ?? business.status}
-                </Badge>
-              </Link>
-            ))
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Negocio</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Plan</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {businesses.map((business) => (
+                  <TableRow key={business.id} className="cursor-pointer">
+                    <TableCell className="p-0">
+                      <Link
+                        href={`/admin/businesses/${business.id}`}
+                        className="flex flex-col gap-0.5 px-2 py-2.5"
+                      >
+                        <span className="font-medium">{business.name}</span>
+                        <span className="text-sm text-muted-foreground">{business.slug}</span>
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link href={`/admin/businesses/${business.id}`} className="block py-2.5">
+                        <StatusBadge status={business.status} />
+                      </Link>
+                    </TableCell>
+                    <TableCell className="capitalize">
+                      <Link href={`/admin/businesses/${business.id}`} className="block py-2.5">
+                        {business.plan}
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
       {session.platformRole === "owner" ? (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-medium">Alta de negocio</h2>
-          <CreateBusinessForm />
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PlusIcon className="size-4.5" />
+              Alta de negocio
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CreateBusinessForm />
+          </CardContent>
+        </Card>
       ) : null}
-    </main>
+    </div>
   );
 }

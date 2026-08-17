@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
-import { Alert, AlertDescription } from "../../components/ui/alert";
+import { useActionState, useEffect, useRef } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { useActionToast } from "../../lib/useActionToast";
 import { createBusinessAction, type CreateBusinessState } from "./actions";
 
 const initialState: CreateBusinessState = {};
@@ -15,9 +15,17 @@ const initialState: CreateBusinessState = {};
 // con negocio+dueño). Antes: 2 scripts + SQL manual para lo mismo.
 export function CreateBusinessForm() {
   const [state, formAction, pending] = useActionState(createBusinessAction, initialState);
+  const formRef = useRef<HTMLFormElement>(null);
+  useActionToast(state, initialState);
+
+  useEffect(() => {
+    if (state !== initialState && state.success) {
+      formRef.current?.reset();
+    }
+  }, [state]);
 
   return (
-    <form action={formAction} className="flex max-w-md flex-col gap-4">
+    <form ref={formRef} action={formAction} className="flex max-w-md flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="businessName">Nombre del negocio</Label>
         <Input id="businessName" name="businessName" type="text" required />
@@ -44,22 +52,9 @@ export function CreateBusinessForm() {
         <Label htmlFor="brandColorHex">Color de marca (opcional)</Label>
         <Input id="brandColorHex" name="brandColorHex" type="text" placeholder="#085AB3" />
       </div>
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending} className="w-fit">
         {pending ? "Creando…" : "Crear negocio"}
       </Button>
-      {state.error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {state.success ? (
-        <Alert>
-          <AlertDescription>
-            Negocio &quot;{state.success.businessName}&quot; creado. Se envió invitación a{" "}
-            {state.success.ownerEmail}.
-          </AlertDescription>
-        </Alert>
-      ) : null}
     </form>
   );
 }
