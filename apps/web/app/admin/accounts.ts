@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { auditLogs, platformAdmins } from "@loyalty/db";
+import { auditLogs, platformAdmins, users } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
 import { createAdminClient } from "../../lib/supabase/server";
 import type { PlatformRole } from "../../lib/supabase/session";
@@ -52,6 +52,25 @@ export async function invitePlatformAdmin(
   siteUrl: string,
 ): Promise<void> {
   requireOwner(actingAdminPlatformRole);
+
+  // Hallazgo real de una revisión ofensiva: invitar por error (o a
+  // propósito) el email de un dueño/staff real de un negocio le da
+  // is_platform_admin=true en su próximo login — getVerifiedSession()
+  // (lib/supabase/session.ts) corta ahí primero, así que esa persona
+  // pierde silenciosamente su acceso normal de tenant. Mismo bug ya
+  // diagnosticado y corregido a mano esta sesión para
+  // iancarlo1203@gmail.com en Chilaquikes — este chequeo evita que vuelva
+  // a pasar por accidente.
+  const [existingTenantUser] = await adminDb
+    .select({ businessId: users.businessId })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  if (existingTenantUser) {
+    throw new Error(
+      `${email} ya es dueño/staff de un negocio (business_id ${existingTenantUser.businessId}) — invitarlo como admin de plataforma le quitaría su acceso normal de tenant en su próximo login. Desactiva esa membresía primero si esto es intencional.`,
+    );
+  }
 
   const supabaseAdmin = createAdminClient();
   const invite = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {

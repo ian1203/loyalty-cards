@@ -23,6 +23,28 @@ function requireOwner(platformRole: PlatformRole): void {
   }
 }
 
+// Hallazgo real de una revisión ofensiva: soft-delete era puramente
+// cosmético — listBusinesses() ya excluía 'deleted', pero ninguna acción
+// (impersonar, cambiar estado, editar sucursales/branding) comprobaba el
+// status del negocio. Cualquiera que conservara o adivinara el
+// businessId de un negocio "eliminado" (fraude, disputa legal — el motivo
+// real por el que alguien lo elimina) podía seguir operándolo con
+// normalidad. Exportada: startImpersonation (impersonation.ts) también
+// la necesita.
+export async function assertBusinessNotDeleted(businessId: string): Promise<void> {
+  const [row] = await adminDb
+    .select({ status: businesses.status })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1);
+  if (!row) {
+    throw new Error("Negocio no encontrado.");
+  }
+  if (row.status === "deleted") {
+    throw new Error("Este negocio fue eliminado — no se pueden realizar acciones sobre él.");
+  }
+}
+
 export async function listBusinesses() {
   return adminDb
     .select({
@@ -46,7 +68,10 @@ export async function getBusinessDetail(businessId: string) {
     .from(businesses)
     .where(eq(businesses.id, businessId))
     .limit(1);
-  if (!business) return null;
+  // Sin flujo de "restaurar" todavía — un negocio eliminado queda
+  // inaccesible por completo desde /admin (notFound() en la página),
+  // no solo fuera del listado.
+  if (!business || business.status === "deleted") return null;
 
   const businessLocations = await adminDb
     .select()
@@ -64,6 +89,7 @@ export async function createLocationForBusiness(
   input: { name: string; address?: string; latitude?: number; longitude?: number },
 ): Promise<void> {
   requireOwner(adminPlatformRole);
+  await assertBusinessNotDeleted(businessId);
 
   const [location] = await adminDb
     .insert(locations)
@@ -100,6 +126,7 @@ export async function updateLocationForBusiness(
   },
 ): Promise<void> {
   requireOwner(adminPlatformRole);
+  await assertBusinessNotDeleted(businessId);
 
   await adminDb
     .update(locations)
@@ -140,6 +167,7 @@ export async function updateBusinessBranding(
   input: BrandingInput,
 ): Promise<void> {
   requireOwner(adminPlatformRole);
+  await assertBusinessNotDeleted(businessId);
 
   await adminDb
     .update(businesses)
@@ -182,6 +210,12 @@ export async function setBusinessStatus(
   businessId: string,
   status: Extract<BusinessStatus, "active" | "suspended" | "unpaid">,
 ): Promise<void> {
+  // 'deleted' es terminal hasta que exista un flujo real de "restaurar" —
+  // sin este chequeo, cualquier admin (owner o viewer, este endpoint está
+  // abierto a ambos) podría "revivir" un negocio eliminado con un simple
+  // cambio de estado, sin pasar por ninguna decisión explícita de restaurar.
+  await assertBusinessNotDeleted(businessId);
+
   await adminDb
     .update(businesses)
     .set({ status, updatedAt: new Date(), updatedBy: adminAuthUserId })

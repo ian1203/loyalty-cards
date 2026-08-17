@@ -75,6 +75,7 @@ describe("scoping de secretos — service role nunca al cliente", () => {
   const ALLOWED_CREATE_ADMIN_CLIENT_IMPORTERS = new Set([
     "app/admin/actions.ts",
     "app/admin/accounts.ts",
+    "app/admin/activity.ts",
     "lib/employeeOffboarding.ts",
     "app/(product)/team/logic.ts",
   ]);
