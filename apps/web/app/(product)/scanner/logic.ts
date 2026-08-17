@@ -225,15 +225,9 @@ async function requireOperationContext(
   session: TenantSession,
   locationId: string,
 ): Promise<OperationContext> {
-  // Mismo guard temprano que resolveActor (apps/web/lib/tenant.ts) — un
-  // grant de impersonación de rol viewer NUNCA provisiona fila de `users`,
-  // así que sellar/canjear ya fallaría más abajo de todas formas. Explícito
-  // acá porque sellar/canjear es la operación sensible por excelencia del
-  // sistema (CLAUDE.md) — sin excepciones para ningún rol de plataforma.
-  if (session.impersonation?.platformRole === "viewer") {
-    throw new OperationRejectedError("Sesión de solo lectura — no puede registrar operaciones.");
-  }
-
+  // Nota: AMBOS roles de plataforma impersonan con acceso completo,
+  // incluido sellar/canjear — ver el comentario en resolveActor()
+  // (apps/web/lib/tenant.ts) para el razonamiento completo.
   const [business] = await tx
     .select({ status: businesses.status })
     .from(businesses)

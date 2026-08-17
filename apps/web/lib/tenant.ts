@@ -58,15 +58,12 @@ export async function resolveActor(
   tx: TenantTransaction,
   session: TenantSession,
 ): Promise<InferSelectModel<typeof users>> {
-  // Defensa en profundidad, no la razón estructural del bloqueo: un grant
-  // de impersonación de rol viewer NUNCA provisiona una fila en `users`
-  // (ver platformImpersonationGrants.ts), así que esta query ya devolvería
-  // null y lanzaría más abajo de todas formas. Este guard temprano solo da
-  // un mensaje de error más claro.
-  if (session.impersonation?.platformRole === "viewer") {
-    throw new Error("Sesión de solo lectura — no puede realizar escrituras.");
-  }
-
+  // Nota: AMBOS roles de plataforma (owner y viewer) impersonan con
+  // acceso completo de escritura ("entrar como dueño", pedido explícito)
+  // — startImpersonation() provisiona la misma fila real de `users` para
+  // los dos, así que no hay ningún guard de rol acá. La distinción
+  // owner/viewer se aplica DESDE /admin (requireOwner() en
+  // businesses.ts/accounts.ts), no dentro de un negocio ya impersonado.
   const [actor] = await tx
     .select()
     .from(users)

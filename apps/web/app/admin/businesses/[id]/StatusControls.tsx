@@ -12,7 +12,20 @@ const STATUS_OPTIONS = [
   { value: "unpaid" as const, label: "Marcar pago pendiente" },
 ];
 
-export function StatusControls({ businessId, status }: { businessId: string; status: string }) {
+export function StatusControls({
+  businessId,
+  status,
+  canDelete,
+}: {
+  businessId: string;
+  status: string;
+  // Suspender/marcar pago pendiente/reactivar están abiertos a ambos roles
+  // de plataforma (pedido explícito) — eliminar sigue exclusivo de owner,
+  // gateado server-side en softDeleteBusiness (businesses.ts). Esta prop
+  // es solo la contraparte de UI: no mostrar un botón que el servidor
+  // igual va a rechazar.
+  canDelete: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -55,31 +68,33 @@ export function StatusControls({ businessId, status }: { businessId: string; sta
           </Button>
         ))}
       </div>
-      {confirmingDelete ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-          <span className="text-sm text-muted-foreground">
-            ¿Eliminar este negocio? Sus datos NO se borran, solo queda oculto del listado.
-          </span>
-          <div className="flex gap-2">
-            <Button type="button" variant="destructive" size="sm" disabled={pending} onClick={handleDelete}>
-              Confirmar eliminación
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
-              Cancelar
-            </Button>
+      {canDelete ? (
+        confirmingDelete ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+            <span className="text-sm text-muted-foreground">
+              ¿Eliminar este negocio? Sus datos NO se borran, solo queda oculto del listado.
+            </span>
+            <div className="flex gap-2">
+              <Button type="button" variant="destructive" size="sm" disabled={pending} onClick={handleDelete}>
+                Confirmar eliminación
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
+                Cancelar
+              </Button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <Button
-          type="button"
-          variant="destructive"
-          size="sm"
-          className="w-fit"
-          onClick={() => setConfirmingDelete(true)}
-        >
-          Eliminar negocio
-        </Button>
-      )}
+        ) : (
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            className="w-fit"
+            onClick={() => setConfirmingDelete(true)}
+          >
+            Eliminar negocio
+          </Button>
+        )
+      ) : null}
     </div>
   );
 }

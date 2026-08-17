@@ -6,6 +6,7 @@ import { PageHeader } from "../../../../components/PageHeader";
 import { getVerifiedSession } from "../../../../lib/supabase/session";
 import { getBusinessDetail } from "../../businesses";
 import { BrandingPanel } from "./BrandingPanel";
+import { BrandingReadOnly } from "./BrandingReadOnly";
 import { ImpersonateButton } from "./ImpersonateButton";
 import { LocationsPanel } from "./LocationsPanel";
 import { StatusControls } from "./StatusControls";
@@ -40,13 +41,6 @@ function Section({
       <CardContent>{children}</CardContent>
     </Card>
   );
-}
-
-// Viewer: solo lectura estructural (ver requireOwner() en businesses.ts) —
-// esta nota es la contraparte de UI, para no mostrar un formulario que el
-// servidor va a rechazar de todas formas.
-function ReadOnlyNote() {
-  return <p className="text-sm text-muted-foreground">Tu cuenta es de solo lectura.</p>;
 }
 
 function LocationsReadOnlyList({
@@ -97,6 +91,7 @@ export default async function AdminBusinessDetailPage({
     notFound();
   }
   const { business, locations } = detail;
+  const isOwner = session.platformRole === "owner";
 
   return (
     <div className="flex flex-col gap-6">
@@ -116,20 +111,16 @@ export default async function AdminBusinessDetailPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Section title="Acceso" icon={KeyRoundIcon}>
-          <ImpersonateButton businessId={business.id} ownPlatformRole={session.platformRole} />
+          <ImpersonateButton businessId={business.id} />
         </Section>
 
         <Section title="Estado" icon={ToggleLeftIcon}>
-          {session.platformRole === "owner" ? (
-            <StatusControls businessId={business.id} status={business.status} />
-          ) : (
-            <ReadOnlyNote />
-          )}
+          <StatusControls businessId={business.id} status={business.status} canDelete={isOwner} />
         </Section>
       </div>
 
       <Section title="Sucursales" icon={MapPinIcon}>
-        {session.platformRole === "owner" ? (
+        {isOwner ? (
           <LocationsPanel businessId={business.id} locations={locations} />
         ) : (
           <LocationsReadOnlyList locations={locations} />
@@ -137,7 +128,7 @@ export default async function AdminBusinessDetailPage({
       </Section>
 
       <Section title="Branding" icon={PaletteIcon}>
-        {session.platformRole === "owner" ? (
+        {isOwner ? (
           <BrandingPanel
             businessId={business.id}
             branding={{
@@ -151,7 +142,17 @@ export default async function AdminBusinessDetailPage({
             }}
           />
         ) : (
-          <ReadOnlyNote />
+          <BrandingReadOnly
+            branding={{
+              brandColorHex: business.brandColorHex,
+              logoUrl: business.logoUrl,
+              walletLogoUrl: business.walletLogoUrl,
+              walletHeroUrl: business.walletHeroUrl,
+              googleLogoUri: business.googleLogoUri,
+              googleHeroUri: business.googleHeroUri,
+              googleWideLogoUri: business.googleWideLogoUri,
+            }}
+          />
         )}
       </Section>
     </div>

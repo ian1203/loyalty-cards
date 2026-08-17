@@ -1,5 +1,5 @@
 import type { CookieMethodsServer } from "@supabase/ssr";
-import { eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   auditLogs,
@@ -187,7 +187,15 @@ describe("Impersonación de negocio — Panel de Admin de Plataforma", () => {
     });
   });
 
-  describe("Viewer impersonando: bloqueo estructural de escritura", () => {
+  // Pedido explícito del negocio: un admin viewer impersonando también
+  // tiene acceso COMPLETO de escritura ("entrar como dueño") — la
+  // distinción owner/viewer ya no es lectura-vs-escritura dentro de un
+  // negocio impersonado, es qué puede hacer cada uno DESDE /admin mismo
+  // (crear negocios, gestionar cuentas, editar sucursales/branding sin
+  // impersonar — ver el describe de más abajo). Este describe reemplaza
+  // al que antes probaba "viewer bloqueado" — ese comportamiento ya no
+  // existe a propósito.
+  describe("Viewer impersonando: acceso completo real (igual que owner)", () => {
     let adminViewerCookies: CookieMethodsServer;
     let session: Extract<
       Awaited<ReturnType<typeof getVerifiedSession>>,
@@ -204,50 +212,104 @@ describe("Impersonación de negocio — Panel de Admin de Plataforma", () => {
       session = resolved;
     });
 
-    it("getVerifiedSession refleja el rol de plataforma viewer en impersonation.platformRole", async () => {
+    it("getVerifiedSession refleja el rol de plataforma viewer en impersonation.platformRole, con role tenant 'owner'", async () => {
       expect(session.businessId).toBe(businessB.id);
+      expect(session.role).toBe("owner");
       expect(session.impersonation).toEqual({
         byPlatformAdminAuthUserId: adminViewerAuthUserId,
         platformRole: "viewer",
       });
     });
 
-    it("resolveActor lanza: un viewer impersonando nunca tiene fila de users provisionada", async () => {
-      await expect(
-        withTenantContext(session.businessId, (tx) => resolveActor(tx, session)),
-      ).rejects.toThrow(/solo lectura/i);
+    it("resolveActor no lanza: un viewer impersonando SÍ tiene fila de users provisionada", async () => {
+      const actor = await withTenantContext(session.businessId, (tx) => resolveActor(tx, session));
+      expect(actor.businessId).toBe(businessB.id);
+      expect(actor.authUserId).toBe(adminViewerAuthUserId);
     });
 
-    it("una escritura real (guardar el programa de sellos) se rechaza server-side, sin modificar nada", async () => {
-      const [beforeProgram] = await adminDb
-        .select()
-        .from(loyaltyPrograms)
-        .where(eq(loyaltyPrograms.businessId, businessB.id));
-
+    it("una escritura real (guardar el programa de sellos) se ejecuta exitosamente y queda auditada", async () => {
       const result = await saveProgramForSession(
         session,
         form({
-          name: "Programa vía impersonación viewer (no debería guardarse)",
+          name: "Programa vía impersonación viewer",
           stampsRequired: "9",
           cooldownMinutes: "0",
           isActive: "on",
         }),
       );
-      expect(result.error).toBeDefined();
-      expect(result.success).toBeUndefined();
+      expect(result.success).toBeDefined();
+      expect(result.error).toBeUndefined();
 
-      const [afterProgram] = await adminDb
+      const [program] = await adminDb
         .select()
         .from(loyaltyPrograms)
         .where(eq(loyaltyPrograms.businessId, businessB.id));
-      // El programa creado por el owner impersonando (test anterior) sigue
-      // exactamente igual — el intento de escritura del viewer no lo tocó.
-      expect(afterProgram?.name).toBe(beforeProgram?.name);
-      expect(afterProgram?.stampsRequired).toBe(beforeProgram?.stampsRequired);
+      expect(program?.name).toBe("Programa vía impersonación viewer");
+      expect(program?.stampsRequired).toBe(9);
+
+      const auditRows = await adminDb
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.businessId, businessB.id));
+      const updatedLog = auditRows.find(
+        (row) => row.action === "loyalty_program.created" || row.action === "loyalty_program.updated",
+      );
+      expect(updatedLog).toBeDefined();
     });
 
     afterAll(async () => {
       await endImpersonation(adminViewerAuthUserId);
+    });
+  });
+
+  // La restricción real de un viewer no es DENTRO de un negocio
+  // impersonado — es en /admin mismo: crear negocios, gestionar cuentas
+  // de plataforma, y editar sucursales/branding SIN impersonar (ver
+  // requireOwner() en apps/web/app/admin/businesses.ts/accounts.ts).
+  // setBusinessStatus es la única excepción explícita — abierta a ambos
+  // roles (pedido explícito, "debe poder... suspender y marcar pago
+  // pendiente").
+  describe("Restricciones reales de un viewer: dentro de /admin, no dentro del negocio impersonado", () => {
+    it("un viewer puede cambiar el estado del negocio (setBusinessStatus) sin impersonar, y queda auditado con su rol", async () => {
+      const { setBusinessStatus } = await import("../app/admin/businesses");
+      await setBusinessStatus(adminViewerAuthUserId, "viewer", businessB.id, "unpaid");
+
+      const [row] = await adminDb.select().from(businesses).where(eq(businesses.id, businessB.id));
+      expect(row?.status).toBe("unpaid");
+
+      const [log] = await adminDb
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.businessId, businessB.id))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(1);
+      expect(log?.action).toBe("business.status_changed");
+      expect(log?.actorAuthUserId).toBe(adminViewerAuthUserId);
+      expect(log?.metadata).toMatchObject({ status: "unpaid", actingPlatformRole: "viewer" });
+
+      // Deja el negocio como estaba para no afectar otros describes de
+      // este archivo (corre después de todos los que impersonan).
+      await setBusinessStatus(adminViewerAuthUserId, "viewer", businessB.id, "active");
+    });
+
+    it("un viewer NO puede editar sucursales/branding ni eliminar el negocio sin impersonar", async () => {
+      const { createLocationForBusiness, softDeleteBusiness, updateBusinessBranding } = await import(
+        "../app/admin/businesses"
+      );
+
+      await expect(
+        createLocationForBusiness(adminViewerAuthUserId, "viewer", businessB.id, { name: "No debería crearse" }),
+      ).rejects.toThrow(/owner/i);
+
+      await expect(
+        updateBusinessBranding(adminViewerAuthUserId, "viewer", businessB.id, { brandColorHex: "#000000" }),
+      ).rejects.toThrow(/owner/i);
+
+      await expect(softDeleteBusiness(adminViewerAuthUserId, "viewer", businessB.id)).rejects.toThrow(/owner/i);
+
+      const [row] = await adminDb.select().from(businesses).where(eq(businesses.id, businessB.id));
+      expect(row?.status).not.toBe("deleted");
+      expect(row?.brandColorHex).not.toBe("#000000");
     });
   });
 

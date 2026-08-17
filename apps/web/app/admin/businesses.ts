@@ -169,14 +169,19 @@ export async function updateBusinessBranding(
 // active/suspended/unpaid — 'deleted' pasa por softDeleteBusiness (acción
 // separada, irreversible en la práctica, con su propia confirmación en la
 // UI en vez de compartir el mismo <select>).
+//
+// Sin requireOwner() a propósito: pedido explícito del negocio, un admin
+// viewer SÍ puede suspender/marcar pago pendiente/reactivar un negocio —
+// a diferencia de crear/eliminar negocios, editar sucursales/branding o
+// gestionar cuentas de plataforma, que siguen exclusivos de owner. El
+// parámetro adminPlatformRole se conserva para el audit log, no para
+// restringir esta acción.
 export async function setBusinessStatus(
   adminAuthUserId: string,
   adminPlatformRole: PlatformRole,
   businessId: string,
   status: Extract<BusinessStatus, "active" | "suspended" | "unpaid">,
 ): Promise<void> {
-  requireOwner(adminPlatformRole);
-
   await adminDb
     .update(businesses)
     .set({ status, updatedAt: new Date(), updatedBy: adminAuthUserId })
@@ -188,7 +193,7 @@ export async function setBusinessStatus(
     action: "business.status_changed",
     entityType: "business",
     entityId: businessId,
-    metadata: { status },
+    metadata: { status, actingPlatformRole: adminPlatformRole },
   });
 }
 

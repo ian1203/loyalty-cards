@@ -4,22 +4,14 @@ import { useActionState } from "react";
 import { LogInIcon } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
 import { useActionToast } from "../../../../lib/useActionToast";
-import type { PlatformRole } from "../../../../lib/supabase/session";
 import { startImpersonationAction, type ImpersonationActionState } from "../../impersonation-actions";
 
 const initialState: ImpersonationActionState = {};
 
-// Un solo botón, la etiqueta depende del ROL PROPIO del admin — no hay
-// elección: un admin owner siempre impersona con acceso completo, un
-// viewer siempre en modo lectura (ver startImpersonation, que usa
-// admin.platformRole, nunca un valor que este componente pudiera mandar).
-export function ImpersonateButton({
-  businessId,
-  ownPlatformRole,
-}: {
-  businessId: string;
-  ownPlatformRole: PlatformRole;
-}) {
+// Mismo botón para ambos roles de plataforma — owner y viewer impersonan
+// con acceso completo (pedido explícito, ver comentario en
+// startImpersonation, app/admin/impersonation.ts).
+export function ImpersonateButton({ businessId }: { businessId: string }) {
   const boundAction = startImpersonationAction.bind(null, businessId);
   const [state, formAction, pending] = useActionState(boundAction, initialState);
   useActionToast(state, initialState);
@@ -28,11 +20,7 @@ export function ImpersonateButton({
     <form action={formAction}>
       <Button type="submit" disabled={pending} className="w-full sm:w-auto">
         <LogInIcon />
-        {pending
-          ? "Entrando…"
-          : ownPlatformRole === "owner"
-            ? "Entrar como dueño"
-            : "Ver como viewer (solo lectura)"}
+        {pending ? "Entrando…" : "Entrar como dueño"}
       </Button>
     </form>
   );

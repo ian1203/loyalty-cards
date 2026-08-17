@@ -37,7 +37,7 @@ export function InviteAccountForm() {
         <Label htmlFor="platformRole">Rol</Label>
         <select id="platformRole" name="platformRole" className={SELECT_CLASS} defaultValue="viewer">
           <option value="owner">Owner (control total)</option>
-          <option value="viewer">Viewer (solo lectura)</option>
+          <option value="viewer">Viewer (acotado en /admin — acceso completo al impersonar)</option>
         </select>
       </div>
       <Button type="submit" disabled={pending} className="w-fit">

@@ -236,11 +236,11 @@ export async function createStaffForSession(
   // Supabase Auth exige email único a nivel de proyecto, así que crear la
   // cuenta primero y descubrir el duplicado/sucursal inválida después
   // dejaría una cuenta huérfana sin necesidad. resolveActor corre primero
-  // acá también — defensa en profundidad para una sesión de impersonación
-  // "viewer", que debe cortar ANTES de tocar Auth, no solo en el tx de
-  // escritura. El pre-chequeo de dedupe es cortesía de UX (mismo criterio
-  // que createCustomerForSession); el backstop real sigue siendo el
-  // UNIQUE (business_id, email) de `users`, atrapado más abajo.
+  // acá también — mismo motivo que en cualquier logic.ts de feature: sin
+  // actor real no hay a quién auditar como creador. El pre-chequeo de
+  // dedupe es cortesía de UX (mismo criterio que createCustomerForSession);
+  // el backstop real sigue siendo el UNIQUE (business_id, email) de
+  // `users`, atrapado más abajo.
   let primaryLocationId: string | null = null;
   try {
     await withTenantContext(session.businessId, async (tx) => {

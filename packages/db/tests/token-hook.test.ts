@@ -344,11 +344,13 @@ describe("custom_access_token_hook — impersonación de negocio por un platform
   it("grant activo (rol viewer, SIN fila de users) igual resuelve business_id/tenant_role desde el grant — el hook no depende de una fila de users", async () => {
     const adminAuthUserId = await createPlatformAdmin({ platformRole: "viewer" });
     try {
-      // A propósito: NO se inserta fila en `users` — un grant viewer nunca
-      // provisiona una (ver comentario de impersonatedUsersId en
-      // platformImpersonationGrants.ts). Si el hook dependiera de esa fila
-      // para resolver business_id/tenant_role, este test fallaría con
-      // ambos en null pese al grant activo.
+      // Escenario sintético: en la práctica startImpersonation() SIEMPRE
+      // provisiona una fila de users (owner y viewer impersonan con
+      // acceso completo — pedido explícito, ver app/admin/impersonation.ts).
+      // Este test verifica algo más angosto y todavía real: el HOOK mismo
+      // resuelve business_id/tenant_role directo de la tabla de grants,
+      // sin depender de que exista esa fila — si el hook dependiera de
+      // ella, este test fallaría con ambos en null pese al grant activo.
       await adminDb.insert(platformImpersonationGrants).values({
         platformAdminAuthUserId: adminAuthUserId,
         businessId: targetBusinessId,
