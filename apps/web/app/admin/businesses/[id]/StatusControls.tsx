@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Alert, AlertDescription } from "../../../../components/ui/alert";
+import { toast } from "sonner";
 import { Button } from "../../../../components/ui/button";
 import { setBusinessStatusAction, softDeleteBusinessAction } from "../../businesses-actions";
 
@@ -15,29 +15,32 @@ const STATUS_OPTIONS = [
 export function StatusControls({ businessId, status }: { businessId: string; status: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   function handleStatus(next: "active" | "suspended" | "unpaid") {
-    setError(null);
     startTransition(async () => {
       const result = await setBusinessStatusAction(businessId, next);
-      if (result.error) setError(result.error);
-      else router.refresh();
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success(result.success ?? "Listo.");
+        router.refresh();
+      }
     });
   }
 
   function handleDelete() {
-    setError(null);
     startTransition(async () => {
       const result = await softDeleteBusinessAction(businessId);
-      if (result.error) setError(result.error);
-      else router.push("/admin");
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success(result.success ?? "Listo.");
+        router.push("/admin");
+      }
     });
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
         {STATUS_OPTIONS.filter((option) => option.value !== status).map((option) => (
           <Button
@@ -53,16 +56,18 @@ export function StatusControls({ businessId, status }: { businessId: string; sta
         ))}
       </div>
       {confirmingDelete ? (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
           <span className="text-sm text-muted-foreground">
             ¿Eliminar este negocio? Sus datos NO se borran, solo queda oculto del listado.
           </span>
-          <Button type="button" variant="destructive" size="sm" disabled={pending} onClick={handleDelete}>
-            Confirmar eliminación
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
-            Cancelar
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="destructive" size="sm" disabled={pending} onClick={handleDelete}>
+              Confirmar eliminación
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
+              Cancelar
+            </Button>
+          </div>
         </div>
       ) : (
         <Button
@@ -75,11 +80,6 @@ export function StatusControls({ businessId, status }: { businessId: string; sta
           Eliminar negocio
         </Button>
       )}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
     </div>
   );
 }

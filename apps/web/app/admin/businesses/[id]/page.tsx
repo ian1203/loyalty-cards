@@ -1,6 +1,8 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { KeyRoundIcon, MapPinIcon, PaletteIcon, ToggleLeftIcon } from "lucide-react";
 import { Badge } from "../../../../components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../../components/ui/card";
+import { PageHeader } from "../../../../components/PageHeader";
 import { getVerifiedSession } from "../../../../lib/supabase/session";
 import { getBusinessDetail } from "../../businesses";
 import { BrandingPanel } from "./BrandingPanel";
@@ -14,85 +16,29 @@ const STATUS_LABEL: Record<string, string> = {
   unpaid: "Pago pendiente",
 };
 
-export default async function AdminBusinessDetailPage({
-  params,
+// Cada bloque del detalle vive en su propia Card con un título con ícono —
+// mismo patrón visual en las cuatro secciones (Acceso/Estado/Sucursales/
+// Branding) para que una sección nueva en el futuro (p.ej. "Facturación")
+// solo agregue una Card más siguiendo el mismo molde, sin reordenar nada.
+function Section({
+  title,
+  icon: Icon,
+  children,
 }: {
-  params: Promise<{ id: string }>;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
 }) {
-  const { id } = await params;
-  const session = await getVerifiedSession();
-
-  if (!session.authenticated) {
-    redirect("/login");
-  }
-  if (session.kind !== "platform_admin") {
-    redirect("/dashboard");
-  }
-
-  const detail = await getBusinessDetail(id);
-  if (!detail) {
-    notFound();
-  }
-  const { business, locations } = detail;
-
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-10 p-6">
-      <div className="flex flex-col gap-2">
-        <Link href="/admin" className="text-sm text-muted-foreground underline">
-          ← Negocios
-        </Link>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">{business.name}</h1>
-          <Badge variant={business.status === "active" ? "secondary" : "destructive"}>
-            {STATUS_LABEL[business.status] ?? business.status}
-          </Badge>
-        </div>
-        <p className="text-sm text-muted-foreground">{business.slug}</p>
-      </div>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Acceso</h2>
-        <ImpersonateButton businessId={business.id} ownPlatformRole={session.platformRole} />
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Estado</h2>
-        {session.platformRole === "owner" ? (
-          <StatusControls businessId={business.id} status={business.status} />
-        ) : (
-          <ReadOnlyNote />
-        )}
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Sucursales</h2>
-        {session.platformRole === "owner" ? (
-          <LocationsPanel businessId={business.id} locations={locations} />
-        ) : (
-          <LocationsReadOnlyList locations={locations} />
-        )}
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Branding</h2>
-        {session.platformRole === "owner" ? (
-          <BrandingPanel
-            businessId={business.id}
-            branding={{
-              brandColorHex: business.brandColorHex,
-              logoUrl: business.logoUrl,
-              walletLogoUrl: business.walletLogoUrl,
-              walletHeroUrl: business.walletHeroUrl,
-              googleLogoUri: business.googleLogoUri,
-              googleHeroUri: business.googleHeroUri,
-              googleWideLogoUri: business.googleWideLogoUri,
-            }}
-          />
-        ) : (
-          <ReadOnlyNote />
-        )}
-      </section>
-    </main>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Icon className="size-4.5 text-muted-foreground" />
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 
@@ -127,6 +73,87 @@ function LocationsReadOnlyList({
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+export default async function AdminBusinessDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const session = await getVerifiedSession();
+
+  if (!session.authenticated) {
+    redirect("/login");
+  }
+  if (session.kind !== "platform_admin") {
+    redirect("/dashboard");
+  }
+
+  const detail = await getBusinessDetail(id);
+  if (!detail) {
+    notFound();
+  }
+  const { business, locations } = detail;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title={business.name}
+        description={business.slug}
+        back={{ href: "/admin", label: "Negocios" }}
+        actions={
+          <Badge
+            variant={business.status === "active" ? "secondary" : "destructive"}
+            className="text-sm"
+          >
+            {STATUS_LABEL[business.status] ?? business.status}
+          </Badge>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Section title="Acceso" icon={KeyRoundIcon}>
+          <ImpersonateButton businessId={business.id} ownPlatformRole={session.platformRole} />
+        </Section>
+
+        <Section title="Estado" icon={ToggleLeftIcon}>
+          {session.platformRole === "owner" ? (
+            <StatusControls businessId={business.id} status={business.status} />
+          ) : (
+            <ReadOnlyNote />
+          )}
+        </Section>
+      </div>
+
+      <Section title="Sucursales" icon={MapPinIcon}>
+        {session.platformRole === "owner" ? (
+          <LocationsPanel businessId={business.id} locations={locations} />
+        ) : (
+          <LocationsReadOnlyList locations={locations} />
+        )}
+      </Section>
+
+      <Section title="Branding" icon={PaletteIcon}>
+        {session.platformRole === "owner" ? (
+          <BrandingPanel
+            businessId={business.id}
+            branding={{
+              brandColorHex: business.brandColorHex,
+              logoUrl: business.logoUrl,
+              walletLogoUrl: business.walletLogoUrl,
+              walletHeroUrl: business.walletHeroUrl,
+              googleLogoUri: business.googleLogoUri,
+              googleHeroUri: business.googleHeroUri,
+              googleWideLogoUri: business.googleWideLogoUri,
+            }}
+          />
+        ) : (
+          <ReadOnlyNote />
+        )}
+      </Section>
     </div>
   );
 }

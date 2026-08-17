@@ -7,7 +7,7 @@ import { slugify } from "../../lib/slugify";
 
 export type CreateBusinessState = {
   error?: string;
-  success?: { businessName: string; ownerEmail: string };
+  success?: string;
 };
 
 // Camino confinado y auditado para que el admin general dé de alta un
@@ -78,7 +78,7 @@ export async function createBusinessAction(
       brandColorHex,
     });
 
-    return { success: { businessName, ownerEmail } };
+    return { success: `Negocio "${businessName}" creado — se envió invitación a ${ownerEmail}.` };
   } catch (error) {
     // La invitación en auth.users ya se creó — si el resto falla, no la
     // dejamos huérfana (sin negocio ni fila en users).

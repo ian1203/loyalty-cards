@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState } from "react";
-import { Alert, AlertDescription } from "../../../../components/ui/alert";
+import { LogInIcon } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
+import { useActionToast } from "../../../../lib/useActionToast";
 import type { PlatformRole } from "../../../../lib/supabase/session";
 import { startImpersonationAction, type ImpersonationActionState } from "../../impersonation-actions";
 
@@ -21,21 +22,18 @@ export function ImpersonateButton({
 }) {
   const boundAction = startImpersonationAction.bind(null, businessId);
   const [state, formAction, pending] = useActionState(boundAction, initialState);
+  useActionToast(state, initialState);
 
   return (
-    <form action={formAction} className="flex flex-col gap-2">
-      <Button type="submit" disabled={pending}>
+    <form action={formAction}>
+      <Button type="submit" disabled={pending} className="w-full sm:w-auto">
+        <LogInIcon />
         {pending
           ? "Entrando…"
           : ownPlatformRole === "owner"
             ? "Entrar como dueño"
             : "Ver como viewer (solo lectura)"}
       </Button>
-      {state.error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
-      ) : null}
     </form>
   );
 }
