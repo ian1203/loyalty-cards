@@ -4,6 +4,18 @@ import { platformAdmins } from "./platformAdmins";
 export const businessStatusEnum = pgEnum("business_status", [
   "active",
   "suspended",
+  // Suspensión específica por falta de pago — distinta de "suspended"
+  // (que puede tener otras causas) para que la capa de aplicación del
+  // Panel de Admin de Plataforma pueda mostrar/actuar distinto sobre
+  // ella. Bloquea el dashboard COMPLETO del dueño/staff real, igual que
+  // "suspended" — el enforcement vive en la app, no acá.
+  "unpaid",
+  // Soft-delete de negocio — NUNCA un DELETE físico: todas las FK hacia
+  // businesses.id en este esquema son ON DELETE no action, así que un
+  // DELETE real fallaría (o, peor, habría que ir aflojando cada FK una
+  // por una). El negocio y su historial se conservan, solo deja de ser
+  // operable.
+  "deleted",
 ]);
 
 // Sin UI de asignación todavía (backfill manual contra la DB, mismo

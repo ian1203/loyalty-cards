@@ -14,7 +14,14 @@ export const users = pgTable(
     // negocio y la identidad real en auth.users. Sin .references() de
     // Drizzle: auth.users la administra Supabase, no nuestras migraciones —
     // la FK real se agrega a mano en SQL (ver migración de auth).
-    authUserId: uuid("auth_user_id").notNull().unique(),
+    //
+    // Deliberadamente SIN .unique() acá: no es único global, ver el UNIQUE
+    // compuesto (auth_user_id, business_id) abajo — un platform admin que
+    // impersona a un dueño necesita una fila real de `users` por cada
+    // negocio impersonado, con el MISMO auth_user_id (su login real de
+    // plataforma) en negocios distintos (ver
+    // platformImpersonationGrants.ts).
+    authUserId: uuid("auth_user_id").notNull(),
     email: text("email").notNull(),
     roleId: uuid("role_id")
       .notNull()
@@ -33,5 +40,14 @@ export const users = pgTable(
     // Requerido para que otras tablas puedan tener una FK compuesta
     // (id, business_id) -> users e impedir referencias cross-tenant.
     unique("users_id_business_id_key").on(table.id, table.businessId),
+    // Reemplaza el UNIQUE global de auth_user_id (ver comentario arriba):
+    // preserva la garantía real para usuarios normales (nunca dos filas
+    // activas del mismo auth_user_id en el MISMO negocio) sin bloquear el
+    // caso legítimo de impersonación (mismo auth_user_id, negocios
+    // distintos).
+    unique("users_auth_user_id_business_id_key").on(
+      table.authUserId,
+      table.businessId,
+    ),
   ],
 );
