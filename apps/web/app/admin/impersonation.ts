@@ -21,8 +21,8 @@ export type AdminTransaction = Parameters<Parameters<typeof adminDb.transaction>
 // cierra la laptop sin salir explícitamente.
 const GRANT_SAFETY_NET_HOURS = 24;
 
-// Email reconociblemente interno para la fila de `users` provisionada
-// durante una impersonación de rol owner — NUNCA el email personal del
+// Email reconociblemente interno para la fila de `users` provisionada al
+// impersonar (cualquier rol de plataforma) — NUNCA el email personal del
 // admin (si algún día una vista lista `users` crudo de un negocio, esto se
 // lee como "cuenta interna de la plataforma", no como una persona
 // confundida con acceso). Estable POR ADMIN, no por grant: la misma fila
@@ -93,9 +93,15 @@ export async function endActiveGrantsForAdmin(
 }
 
 // Inicia impersonación de `targetBusinessId` para el admin dado, con el
-// rol de plataforma que YA tiene (no es una elección del caller: un admin
-// viewer siempre impersona en modo lectura, un owner siempre en modo
-// completo — ver getVerifiedSession/requirePlatformAdmin).
+// rol de plataforma que YA tiene (no es una elección del caller — ver
+// getVerifiedSession/requirePlatformAdmin). Pedido explícito del negocio:
+// AMBOS roles de plataforma impersonan con acceso completo de escritura
+// ("entrar como dueño") — la distinción owner/viewer NO es
+// lectura-vs-escritura dentro de un negocio impersonado, es qué puede
+// hacer cada uno DESDE /admin mismo (crear negocios, gestionar cuentas de
+// plataforma, editar sucursales/branding directo sin impersonar — todo
+// eso sigue exclusivo de owner, ver requireOwner() en businesses.ts). Por
+// eso ambos roles provisionan/reactivan la misma fila real de `users`.
 export async function startImpersonation(
   adminAuthUserId: string,
   adminPlatformRole: PlatformRole,
@@ -108,44 +114,38 @@ export async function startImpersonation(
     // ANTES de crear el nuevo, en la misma transacción.
     await endActiveGrantsForAdmin(tx, adminAuthUserId, "nueva impersonación iniciada");
 
-    let impersonatedUsersId: string | null = null;
+    let impersonatedUsersId: string;
 
-    if (adminPlatformRole === "owner") {
-      const [existing] = await tx
-        .select()
-        .from(users)
-        .where(and(eq(users.authUserId, adminAuthUserId), eq(users.businessId, targetBusinessId)))
-        .limit(1);
+    const [existing] = await tx
+      .select()
+      .from(users)
+      .where(and(eq(users.authUserId, adminAuthUserId), eq(users.businessId, targetBusinessId)))
+      .limit(1);
 
-      if (existing) {
-        // Reactiva la fila de una impersonación anterior de ESTE MISMO
-        // negocio — nunca se borró (ver endActiveGrantsForAdmin), así que
-        // cualquier reward/sucursal/promo que haya creado antes sigue
-        // siendo el mismo actor real.
-        await tx.update(users).set({ isActive: true }).where(eq(users.id, existing.id));
-        impersonatedUsersId = existing.id;
-      } else {
-        const [ownerRole] = await tx.select().from(roles).where(eq(roles.name, "owner"));
-        if (!ownerRole) {
-          throw new Error("No existe el rol global 'owner' — revisa el seed de roles.");
-        }
-        const [created] = await tx
-          .insert(users)
-          .values({
-            businessId: targetBusinessId,
-            authUserId: adminAuthUserId,
-            email: impersonationUserEmail(adminAuthUserId),
-            roleId: ownerRole.id,
-            fullName: "Acceso de soporte de Pragmia",
-          })
-          .returning();
-        impersonatedUsersId = created.id;
+    if (existing) {
+      // Reactiva la fila de una impersonación anterior de ESTE MISMO
+      // negocio — nunca se borró (ver endActiveGrantsForAdmin), así que
+      // cualquier reward/sucursal/promo que haya creado antes sigue
+      // siendo el mismo actor real.
+      await tx.update(users).set({ isActive: true }).where(eq(users.id, existing.id));
+      impersonatedUsersId = existing.id;
+    } else {
+      const [ownerRole] = await tx.select().from(roles).where(eq(roles.name, "owner"));
+      if (!ownerRole) {
+        throw new Error("No existe el rol global 'owner' — revisa el seed de roles.");
       }
+      const [created] = await tx
+        .insert(users)
+        .values({
+          businessId: targetBusinessId,
+          authUserId: adminAuthUserId,
+          email: impersonationUserEmail(adminAuthUserId),
+          roleId: ownerRole.id,
+          fullName: "Acceso de soporte de Pragmia",
+        })
+        .returning();
+      impersonatedUsersId = created.id;
     }
-    // Rol viewer: impersonatedUsersId se queda null a propósito — nunca se
-    // provisiona fila de users, así que resolveActor/requireOperationContext
-    // no encuentran actor y cualquier escritura falla estructuralmente (ver
-    // esos dos archivos, más el guard explícito que además tienen).
 
     const [grant] = await tx
       .insert(platformImpersonationGrants)

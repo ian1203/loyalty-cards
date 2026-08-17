@@ -18,9 +18,17 @@ import { AdminUserMenu } from "./AdminUserMenu";
 // sección nueva al panel (p.ej. un futuro "/admin/reports") — no dupliques
 // esta lista en otro componente.
 const NAV_ITEMS = [
-  { href: "/admin", label: "Negocios", icon: Building2Icon },
-  { href: "/admin/accounts", label: "Cuentas", icon: ShieldCheckIcon },
+  { href: "/admin", label: "Negocios", icon: Building2Icon, ownerOnly: false },
+  { href: "/admin/accounts", label: "Cuentas", icon: ShieldCheckIcon, ownerOnly: true },
 ] as const;
+
+// Filtro cosmético — nunca el control real (eso vive server-side en cada
+// page.tsx/route.ts, ver admin/accounts/page.tsx, que redirige a un
+// viewer que entre por URL directa). Mismo criterio que navItemsForRole en
+// components/AppShell.tsx.
+function navItemsForRole(platformRole: PlatformRole) {
+  return NAV_ITEMS.filter((item) => !item.ownerOnly || platformRole === "owner");
+}
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/admin") return pathname === "/admin";
@@ -29,14 +37,16 @@ function isActive(pathname: string, href: string): boolean {
 
 function NavLinks({
   pathname,
+  items,
   onNavigate,
 }: {
   pathname: string;
+  items: readonly (typeof NAV_ITEMS)[number][];
   onNavigate?: () => void;
 }) {
   return (
     <nav className="flex flex-col gap-1">
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
         return (
@@ -72,6 +82,7 @@ export function AdminShell({
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navItems = navItemsForRole(platformRole);
 
   return (
     <div className="min-h-screen bg-background lg:flex">
@@ -84,7 +95,7 @@ export function AdminShell({
           <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Panel de plataforma
           </p>
-          <NavLinks pathname={pathname} />
+          <NavLinks pathname={pathname} items={navItems} />
         </div>
         <Separator />
         <div className="p-2">
@@ -117,7 +128,7 @@ export function AdminShell({
                 <p className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Panel de plataforma
                 </p>
-                <NavLinks pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+                <NavLinks pathname={pathname} items={navItems} onNavigate={() => setMobileOpen(false)} />
               </div>
               <div className="border-t pt-2">
                 <AdminUserMenu email={email} platformRole={platformRole} />

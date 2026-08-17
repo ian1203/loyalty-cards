@@ -31,10 +31,12 @@ export const platformImpersonationGrants = pgTable(
       "platform_role_at_grant_time",
     ).notNull(),
     // Fila de `users` provisionada para que el admin escriba como el
-    // dueño impersonado (FK compuesta abajo). SOLO grants de rol owner
-    // la tienen — los de rol viewer se quedan NULL a propósito: nunca se
-    // provisiona fila de users para un viewer, así que estructuralmente
-    // no puede escribir nada mientras impersona.
+    // dueño impersonado (FK compuesta abajo). AMBOS roles de plataforma
+    // la tienen — owner y viewer impersonan con acceso completo (pedido
+    // explícito, "entrar como dueño" — ver app/admin/impersonation.ts).
+    // Nullable solo por si algún día un modo de impersonación
+    // genuinamente de solo lectura vuelve a existir; hoy siempre se
+    // rellena.
     impersonatedUsersId: uuid("impersonated_users_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

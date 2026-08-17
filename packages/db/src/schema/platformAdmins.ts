@@ -1,11 +1,16 @@
 import { boolean, pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 
-// owner: acceso total (alta de negocios, gestión de otros admins,
-// impersonación). viewer: solo lectura + impersonación de solo-lectura
-// (nunca provisiona la fila de `users` que le daría capacidad de escribir
-// como el dueño impersonado — ver platformImpersonationGrants.ts). La
-// aplicación exacta de estos permisos vive en el Panel de Admin de
-// Plataforma, no acá.
+// owner: acceso total (alta de negocios, gestión de otros admins de
+// plataforma, edición directa de sucursales/branding, eliminar negocios).
+// viewer: acotado a /admin mismo — solo lista de negocios (sin gestión de
+// cuentas), y dentro de cada negocio solo puede cambiar su estado
+// (activo/suspendido/pago pendiente) y ver (no editar) sucursales/
+// branding. DENTRO de un negocio impersonado, en cambio, AMBOS roles
+// tienen acceso completo de escritura ("entrar como dueño", pedido
+// explícito) — ver platformImpersonationGrants.ts y
+// app/admin/impersonation.ts, que provisionan la misma fila real de
+// `users` para los dos. La aplicación exacta de estos permisos vive en el
+// Panel de Admin de Plataforma, no acá.
 export const platformRoleEnum = pgEnum("platform_role", ["owner", "viewer"]);
 
 // Catálogo global de plataforma, separado a propósito de `users`: un admin

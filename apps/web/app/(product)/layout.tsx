@@ -60,10 +60,7 @@ export default async function ProductLayout({ children }: { children: ReactNode 
   return (
     <>
       {session.impersonation ? (
-        <ImpersonationBanner
-          businessName={business?.name ?? "este negocio"}
-          platformRole={session.impersonation.platformRole}
-        />
+        <ImpersonationBanner businessName={business?.name ?? "este negocio"} />
       ) : null}
       <AppShell businessName={business?.name ?? "Tu negocio"} email={email} role={session.role}>
         {children}

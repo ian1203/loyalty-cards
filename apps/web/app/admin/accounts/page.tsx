@@ -16,6 +16,12 @@ export default async function AdminAccountsPage() {
   if (session.kind !== "platform_admin") {
     redirect("/dashboard");
   }
+  // Bloqueo real, no solo ocultar el link del nav (ver AdminShell) — un
+  // viewer solo tiene la pestaña de Negocios, gestión de cuentas de
+  // plataforma sigue exclusiva de owner.
+  if (session.platformRole !== "owner") {
+    redirect("/admin");
+  }
 
   const accounts = await listPlatformAdmins();
 
