@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "platform_impersonation_grants_one_active_per_admin_idx" ON "platform_impersonation_grants" USING btree ("platform_admin_auth_user_id") WHERE "platform_impersonation_grants"."ended_at" is null;

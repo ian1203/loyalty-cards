@@ -144,6 +144,7 @@ describe("Fase 1 — fail-closed con sesión válida pero sin claim de tenant", 
       authenticated: true,
       kind: "platform_admin",
       authUserId: platformAdminAuthUserId,
+      platformRole: "owner",
     });
     // El carril de tenant_user, en cambio, sigue cerrado para este admin.
     expect(await requireTenantSession(jar)).toBeNull();

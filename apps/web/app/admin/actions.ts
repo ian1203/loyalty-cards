@@ -26,9 +26,16 @@ export async function createBusinessAction(
   if (!admin) {
     return { error: "No autorizado." };
   }
+  if (admin.platformRole !== "owner") {
+    return { error: "Solo un admin de plataforma con rol owner puede crear negocios." };
+  }
 
   const businessName = String(formData.get("businessName") ?? "").trim();
   const ownerEmail = String(formData.get("ownerEmail") ?? "").trim();
+  const initialLocationName = String(formData.get("initialLocationName") ?? "").trim() || undefined;
+  const brandColorHex = String(formData.get("brandColorHex") ?? "").trim() || undefined;
+  const stampsRequiredRaw = String(formData.get("initialStampsRequired") ?? "").trim();
+  const initialStampsRequired = stampsRequiredRaw ? Number(stampsRequiredRaw) : undefined;
 
   if (!businessName || !ownerEmail) {
     return { error: "Nombre del negocio y email del dueño son obligatorios." };
@@ -66,6 +73,9 @@ export async function createBusinessAction(
       ownerEmail,
       ownerAuthUserId: authUserId,
       createdByAuthUserId: admin.authUserId,
+      initialLocationName,
+      initialStampsRequired,
+      brandColorHex,
     });
 
     return { success: { businessName, ownerEmail } };

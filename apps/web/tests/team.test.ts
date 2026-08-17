@@ -13,7 +13,11 @@ import {
 } from "@loyalty/db";
 import { adminDb } from "@loyalty/db/admin";
 import { registerStampForSession } from "../app/(product)/scanner/logic";
-import { deactivateEmployeeForSession, listEmployeesForSession } from "../app/(product)/team/logic";
+import {
+  createStaffForSession,
+  deactivateEmployeeForSession,
+  listEmployeesForSession,
+} from "../app/(product)/team/logic";
 import { requireTenantSession } from "../lib/supabase/session";
 import type { TenantSession } from "../lib/tenant";
 import {
@@ -81,6 +85,12 @@ describe("Offboarding de empleados — /team", () => {
   let ownerBAuthUserId: string;
   let staffBAuthUserId: string;
   let staffBEmployeeId: string;
+  let locationBId: string;
+  let sessionOwnerB: TenantSession;
+
+  // auth.users creados por los tests de ALTA de staff (no por el setup de
+  // beforeAll) — se limpian junto con el resto en afterAll.
+  const extraAuthUserIds: string[] = [];
 
   beforeAll(async () => {
     platformAdminAuthUserId = await createPlatformAdmin(
@@ -164,6 +174,13 @@ describe("Offboarding de empleados — /team", () => {
     });
     businessBId = b.business.id;
     ownerBAuthUserId = b.ownerAuthUserId;
+    sessionOwnerB = await tenantSession(await signInAsCookieJar(ownerBEmail, password));
+
+    const [locB] = await adminDb
+      .insert(locations)
+      .values({ businessId: businessBId, name: "Sucursal B" })
+      .returning();
+    locationBId = locB.id;
 
     const staffBEmail = `team-staff-b-${suffix}@test.dev`;
     staffBAuthUserId = await createRealStaffUser({
@@ -207,6 +224,7 @@ describe("Offboarding de empleados — /team", () => {
       ownerBAuthUserId,
       staffBAuthUserId,
       platformAdminAuthUserId,
+      ...extraAuthUserIds,
     ]) {
       await admin.auth.admin.deleteUser(authUserId);
     }
@@ -307,5 +325,111 @@ describe("Offboarding de empleados — /team", () => {
     );
     expect(rows.some((row) => row.id === staffBEmployeeId)).toBe(false);
     expect(rows.some((row) => row.id === adminAEmployeeId)).toBe(true);
+  });
+
+  it("el dueño da de alta a un staff nuevo: el password devuelto una sola vez sirve para iniciar sesión, con audit log", async () => {
+    const newStaffEmail = `team-new-staff-${suffix}@test.dev`;
+
+    const result = await createStaffForSession(
+      sessionOwnerA,
+      form({ fullName: "Staff Nuevo", email: newStaffEmail, primaryLocationId: locationAId }),
+    );
+    expect(result.success).toBeTruthy();
+    expect(result.credentials?.email).toBe(newStaffEmail);
+    expect(result.credentials?.password).toBeTruthy();
+    const newPassword = result.credentials!.password;
+
+    const [userRow] = await adminDb
+      .select()
+      .from(users)
+      .where(and(eq(users.businessId, businessAId), eq(users.email, newStaffEmail)));
+    expect(userRow).toBeTruthy();
+    extraAuthUserIds.push(userRow.authUserId);
+
+    const [employeeRow] = await adminDb
+      .select()
+      .from(employees)
+      .where(eq(employees.userId, userRow.id));
+    expect(employeeRow).toBeTruthy();
+    expect(employeeRow.primaryLocationId).toBe(locationAId);
+    expect(employeeRow.isActive).toBe(true);
+
+    const [log] = await adminDb
+      .select()
+      .from(auditLogs)
+      .where(and(eq(auditLogs.entityId, employeeRow.id), eq(auditLogs.action, "staff.created")));
+    expect(log).toBeTruthy();
+    expect(log.businessId).toBe(businessAId);
+
+    // El password generado (nunca logueado) viaja UNA VEZ en el estado —
+    // la única forma de confirmar que es real es usarlo para loguearse.
+    const { data, error } = await anonClient().auth.signInWithPassword({
+      email: newStaffEmail,
+      password: newPassword,
+    });
+    expect(error).toBeFalsy();
+    expect(data.session).toBeTruthy();
+  });
+
+  it("dedupe de email dentro del negocio: rechaza un email ya usado por otro usuario del mismo tenant, sin 500 de constraint", async () => {
+    const result = await createStaffForSession(
+      sessionOwnerA,
+      form({ fullName: "Staff Duplicado", email: staffAEmail }),
+    );
+    expect(result.error).toMatch(/ya existe/i);
+    expect(result.credentials).toBeUndefined();
+  });
+
+  it("staff no puede dar de alta a nadie (gate) — corre ANTES de tocar Auth/DB", async () => {
+    const attemptedEmail = `team-staff-attempt-${suffix}@test.dev`;
+
+    const result = await createStaffForSession(
+      sessionStaffA,
+      form({ fullName: "Intento de Staff", email: attemptedEmail }),
+    );
+    expect(result.error).toMatch(/dueño/);
+    expect(result.credentials).toBeUndefined();
+
+    const [userRow] = await adminDb
+      .select()
+      .from(users)
+      .where(and(eq(users.businessId, businessAId), eq(users.email, attemptedEmail)));
+    expect(userRow).toBeUndefined();
+  });
+
+  it("aislamiento cross-tenant: el dueño de A no puede asignar una sucursal de B al staff nuevo", async () => {
+    const attemptedEmail = `team-cross-location-${suffix}@test.dev`;
+
+    const result = await createStaffForSession(
+      sessionOwnerA,
+      form({ fullName: "Staff Cross Tenant", email: attemptedEmail, primaryLocationId: locationBId }),
+    );
+    expect(result.error).toMatch(/sucursal/i);
+    expect(result.credentials).toBeUndefined();
+
+    // Ni el auth.users ni la fila de users quedaron creados — el
+    // pre-chequeo corta ANTES de tocar Auth.
+    const [userRow] = await adminDb
+      .select()
+      .from(users)
+      .where(and(eq(users.businessId, businessAId), eq(users.email, attemptedEmail)));
+    expect(userRow).toBeUndefined();
+  });
+
+  it("el dueño de B sí puede usar su propia sucursal (control positivo del test anterior)", async () => {
+    const newStaffEmail = `team-owner-b-staff-${suffix}@test.dev`;
+
+    const result = await createStaffForSession(
+      sessionOwnerB,
+      form({ fullName: "Staff B Nuevo", email: newStaffEmail, primaryLocationId: locationBId }),
+    );
+    expect(result.success).toBeTruthy();
+
+    const [userRow] = await adminDb
+      .select()
+      .from(users)
+      .where(and(eq(users.businessId, businessBId), eq(users.email, newStaffEmail)));
+    expect(userRow).toBeTruthy();
+    extraAuthUserIds.push(userRow.authUserId);
   });
 });

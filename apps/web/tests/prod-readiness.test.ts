@@ -68,11 +68,15 @@ describe("scoping de secretos — service role nunca al cliente", () => {
   // (Supabase Auth Admin API, no adminDb/Postgres, pero mismo espíritu de
   // la regla) solo puede importarse desde el camino confinado de /admin y
   // desde lib/employeeOffboarding.ts (bloqueo de login de un empleado
-  // desactivado, ver esa función). Cualquier uso futuro fuera de esta
-  // lista debe fallar este test, no quedar en un comentario.
+  // desactivado, ver esa función) y app/(product)/team/logic.ts (alta de
+  // staff real, misma necesidad de crear un auth.users real). Cualquier
+  // uso futuro fuera de esta lista debe fallar este test, no quedar en un
+  // comentario.
   const ALLOWED_CREATE_ADMIN_CLIENT_IMPORTERS = new Set([
     "app/admin/actions.ts",
+    "app/admin/accounts.ts",
     "lib/employeeOffboarding.ts",
+    "app/(product)/team/logic.ts",
   ]);
 
   it("createAdminClient() solo se importa desde los archivos confinados permitidos", () => {

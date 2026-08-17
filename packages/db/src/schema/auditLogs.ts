@@ -10,9 +10,17 @@ export const auditLogs = pgTable(
   "audit_logs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    businessId: uuid("business_id")
-      .notNull()
-      .references(() => businesses.id),
+    // Nullable desde el Panel de Admin de Plataforma: la gestión de
+    // CUENTAS de plataforma (invitar/desactivar/cambiar rol de un
+    // platform_admin) es una acción sensible sin ningún negocio al que
+    // asociarla — a diferencia de business.created, que sí tiene un
+    // business_id real. RLS sigue protegiendo a app_user igual que antes:
+    // una fila con business_id NULL nunca calza contra
+    // current_setting('app.current_business_id') (comparación NULL, nunca
+    // true), así que sigue siendo estructuralmente invisible para
+    // cualquier sesión de tenant — solo adminDb (bypassa RLS) las
+    // lee/escribe.
+    businessId: uuid("business_id").references(() => businesses.id),
     actorUserId: uuid("actor_user_id"),
     actorEmployeeId: uuid("actor_employee_id"),
     // Acciones de plataforma (p.ej. alta de negocio) las hace un admin

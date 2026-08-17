@@ -197,6 +197,34 @@
       "when": 1786900300000,
       "tag": "0027_enroll_shipping_address",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786931356477,
+      "tag": "0028_peaceful_juggernaut",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1786931400000,
+      "tag": "0029_platform_admin_impersonation_hook",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786932590070,
+      "tag": "0030_special_clint_barton",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786940660910,
+      "tag": "0031_naive_sharon_ventura",
+      "breakpoints": true
     }
   ]
 }

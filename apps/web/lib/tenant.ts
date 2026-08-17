@@ -58,6 +58,15 @@ export async function resolveActor(
   tx: TenantTransaction,
   session: TenantSession,
 ): Promise<InferSelectModel<typeof users>> {
+  // Defensa en profundidad, no la razón estructural del bloqueo: un grant
+  // de impersonación de rol viewer NUNCA provisiona una fila en `users`
+  // (ver platformImpersonationGrants.ts), así que esta query ya devolvería
+  // null y lanzaría más abajo de todas formas. Este guard temprano solo da
+  // un mensaje de error más claro.
+  if (session.impersonation?.platformRole === "viewer") {
+    throw new Error("Sesión de solo lectura — no puede realizar escrituras.");
+  }
+
   const [actor] = await tx
     .select()
     .from(users)

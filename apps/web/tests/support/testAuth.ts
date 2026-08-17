@@ -83,6 +83,11 @@ export async function signInAsCookieJar(
 export async function createPlatformAdmin(
   email: string,
   password: string,
+  // Default "owner": preserva el comportamiento de todo call site existente
+  // de esta función (mismo default que la columna en DB, ver
+  // packages/db/src/schema/platformAdmins.ts). "viewer" es para tests que
+  // necesitan probar el modo de solo-lectura (p.ej. impersonación viewer).
+  platformRole: "owner" | "viewer" = "owner",
 ): Promise<string> {
   const { data, error } = await supabaseAdminClient().auth.admin.createUser({
     email,
@@ -92,7 +97,7 @@ export async function createPlatformAdmin(
   if (error || !data.user) {
     throw new Error(`No se pudo crear el admin de plataforma: ${error?.message}`);
   }
-  await adminDb.insert(platformAdmins).values({ authUserId: data.user.id });
+  await adminDb.insert(platformAdmins).values({ authUserId: data.user.id, platformRole });
   return data.user.id;
 }
 
