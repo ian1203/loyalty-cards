@@ -16,6 +16,14 @@ export type PassBackFieldsConfig = {
   validUntilText: string;
   reviewLinkUrl: string;
   reviewLinkLabel: string;
+  createdWithUrl: string;
+  createdWithLabel: string;
+  // Activa 3 backFields dinámicos MÁS (total histórico de sellos,
+  // faltantes para la próxima recompensa, recompensas disponibles) —
+  // separado de los campos estáticos de arriba porque estos SÍ exigen una
+  // query nueva por cliente (ver loyaltySnapshot.ts) en vez de un texto
+  // fijo, así que solo corre para negocios que la activen explícitamente.
+  showAccountSummaryFields: boolean;
 };
 
 const CHILAQUIKES_BUSINESS_ID = "26166780-c160-4e91-81a5-a0694a96cecc";
@@ -28,6 +36,9 @@ const CONFIG_BY_BUSINESS_ID: Record<string, PassBackFieldsConfig> = {
     validUntilText: "Ilimitado",
     reviewLinkUrl: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8",
     reviewLinkLabel: "Dejar reseña en Google",
+    createdWithUrl: "https://pragmia-data.com",
+    createdWithLabel: "Pragmia",
+    showAccountSummaryFields: true,
   },
 };
 

@@ -81,6 +81,23 @@ export type PassJsonInput = {
   // link sin URL no es tappable, así que no vale la pena el campo).
   reviewLinkUrl?: string;
   reviewLinkLabel?: string;
+  createdWithUrl?: string;
+  createdWithLabel?: string;
+  // Activa 3 backFields dinámicos DE CUENTA (total histórico, faltantes
+  // para la próxima recompensa, disponibles) juntos — sin flag, ninguno
+  // se agrega, ni siquiera "Disponible" pese a que availableRewardsCount
+  // (arriba) siempre está presente. Ver apps/web/lib/wallet/
+  // passBackFieldsConfig.ts (showAccountSummaryFields).
+  showAccountSummaryFields?: boolean;
+  // Total HISTÓRICO de sellos ganados (nunca decrece con un canje) —
+  // DISTINTO de cycleStamps/headerFields arriba, que sí puede "reiniciar"
+  // visualmente cada ciclo. Ver loyaltySnapshot.ts (COUNT sobre
+  // transactions).
+  totalStampsEarned?: number;
+  // null cuando no hay ninguna recompensa pendiente (ya puede canjear
+  // todas, o el negocio no tiene reglas activas) — en ese caso el campo
+  // completo se omite, no se muestra "0".
+  stampsUntilNextReward?: number | null;
 };
 
 // Texto del banner de lock screen al entrar en el geofence de una
@@ -222,6 +239,29 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
               },
             ]
           : []),
+        ...(input.showAccountSummaryFields
+          ? [
+              {
+                key: "totalStampsEarned",
+                label: "Total acumulado",
+                value: `${input.totalStampsEarned ?? 0} sellos`,
+              },
+              ...(input.stampsUntilNextReward != null
+                ? [
+                    {
+                      key: "stampsUntilNextReward",
+                      label: "Para la siguiente recompensa",
+                      value: `${input.stampsUntilNextReward} sello${input.stampsUntilNextReward === 1 ? "" : "s"}`,
+                    },
+                  ]
+                : []),
+              {
+                key: "availableRewards",
+                label: "Disponible",
+                value: String(input.availableRewardsCount ?? 0),
+              },
+            ]
+          : []),
         ...(input.howItWorksText
           ? [{ key: "howItWorks", label: "Cómo funciona", value: input.howItWorksText }]
           : []),
@@ -243,6 +283,16 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
           : []),
         ...(input.validUntilText
           ? [{ key: "validUntil", label: "La tarjeta es válida hasta", value: input.validUntilText }]
+          : []),
+        ...(input.createdWithUrl
+          ? [
+              {
+                key: "createdWith",
+                label: "Creado con",
+                value: input.createdWithLabel ?? "Pragmia",
+                attributedValue: `<a href='${input.createdWithUrl}'>${input.createdWithLabel ?? "Pragmia"}</a>`,
+              },
+            ]
           : []),
       ],
     },

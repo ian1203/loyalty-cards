@@ -243,6 +243,77 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     }) as { storeCard: { backFields: Array<{ key: string; value: string }> } };
     expect(pass.storeCard.backFields.find((f) => f.key === "review")?.value).toBe("Dejar reseña");
   });
+
+  it("con createdWithUrl, agrega 'Creado con' tappable al final de backFields", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      validUntilText: "Ilimitado",
+      createdWithUrl: "https://pragmia-data.com",
+      createdWithLabel: "Pragmia",
+    }) as { storeCard: { backFields: Array<{ key: string; value: string; attributedValue?: string }> } };
+    expect(pass.storeCard.backFields.map((f) => f.key)).toEqual(["poweredBy", "validUntil", "createdWith"]);
+    const createdWith = pass.storeCard.backFields.find((f) => f.key === "createdWith");
+    expect(createdWith?.value).toBe("Pragmia");
+    expect(createdWith?.attributedValue).toBe("<a href='https://pragmia-data.com'>Pragmia</a>");
+  });
+
+  it("sin showAccountSummaryFields, ninguno de los 3 campos dinámicos aparece — ni 'Disponible', pese a que availableRewardsCount siempre está presente", () => {
+    const pass = buildPassJson({ ...baseInput, availableRewardsCount: 3 }) as {
+      storeCard: { backFields: Array<{ key: string }> };
+    };
+    expect(pass.storeCard.backFields.map((f) => f.key)).toEqual(["poweredBy"]);
+  });
+
+  it("con showAccountSummaryFields, agrega Total acumulado + Para la siguiente recompensa + Disponible, en ese orden", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      showAccountSummaryFields: true,
+      totalStampsEarned: 23,
+      stampsUntilNextReward: 5,
+      availableRewardsCount: 2,
+    }) as { storeCard: { backFields: Array<{ key: string; label: string; value: string }> } };
+    expect(pass.storeCard.backFields.map((f) => f.key)).toEqual([
+      "poweredBy",
+      "totalStampsEarned",
+      "stampsUntilNextReward",
+      "availableRewards",
+    ]);
+    expect(pass.storeCard.backFields.find((f) => f.key === "totalStampsEarned")?.value).toBe("23 sellos");
+    expect(pass.storeCard.backFields.find((f) => f.key === "stampsUntilNextReward")?.value).toBe("5 sellos");
+    expect(pass.storeCard.backFields.find((f) => f.key === "availableRewards")?.value).toBe("2");
+  });
+
+  it("stampsUntilNextReward en singular ('1 sello', no '1 sellos')", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      showAccountSummaryFields: true,
+      stampsUntilNextReward: 1,
+    }) as { storeCard: { backFields: Array<{ key: string; value: string }> } };
+    expect(pass.storeCard.backFields.find((f) => f.key === "stampsUntilNextReward")?.value).toBe("1 sello");
+  });
+
+  it("con showAccountSummaryFields pero stampsUntilNextReward null (ya puede canjear todo), OMITE ese campo — no muestra '0 sellos'", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      showAccountSummaryFields: true,
+      totalStampsEarned: 40,
+      stampsUntilNextReward: null,
+      availableRewardsCount: 5,
+    }) as { storeCard: { backFields: Array<{ key: string }> } };
+    expect(pass.storeCard.backFields.map((f) => f.key)).toEqual([
+      "poweredBy",
+      "totalStampsEarned",
+      "availableRewards",
+    ]);
+  });
+
+  it("con showAccountSummaryFields pero sin totalStampsEarned/availableRewardsCount, usa 0 como respaldo — nunca 'undefined sellos'", () => {
+    const pass = buildPassJson({ ...baseInput, showAccountSummaryFields: true }) as {
+      storeCard: { backFields: Array<{ key: string; value: string }> };
+    };
+    expect(pass.storeCard.backFields.find((f) => f.key === "totalStampsEarned")?.value).toBe("0 sellos");
+    expect(pass.storeCard.backFields.find((f) => f.key === "availableRewards")?.value).toBe("0");
+  });
 });
 
 describe("buildRelevantText — mismo tono/casos que buildProgressMessage de Google, duplicado a propósito", () => {
