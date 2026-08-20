@@ -67,6 +67,20 @@ export type PassJsonInput = {
   // segundo envío en adelante (pendiente de confirmar contra un
   // dispositivo real, ver plan).
   promoMessage?: string | null;
+  // Contenido informativo ESTÁTICO por negocio (no cambia con cada
+  // transacción, a diferencia de promoMessage arriba) — hoy solo lo
+  // provee la config de código en apps/web/lib/wallet/passBackFieldsConfig.ts
+  // (Chilaquikes), ver skill wallet-integration. Cada uno agrega UNA
+  // entrada condicional a backFields; ausente (undefined) para cualquier
+  // negocio sin config — nunca un placeholder inventado.
+  howItWorksText?: string;
+  howToEarnStampText?: string;
+  validUntilText?: string;
+  // reviewLinkUrl sin reviewLinkLabel usa "Dejar reseña" como texto de
+  // respaldo — reviewLinkLabel solo sin reviewLinkUrl no agrega nada (un
+  // link sin URL no es tappable, así que no vale la pena el campo).
+  reviewLinkUrl?: string;
+  reviewLinkLabel?: string;
 };
 
 // Texto del banner de lock screen al entrar en el geofence de una
@@ -207,6 +221,28 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
                 changeMessage: "%@",
               },
             ]
+          : []),
+        ...(input.howItWorksText
+          ? [{ key: "howItWorks", label: "Cómo funciona", value: input.howItWorksText }]
+          : []),
+        ...(input.howToEarnStampText
+          ? [{ key: "howToEarnStamp", label: "Cómo conseguir un sello", value: input.howToEarnStampText }]
+          : []),
+        // attributedValue: link tappable (Apple PKField, sin entitlement
+        // especial) — value queda como respaldo en texto plano para
+        // versiones viejas de iOS que no lo rendericen.
+        ...(input.reviewLinkUrl
+          ? [
+              {
+                key: "review",
+                label: "Reseña",
+                value: input.reviewLinkLabel ?? "Dejar reseña",
+                attributedValue: `<a href='${input.reviewLinkUrl}'>${input.reviewLinkLabel ?? "Dejar reseña"}</a>`,
+              },
+            ]
+          : []),
+        ...(input.validUntilText
+          ? [{ key: "validUntil", label: "La tarjeta es válida hasta", value: input.validUntilText }]
           : []),
       ],
     },

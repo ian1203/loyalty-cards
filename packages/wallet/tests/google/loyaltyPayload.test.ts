@@ -272,4 +272,53 @@ describe("buildLoyaltyObjectPayload — contenido mínimo por cliente, sin PII d
     const obj = buildLoyaltyObjectPayload(objectInput) as { state: string };
     expect(obj.state).toBe("active");
   });
+
+  it("sin howItWorksText/howToEarnStampText/validUntilText/reviewLinkUrl, no agrega esas entradas ni linksModuleData (negocio sin config, ej. Iriz Style)", () => {
+    const obj = buildLoyaltyObjectPayload(objectInput) as {
+      textModulesData: Array<{ id: string }>;
+    };
+    expect(obj.textModulesData.map((m) => m.id)).toEqual(["poweredBy"]);
+    expect(obj).not.toHaveProperty("linksModuleData");
+  });
+
+  it("con las 3 entradas de texto estático (Chilaquikes), textModulesData las agrega antes de 'poweredBy'", () => {
+    const obj = buildLoyaltyObjectPayload({
+      ...objectInput,
+      howItWorksText: "6 sellos → orden gratis de chilaquiles",
+      howToEarnStampText: "Por cada visita y compra en cualquiera de nuestras sucursales, ganas un sello.",
+      validUntilText: "Ilimitado",
+    }) as { textModulesData: Array<{ id: string; header: string; body: string }> };
+    expect(obj.textModulesData.map((m) => m.id)).toEqual([
+      "howItWorks",
+      "howToEarnStamp",
+      "validUntil",
+      "poweredBy",
+    ]);
+    expect(obj.textModulesData.find((m) => m.id === "validUntil")?.body).toBe("Ilimitado");
+  });
+
+  it("con reviewLinkUrl, agrega linksModuleData.uris con el link de reseña", () => {
+    const obj = buildLoyaltyObjectPayload({
+      ...objectInput,
+      reviewLinkUrl: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8",
+      reviewLinkLabel: "Dejar reseña en Google",
+    }) as { linksModuleData: { uris: Array<{ uri: string; description: string }> } };
+    expect(obj.linksModuleData.uris).toEqual([
+      { id: "review", uri: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8", description: "Dejar reseña en Google" },
+    ]);
+  });
+
+  it("reviewLinkUrl sin reviewLinkLabel usa 'Dejar reseña' como descripción de respaldo", () => {
+    const obj = buildLoyaltyObjectPayload({
+      ...objectInput,
+      reviewLinkUrl: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8",
+    }) as { linksModuleData: { uris: Array<{ description: string }> } };
+    expect(obj.linksModuleData.uris[0].description).toBe("Dejar reseña");
+  });
+
+  it("buildLoyaltyClassPayload NO se toca — este contenido es a nivel OBJETO a propósito, sin classId nuevo", () => {
+    const cls = buildLoyaltyClassPayload(classInput);
+    expect(cls).not.toHaveProperty("textModulesData");
+    expect(cls).not.toHaveProperty("linksModuleData");
+  });
 });

@@ -211,6 +211,18 @@ export type LoyaltyObjectInput = {
   // misma clase (ver LoyaltyClassInput.classVersion) — si no coinciden, el
   // objeto queda apuntando a un classId que no existe.
   classVersion?: string;
+  // Contenido informativo ESTÁTICO por negocio, mismo criterio y mismo
+  // origen (apps/web/lib/wallet/passBackFieldsConfig.ts) que el bloque
+  // equivalente en apple/passJson.ts — a nivel OBJETO a propósito, no
+  // CLASE: evita el classId nuevo + script de migración que exigiría
+  // tocar buildLoyaltyClassPayload (ver skill wallet-integration), y este
+  // contenido no depende del cliente así que el PATCH normal de
+  // notify.ts ya lo propaga a los pases instalados sin nada especial.
+  howItWorksText?: string;
+  howToEarnStampText?: string;
+  validUntilText?: string;
+  reviewLinkUrl?: string;
+  reviewLinkLabel?: string;
 };
 
 // Google Wallet no soporta una rejilla gráfica de sellos (a diferencia de
@@ -309,6 +321,13 @@ export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<str
     // que se pueda "llenar": textModulesData es una lista que Wallet
     // apila verticalmente sin límite de espacio horizontal, así que no
     // hay ningún truncamiento que evitar acá.
+    ...(input.howItWorksText ? [{ id: "howItWorks", header: "Cómo funciona", body: input.howItWorksText }] : []),
+    ...(input.howToEarnStampText
+      ? [{ id: "howToEarnStamp", header: "Cómo conseguir un sello", body: input.howToEarnStampText }]
+      : []),
+    ...(input.validUntilText
+      ? [{ id: "validUntil", header: "La tarjeta es válida hasta", body: input.validUntilText }]
+      : []),
     { id: "poweredBy", header: "", body: "Powered by Pragmia" },
   ];
 
@@ -322,6 +341,23 @@ export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<str
       balance: { string: `${input.cycleStamps} / ${input.stampsRequired}` },
     },
     textModulesData,
+    // linksModuleData: link tappable de Google Wallet (nivel OBJETO,
+    // mismo motivo que arriba) — a diferencia de Apple, no hay
+    // value/attributedValue con respaldo: uri+description es el único
+    // shape.
+    ...(input.reviewLinkUrl
+      ? {
+          linksModuleData: {
+            uris: [
+              {
+                id: "review",
+                uri: input.reviewLinkUrl,
+                description: input.reviewLinkLabel ?? "Dejar reseña",
+              },
+            ],
+          },
+        }
+      : {}),
     barcode: { type: "QR_CODE", value: input.walletToken },
   };
 }

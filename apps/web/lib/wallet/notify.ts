@@ -174,6 +174,11 @@ async function notifyGoogleObject(businessId: VerifiedBusinessId, customerId: st
     // movimiento del cliente. Debe coincidir siempre con el version que
     // usa googleSaveLink.ts para la MISMA clase.
     classVersion: CURRENT_GOOGLE_LOYALTY_CLASS_VERSION,
+    howItWorksText: snapshot.passBackFields?.howItWorksText,
+    howToEarnStampText: snapshot.passBackFields?.howToEarnStampText,
+    validUntilText: snapshot.passBackFields?.validUntilText,
+    reviewLinkUrl: snapshot.passBackFields?.reviewLinkUrl,
+    reviewLinkLabel: snapshot.passBackFields?.reviewLinkLabel,
   });
 
   await withRetries(
