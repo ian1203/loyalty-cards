@@ -22,7 +22,7 @@ const CHILAQUIKES_BUSINESS_ID = "26166780-c160-4e91-81a5-a0694a96cecc";
 
 const CONFIG_BY_BUSINESS_ID: Record<string, PassBackFieldsConfig> = {
   [CHILAQUIKES_BUSINESS_ID]: {
-    howItWorksText: "6 sellos → orden gratis de chilaquiles",
+    howItWorksText: "8 sellos → orden gratis de chilaquiles",
     howToEarnStampText:
       "Por cada visita y compra en cualquiera de nuestras sucursales (local + 2 foodtrucks), ganas un sello.",
     validUntilText: "Ilimitado",
