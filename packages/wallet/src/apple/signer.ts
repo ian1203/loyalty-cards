@@ -20,12 +20,22 @@ export type ApplePassCertificate = {
 // openssl (packages/wallet/tests/support/fakeAppleCert.ts) — corre byte a
 // byte el mismo código que correría con el certificado real y pagado de
 // Apple; solo cambia el certificado, nunca el código de firma.
+//
+// Parseo de PEM movido FUERA del closure que se ejecuta por request
+// (hallazgo real de auditoría de rendimiento, ver docs/HISTORY.md):
+// `getPkpassSigner()` (apps/web/lib/wallet/adapters.ts) ya memoiza el
+// signer una vez por proceso, pero `createRealPkpassSigner` se llama una
+// sola vez — el parseo de cert/key en cambio estaba DENTRO de la función
+// devuelta, así que se repetía en cada `.pkpass` generado aunque el
+// certificado nunca cambia dentro de la vida del proceso. Parsear una vez
+// acá y capturarlo en el closure es la única parte cacheable: `p7.sign()`
+// sigue corriendo por request a propósito, cada manifest es distinto.
 export function createRealPkpassSigner(credentials: ApplePassCertificate): PkpassSigner {
-  return async (manifestJson: Buffer): Promise<Buffer> => {
-    const cert = forge.pki.certificateFromPem(credentials.passCertPem);
-    const wwdrCert = forge.pki.certificateFromPem(credentials.wwdrCertPem);
-    const privateKey = forge.pki.privateKeyFromPem(credentials.passKeyPem);
+  const cert = forge.pki.certificateFromPem(credentials.passCertPem);
+  const wwdrCert = forge.pki.certificateFromPem(credentials.wwdrCertPem);
+  const privateKey = forge.pki.privateKeyFromPem(credentials.passKeyPem);
 
+  return async (manifestJson: Buffer): Promise<Buffer> => {
     const p7 = forge.pkcs7.createSignedData();
     p7.content = forge.util.createBuffer(manifestJson.toString("binary"));
     p7.addCertificate(cert);

@@ -45,13 +45,20 @@ describe("createRealPkpassSigner — PKCS#7 real con cert autofirmado", () => {
     expect(sigA.equals(sigB)).toBe(false);
   });
 
-  it("un certificado/llave inválidos lanzan en vez de devolver una firma silenciosa", async () => {
-    const sign = createRealPkpassSigner({
-      passCertPem: "not-a-cert",
-      passKeyPem: "not-a-key",
-      wwdrCertPem: "not-a-cert",
-    });
-    await expect(sign(Buffer.from("x"))).rejects.toThrow();
+  it("un certificado/llave inválidos lanzan en vez de devolver una firma silenciosa", () => {
+    // El parseo de PEM corre al construir el signer (una sola vez por
+    // proceso, ver comentario en signer.ts), no en cada firma — así que
+    // ahora el throw ocurre acá, no al invocar sign(). Falla más rápido
+    // (en la resolución de config, no en medio de una request real) sin
+    // perder la garantía original: nunca una firma silenciosa con
+    // credenciales rotas.
+    expect(() =>
+      createRealPkpassSigner({
+        passCertPem: "not-a-cert",
+        passKeyPem: "not-a-key",
+        wwdrCertPem: "not-a-cert",
+      }),
+    ).toThrow();
   });
 });
 
