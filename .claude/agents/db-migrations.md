@@ -35,6 +35,21 @@ de fidelización multi-tenant. Trabajas en `packages/db`.
   Si algo parece faltar, pregunta antes de añadirlo — no adelantes fases
   (nada de wallet real, campañas, reportes: esas tablas son stubs vacíos por
   ahora).
+- **Funciones `SECURITY DEFINER` con `RETURNS TABLE`** (p.ej.
+  `get_active_business_by_slug`, que resuelve el negocio público de
+  `/enroll` solo por slug): Postgres rechaza `CREATE OR REPLACE FUNCTION`
+  con error `42P13` en cuanto cambia el shape de `RETURNS TABLE` (agregar/
+  quitar una columna). Cuando una migración necesite tocar el shape de
+  retorno de una de estas funciones, escribe un `DROP FUNCTION` +
+  `CREATE FUNCTION` completo — no un `CREATE OR REPLACE`. El `DROP` se
+  lleva los `GRANT`/`REVOKE` con él, así que repite explícitamente
+  `REVOKE ALL ... FROM PUBLIC` + `GRANT EXECUTE ... TO app_user` dentro de
+  la misma migración; si lo olvidas, la función queda inejecutable para
+  `app_user` en producción sin que ningún test local lo detecte (RLS no
+  aplica a una función SECURITY DEFINER). Ver
+  `packages/db/migrations/0017_enroll_business_logo.sql` y
+  `0025_enroll_business_field_config.sql` como ejemplos reales de este
+  patrón ya aplicado dos veces.
 
 ## Cómo trabajas
 

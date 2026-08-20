@@ -112,6 +112,63 @@ offline, error de red, token de push vencido), la transacción de negocio
 (sello/canje) YA se confirmó en la DB — eso manda. El push se reintenta
 con backoff, pero un fallo de Wallet jamás deshace un sello real.
 
+## Generación de assets del pase (`generate-pass-assets.ts`)
+
+`packages/wallet/scripts/generate-pass-assets.ts` genera el strip visual
+de Apple (`strip@3x.png` y variantes) para un negocio. Dos modos:
+
+- **Fallback** (default, sin `--hero`): círculos de sello tileados sobre
+  fondo blanco — lo que usa Chilaquikes. `computeStampLayout`/
+  `buildStripSvg` son la referencia; deben quedar byte-a-byte idénticos
+  entre rondas de cambios a otros negocios — confírmalo con diff de la
+  función completa, no solo revisión visual.
+- **`--hero-cover`**: cover-crop de una foto de marca ya terminada al
+  tamaño exacto del canvas (sharp `fit:"cover"`, sin parche ni tile — un
+  modo de tile sobre una foto terminada produce un mosaico visible en
+  dispositivo real, no una textura continua). El `--logo` separado se
+  compone SIEMPRE encima salvo `--no-strip-logo` (para un hero que ya
+  trae su propio wordmark). `computeIrizStampGrid` calcula un grid
+  dinámico de sellos (1 fila si `n<=5`; 2 filas — regular si `n` es par,
+  patrón panal intercalado si es impar — si `n>=6`), usando TODO el alto
+  disponible menos `reservedTopPt` (el footprint real del logo si se
+  compone, 0 si no) — no una banda fija heredada de otro layout. Colores
+  parametrizables: `--empty-stamp-stroke`, `--stamp-backing-fill`,
+  `--stamp-filled-fill`.
+
+**Regla permanente de validación** — ningún ajuste a este script se
+reporta como resuelto sin: armar un `.pkpass` REAL (mismo
+`buildPassJson`+`buildPkpass` de producción, solo la firma es fake — vía
+un test de Vitest descartable, ya que `node --experimental-strip-types`
+directo no resuelve los imports sin extensión de `packages/wallet/src/`),
+descomprimirlo, y verificar el asset empaquetado DESDE ADENTRO del
+`.pkpass` con un hash `sha256` contra el archivo fuente. Revisar el PNG
+que el generador escribe en `apps/web/public/passes/` no basta por sí
+solo — no prueba que el pipeline de empaquetado real lo esté leyendo.
+
+Para iterar sobre variantes de color/estilo sin arriesgar un tenant real
+de un cliente pagando, usa un tenant sandbox dedicado (branding clonado
+del negocio real + su propia sucursal de prueba) en vez del negocio en
+producción.
+
+## Migración de `classId` de Google Wallet
+
+Google **nunca relee una Loyalty Class ya creada/guardada** a partir de
+un save-link nuevo — cachea agresivamente por `classId`. Cualquier cambio
+a un campo de la CLASE (no del objeto individual — p.ej. `programLogo`,
+`merchantLocations`, `cardRowTemplateInfos`) exige un `classId` NUEVO,
+nunca un PATCH in-place de la clase vieja:
+
+1. Bump `CURRENT_GOOGLE_LOYALTY_CLASS_VERSION`
+   (`packages/wallet/src/google/loyaltyPayload.ts`).
+2. Crea y verifica el classId nuevo explícitamente contra la API
+   (`upsertLoyaltyClass` + `GET` de vuelta) antes de dar el cambio por
+   bueno — no asumas que el payload que mandaste es el que Google guardó.
+3. Si hay clientes reales con un pase ya guardado bajo la clase vieja,
+   escribe un script de migración (`packages/wallet/scripts/migrate-google-class-v*.ts`,
+   uno por cada bump) que re-emita sus Loyalty Objects contra el classId
+   nuevo — un negocio sin ningún cliente real con pase de Google no
+   necesita migración, solo el bump.
+
 ## Qué NO hacer
 
 - Generar un `wallet_token` nuevo para Wallet — reusar el que ya existe en

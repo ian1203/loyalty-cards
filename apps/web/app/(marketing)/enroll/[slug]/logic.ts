@@ -12,6 +12,7 @@ import {
 } from "@loyalty/db/enroll";
 import { checkRateLimit } from "../../../../lib/rateLimit";
 import { buildWalletArtifactsForNewEnrollment } from "../../../../lib/wallet/publicEnrollWallet";
+import { captureServerError } from "../../../../lib/observability/captureServerError";
 import { HONEYPOT_FIELD } from "./honeypot";
 
 // Narrowing, no eliminación total, del timing entre "teléfono duplicado"
@@ -192,6 +193,17 @@ export async function enrollCustomerForSlug(
       return { error: "No pudimos encontrar este negocio. Verifica el enlace." };
     }
     console.error("enrollCustomerForSlug:", error);
+    // "critical" — único endpoint público sin sesión del sistema: una
+    // excepción no controlada acá puede significar que NINGÚN cliente
+    // nuevo se puede registrar (bug real) o un patrón de abuso que el rate
+    // limit/honeypot no atajaron. NUNCA se pasa nombre/teléfono/email/
+    // fecha de nacimiento/dirección del formulario — solo el slug (público,
+    // no es PII) del negocio, que ya llegó "bindeado" desde la URL.
+    captureServerError(error, {
+      operation: "enroll.customer",
+      severity: "critical",
+      extra: { businessSlug },
+    });
     return { error: "No se pudo completar tu registro. Intenta de nuevo." };
   }
 
@@ -208,6 +220,17 @@ export async function enrollCustomerForSlug(
     wallet = await buildWalletArtifactsForNewEnrollment(enrollResult.businessId, enrollResult.customerId);
   } catch (error) {
     console.error("buildWalletArtifactsForNewEnrollment:", error);
+    // "warning": el alta del cliente YA confirmó (best-effort, ver
+    // comentario arriba) — staff puede entregar el pase después desde
+    // /customers/{id}/wallet. Si esto empieza a fallar en volumen (cert
+    // vencido, bug real de firma), la regla de alerta por frecuencia en
+    // Sentry escala — ver docs/HISTORY.md.
+    captureServerError(error, {
+      operation: "enroll.wallet_artifacts",
+      businessId: enrollResult.businessId,
+      severity: "warning",
+      extra: { customerId: enrollResult.customerId },
+    });
   }
 
   return {

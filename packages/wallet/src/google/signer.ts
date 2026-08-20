@@ -90,6 +90,20 @@ async function fetchAccessToken(
   return data.access_token;
 }
 
+// Hallazgo real de tenant-security-reviewer (ronda de observabilidad): el
+// body crudo de un error de la Wallet API a veces hace eco del valor
+// inválido que mandamos (ej. "Invalid value at 'object.accountName' ...
+// 'Juan Pérez'") — el payload real SÍ incluye customerFirstName (ver
+// notify.ts). Lanzar ese body tal cual en el `Error` lo deja viajar sin
+// sanear hasta captureServerError()/Sentry. El body completo SÍ se loguea
+// (console.error, primer-party — Vercel, no un proveedor externo) para
+// diagnóstico local; el `Error` que efectivamente propaga (y que sí puede
+// llegar a Sentry) solo lleva el status y qué operación/recurso falló.
+function logAndThrowApiError(action: string, resourceId: string, status: number, body: string): never {
+  console.error(`[wallet:google:${action}] ${resourceId} — HTTP ${status}: ${body}`);
+  throw new Error(`Google Wallet API respondió ${status} en ${action} de ${resourceId}`);
+}
+
 // Insert-o-patch: la Wallet API no tiene un verbo "upsert" nativo — se
 // intenta crear y, si ya existe (409), se actualiza.
 async function upsert(
@@ -107,7 +121,7 @@ async function upsert(
   if (insertRes.ok) return;
   if (insertRes.status !== 409) {
     const body = await insertRes.text().catch(() => "");
-    throw new Error(`Google Wallet API respondió ${insertRes.status} al crear ${resourceId}: ${body}`);
+    logAndThrowApiError("crear", resourceId, insertRes.status, body);
   }
   const patchRes = await fetchImpl(`${collectionUrl}/${resourceId}`, {
     method: "PATCH",
@@ -116,7 +130,7 @@ async function upsert(
   });
   if (!patchRes.ok) {
     const body = await patchRes.text().catch(() => "");
-    throw new Error(`Google Wallet API respondió ${patchRes.status} al actualizar ${resourceId}: ${body}`);
+    logAndThrowApiError("actualizar", resourceId, patchRes.status, body);
   }
 }
 
@@ -142,7 +156,7 @@ export function createRealGoogleWalletClient(
       });
       if (!res.ok) {
         const body = await res.text().catch(() => "");
-        throw new Error(`Google Wallet API respondió ${res.status} en addMessage de ${objectId}: ${body}`);
+        logAndThrowApiError("addMessage", objectId, res.status, body);
       }
     },
     async addLoyaltyClassMessage(classId, message) {
@@ -154,7 +168,7 @@ export function createRealGoogleWalletClient(
       });
       if (!res.ok) {
         const body = await res.text().catch(() => "");
-        throw new Error(`Google Wallet API respondió ${res.status} en addMessage de ${classId}: ${body}`);
+        logAndThrowApiError("addMessage", classId, res.status, body);
       }
     },
     async buildSaveLink(payload) {

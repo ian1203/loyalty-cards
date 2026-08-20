@@ -86,7 +86,25 @@ aterriza para las rutas de feature:
    confiar en la validación del navegador. Ids se validan como UUID antes de
    tocar la DB; strings se recortan y acotan.
 
-## Patrón de página de feature (referencia)
+## Patrón `logic.ts` / `actions.ts` — obligatorio en toda mutación
+
+La lógica de cada mutación vive en `logic.ts` (SIN `"use server"`, recibe
+la sesión YA resuelta como parámetro) y `actions.ts` es un shim delgado
+que resuelve la sesión desde cookies verificadas y se la pasa. Razón: un
+archivo `"use server"` queda expuesto como endpoint invocable directamente
+— si la lógica de negocio viviera ahí y aceptara la sesión como
+argumento, un caller externo podría invocar la action con una sesión
+forjada. Poniendo la resolución de sesión en el shim `"use server"` y la
+lógica en un archivo plano, no hay forma de invocar `logic.ts` sin pasar
+primero por `actions.ts`, que siempre resuelve la sesión real.
+
+Primitivos compartidos en `apps/web/lib/tenant.ts`:
+- **`findInTenant`**: lectura por id anti-IDOR — combina el id con el
+  `business_id` de la sesión; un id de otro tenant devuelve exactamente lo
+  mismo que uno inexistente (`null`).
+- **`resolveActor` + `writeAuditLog`**: escriben `audit_logs` con
+  `actor_user_id` — NUNCA `actor_auth_user_id`, cuya FK apunta a
+  `platform_admins` y rechaza actores de tenant.
 
 ```tsx
 // app/<feature>/page.tsx — Server Component
@@ -104,14 +122,22 @@ export default async function FeaturePage() {
 ```
 
 ```ts
-// app/<feature>/actions.ts — mutación
+// app/<feature>/logic.ts — lógica real, SIN "use server"
+export async function mutarAlgoForSession(session: TenantSession, formData: FormData) {
+  if (session.role !== "owner") return { error: "Solo el dueño puede hacer esto." };
+  // validar input → withTenantContext(session.businessId, tx => { cambio + writeAuditLog })
+}
+```
+
+```ts
+// app/<feature>/actions.ts — shim "use server", resuelve la sesión y llama a logic.ts
 "use server";
+import { mutarAlgoForSession } from "./logic";
+
 export async function mutarAlgo(_prev: State, formData: FormData): Promise<State> {
   const session = await requireTenantSession();
   if (!session) return { error: "No autorizado." };
-  if (session.role !== "owner") return { error: "Solo el dueño puede hacer esto." };
-
-  // validar input → withTenantContext(session.businessId, tx => { cambio + audit_log })
+  return mutarAlgoForSession(session, formData);
   // revalidatePath("/<feature>") al final si cambió lo que la página muestra
 }
 ```
@@ -171,33 +197,45 @@ export async function mutarAlgo(_prev: State, formData: FormData): Promise<State
   cliente POR ACCIÓN (no por sesión); un replay devuelve el resultado
   original, jamás un segundo movimiento.
 
-## Sistema de diseño (rediseño `feat/design-overhaul`)
+## Sistema de diseño — identidad Pragmia
 
-Dirección visual **"Sello"**: el objeto real detrás del producto es la
-tarjeta de sellos física. Marino + coral, un solo acento de marca, tono
-sobrio. Definido en `apps/web/app/globals.css` (`@theme inline`, Tailwind
-v4 CSS-first — no hay `tailwind.config.js` ni `components.json`).
+Definido en `apps/web/app/globals.css` (`@theme inline`, Tailwind v4
+CSS-first — no hay `tailwind.config.js` ni `components.json`). La
+dirección visual anterior ("Sello": marino/coral, Space Grotesk/Inter,
+papel cálido) fue **reemplazada por completo** por esta — no la
+reintroduzcas; su historia queda en `docs/HISTORY.md` ("Rebrand Sello →
+Pragmia") por si hace falta el contexto de por qué cambió.
 
 ### Tokens
 
 - **Color** (hex, no oklch — a propósito, para fidelidad exacta con el
-  mockup aprobado; ver comentario en `globals.css`):
-  `--background` papel `#FBFAF7`, `--foreground` `#14181F`, `--primary`
-  marino `#14213D`, `--stamp` coral `#E8573F` (el ÚNICO acento de marca —
-  distinto de `--accent`, que sigue siendo el tinte neutral de hover de
-  shadcn), `--success`/`--warning`/`--destructive` semánticos separados
-  del acento de marca, `--border`/`--ring`. Cada uno tiene su par en
-  `.dark`. **Nunca** uses `--primary` ni `--stamp` como color de dato en
-  una gráfica — fallan el validador de la skill `dataviz` (ver abajo);
-  para eso existen `--chart-1`/`--chart-2`.
-- **Tipografía**: `Space Grotesk` (display, `font-display`, vía
+  mockup aprobado; ver comentario en `globals.css`): `--primary` azul
+  `#085AB3`, `--stamp` celeste `#51CADE`, `--foreground` negro `#000000`,
+  `--background` `#F5F8FC` (neutro frío). **Regla de contraste**:
+  `--stamp` (celeste) falla WCAG como texto/ícono/borde sobre fondo claro
+  (1.9:1) — úsalo SOLO como relleno, con `--stamp-foreground` (negro en
+  claro, casi-negro en oscuro) encima; nunca `text-stamp`/`border-stamp`
+  sueltos sobre `--background`. Un texto/ícono suelto que antes hubiera
+  sido acento va en `--primary`. `--success`/`--warning`/`--destructive`
+  semánticos separados del acento de marca, `--border`/`--ring`. Cada uno
+  tiene su par en `.dark`. **Nunca** uses `--primary` ni `--stamp` como
+  color de dato en una gráfica — fallan el validador de la skill
+  `dataviz` (ver abajo); para eso existen `--chart-1`/`--chart-2`
+  (`#2E7FC9`/`#EB6834` en claro, `#3F8AD1`/`#D9702E` en oscuro,
+  revalidados con `validate_palette.js`).
+- **Tipografía**: `Playfair Display` (display/títulos, `font-display`, vía
   `next/font/google` en `app/layout.tsx` — auto-hosted, cero request a
-  CDN) para títulos/números grandes; `Inter` (`font-sans`) para cuerpo.
-  Utilidad `.text-metric` para números grandes de dashboard.
+  CDN) + `Comfortaa` (`font-sans`, cuerpo). Utilidad `.text-metric` para
+  números grandes de dashboard.
+- **Logo**: `components/Logo.tsx` — `LogoMark` es un PNG
+  (`public/brand/pragmia-icon.png` + variante `-white.png` para fondos
+  `--primary`), NO un SVG a mano — el motivo real es demasiado fino para
+  vectorizar a ojo sin desviarse del arte aprobado. El wordmark "PRAGMIA"
+  sigue siendo texto real en `font-display`, nunca imagen.
 - **Radio de borde**: escala `--radius-sm/md/lg/xl/2xl` (base `1rem`, no
   el `0.625rem` fijo de shadcn de fábrica).
-- **Sombra**: `--shadow-color` tintado de marino (no negro puro),
-  utilidades `.shadow-token-sm/md/lg`.
+- **Sombra**: `--shadow-color` tintado (no negro puro), utilidades
+  `.shadow-token-sm/md/lg`.
 
 ### Componentes compartidos nuevos (`apps/web/components/`)
 

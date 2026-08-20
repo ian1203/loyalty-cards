@@ -3,6 +3,7 @@ import { buildLoyaltyObjectId, buildLoyaltyObjectPayload, CURRENT_GOOGLE_LOYALTY
 import { deviceRegistrations, walletPasses, withTenantContext, type VerifiedBusinessId } from "@loyalty/db";
 import { getApnsSender, getApplePassTypeIdentifier, getGoogleIssuerId, getGoogleWalletClient } from "./adapters";
 import { loadCustomerLoyaltySnapshot } from "./loyaltySnapshot";
+import { captureServerError } from "../observability/captureServerError";
 
 // Encola la actualización de Wallet tras un sello/canje. BEST-EFFORT
 // (ver skill wallet-integration): la transacción de negocio YA se
@@ -102,6 +103,22 @@ async function notifyAppleDevices(
             `[wallet:notify:apple] push falló tras reintentos (walletPassId=${reg.walletPassId}, deviceLibraryIdentifier=${reg.deviceLibraryIdentifier}):`,
             error,
           );
+          // "warning": un dispositivo individual fallando (token vencido,
+          // offline) es esperado — un negocio real acumula churn de
+          // dispositivos. Si esto se vuelve un patrón (varios dispositivos
+          // del mismo negocio, o un pico repentino), la regla de alerta por
+          // volumen en Sentry escala solo — ver docs/HISTORY.md, ronda de
+          // observabilidad. NUNCA se pasa el pushToken (secreto de push).
+          captureServerError(error, {
+            operation: "wallet.notify.apple",
+            businessId,
+            severity: "warning",
+            extra: {
+              customerId,
+              walletPassId: reg.walletPassId,
+              deviceLibraryIdentifier: reg.deviceLibraryIdentifier,
+            },
+          });
         },
       ),
     ),
@@ -164,6 +181,15 @@ async function notifyGoogleObject(businessId: VerifiedBusinessId, customerId: st
     RETRY_DELAYS_MS,
   ).catch((error) => {
     console.error("[wallet:notify:google] upsertLoyaltyObject falló tras reintentos:", error);
+    // "warning" por el mismo criterio que Apple arriba: un PATCH aislado
+    // fallando (Google devolviendo 5xx puntual) es ruido normal de una API
+    // externa — un pico real lo agarra la regla de alerta por volumen.
+    captureServerError(error, {
+      operation: "wallet.notify.google",
+      businessId,
+      severity: "warning",
+      extra: { customerId },
+    });
   });
 }
 
@@ -182,5 +208,11 @@ export async function notifyWalletOfTransaction(
     // (p.ej. la DB no responde), que nunca debe propagar hacia el caller
     // de un sello/canje ya confirmado.
     console.error("[wallet:notify] fallo inesperado:", error);
+    captureServerError(error, {
+      operation: "wallet.notify.query",
+      businessId,
+      severity: "warning",
+      extra: { customerId },
+    });
   }
 }
