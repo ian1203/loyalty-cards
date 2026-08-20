@@ -191,6 +191,58 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     });
     expect(pass).not.toHaveProperty("maxDistance");
   });
+
+  it("sin howItWorksText/howToEarnStampText/reviewLinkUrl/validUntilText, backFields no agrega esas entradas (negocio sin config, ej. Iriz Style)", () => {
+    const pass = buildPassJson(baseInput) as { storeCard: { backFields: Array<{ key: string }> } };
+    expect(pass.storeCard.backFields.map((f) => f.key)).toEqual(["poweredBy"]);
+  });
+
+  it("con las 4 entradas de contenido estático (Chilaquikes), backFields agrega las 4 en orden, después de poweredBy/promo", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      howItWorksText: "6 sellos → orden gratis de chilaquiles",
+      howToEarnStampText: "Por cada visita y compra en cualquiera de nuestras sucursales, ganas un sello.",
+      reviewLinkUrl: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8",
+      reviewLinkLabel: "Dejar reseña en Google",
+      validUntilText: "Ilimitado",
+    }) as {
+      storeCard: {
+        backFields: Array<{ key: string; label: string; value: string; attributedValue?: string }>;
+      };
+    };
+    expect(pass.storeCard.backFields.map((f) => f.key)).toEqual([
+      "poweredBy",
+      "howItWorks",
+      "howToEarnStamp",
+      "review",
+      "validUntil",
+    ]);
+    expect(pass.storeCard.backFields.find((f) => f.key === "howItWorks")?.value).toBe(
+      "6 sellos → orden gratis de chilaquiles",
+    );
+    expect(pass.storeCard.backFields.find((f) => f.key === "validUntil")?.value).toBe("Ilimitado");
+  });
+
+  it("el link de reseña lleva attributedValue tappable (HTML <a href>) con value en texto plano como respaldo", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      reviewLinkUrl: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8",
+      reviewLinkLabel: "Dejar reseña en Google",
+    }) as { storeCard: { backFields: Array<{ key: string; value: string; attributedValue?: string }> } };
+    const review = pass.storeCard.backFields.find((f) => f.key === "review");
+    expect(review?.value).toBe("Dejar reseña en Google");
+    expect(review?.attributedValue).toBe(
+      "<a href='https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8'>Dejar reseña en Google</a>",
+    );
+  });
+
+  it("reviewLinkUrl sin reviewLinkLabel usa 'Dejar reseña' como texto de respaldo", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      reviewLinkUrl: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8",
+    }) as { storeCard: { backFields: Array<{ key: string; value: string }> } };
+    expect(pass.storeCard.backFields.find((f) => f.key === "review")?.value).toBe("Dejar reseña");
+  });
 });
 
 describe("buildRelevantText — mismo tono/casos que buildProgressMessage de Google, duplicado a propósito", () => {

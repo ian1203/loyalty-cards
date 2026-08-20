@@ -171,6 +171,11 @@ export async function generateApplePkpassForCustomer(
     colors: { backgroundRgb, foregroundRgb, labelRgb },
     locations: appleLocations,
     promoMessage: snapshot.businessLastPromoMessage,
+    howItWorksText: snapshot.passBackFields?.howItWorksText,
+    howToEarnStampText: snapshot.passBackFields?.howToEarnStampText,
+    validUntilText: snapshot.passBackFields?.validUntilText,
+    reviewLinkUrl: snapshot.passBackFields?.reviewLinkUrl,
+    reviewLinkLabel: snapshot.passBackFields?.reviewLinkLabel,
   });
 
   const pkpass = await buildPkpass({

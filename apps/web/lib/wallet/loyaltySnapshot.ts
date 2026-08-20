@@ -12,6 +12,7 @@ import {
 } from "@loyalty/db";
 import { availableRewards, countAvailableRedemptions, cycleStampProgress } from "@loyalty/core";
 import { isUuid } from "../tenant";
+import { getPassBackFieldsConfig, type PassBackFieldsConfig } from "./passBackFieldsConfig";
 
 // Datos compartidos entre la generación del .pkpass de Apple
 // (passGeneration.ts) y el link "Add to Google Wallet"
@@ -78,6 +79,12 @@ export type CustomerLoyaltySnapshot = {
   // (el mensaje de clase se manda una sola vez desde promoNotify.ts, no
   // se re-arma en cada PATCH de objeto).
   businessLastPromoMessage: string | null;
+  // Contenido informativo estático del reverso del pase (Apple
+  // backFields / Google textModulesData+linksModuleData, nivel OBJETO) —
+  // ver passBackFieldsConfig.ts. Null para cualquier negocio sin config
+  // (hoy, todos salvo Chilaquikes) — mismo criterio nullable que el resto
+  // de campos opcionales de este snapshot.
+  passBackFields: PassBackFieldsConfig | null;
 };
 
 export async function loadCustomerLoyaltySnapshot(
@@ -193,5 +200,6 @@ export async function loadCustomerLoyaltySnapshot(
     // lo que el WHERE ya garantiza, no lo cambia.
     businessLocations: locationRows as Array<{ latitude: number; longitude: number }>,
     businessLastPromoMessage: latestPromo?.message ?? null,
+    passBackFields: getPassBackFieldsConfig(businessId),
   };
 }

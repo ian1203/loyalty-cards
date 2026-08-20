@@ -81,6 +81,11 @@ export async function buildGoogleSaveLinkForCustomer(
     availableRewardsCount: snapshot.availableRewardsCount,
     walletToken: snapshot.walletToken,
     classVersion: CURRENT_GOOGLE_LOYALTY_CLASS_VERSION,
+    howItWorksText: snapshot.passBackFields?.howItWorksText,
+    howToEarnStampText: snapshot.passBackFields?.howToEarnStampText,
+    validUntilText: snapshot.passBackFields?.validUntilText,
+    reviewLinkUrl: snapshot.passBackFields?.reviewLinkUrl,
+    reviewLinkLabel: snapshot.passBackFields?.reviewLinkLabel,
   });
 
   // origins: dominios autorizados a disparar el guardado — mismo criterio
