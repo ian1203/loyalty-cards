@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Next 16 bloquea por default los recursos de dev (HMR, y con eso la
@@ -11,4 +13,16 @@ const nextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost", "*.trycloudflare.com"],
 };
 
-export default nextConfig;
+// Source maps de subida a Sentry: activados — SENTRY_AUTH_TOKEN/ORG/PROJECT
+// ya están configurados (ver docs/HISTORY.md, ronda de observabilidad) y
+// @sentry/cli ya está aprobado en pnpm-workspace.yaml (`allowBuilds`). Sin
+// el auth token, este mismo plugin loguea un warning y omite la subida sin
+// fallar el build — no hace falta un flag separado para el caso "todavía
+// no hay token".
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: true,
+  webpack: { treeshake: { removeDebugLogging: true }, automaticVercelMonitors: false },
+});

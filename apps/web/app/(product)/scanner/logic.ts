@@ -38,6 +38,7 @@ import {
   writeAuditLog,
   type TenantSession,
 } from "../../../lib/tenant";
+import { captureServerError } from "../../../lib/observability/captureServerError";
 import { checkRateLimit } from "../../../lib/rateLimit";
 import { notifyWalletOfTransaction } from "../../../lib/wallet/notify";
 import { scheduleAfterResponse } from "../../../lib/wallet/scheduleAfterResponse";
@@ -454,6 +455,14 @@ export async function lookupCustomerByTokenForSession(
     });
   } catch (error) {
     console.error("lookupCustomerByTokenForSession:", error);
+    // "warning": bloquea a un empleado de operar (no puede ni ver al
+    // cliente), pero no es en sí un sello/canje corrupto — si se vuelve
+    // recurrente sí amerita mirar. NUNCA se pasa el token del QR.
+    captureServerError(error, {
+      operation: "scanner.lookup",
+      businessId: session.businessId,
+      severity: "warning",
+    });
     return { ok: false, error: "No se pudo buscar el cliente. Intenta de nuevo." };
   }
 }
@@ -486,6 +495,12 @@ export async function lookupCustomerByIdForSession(
     });
   } catch (error) {
     console.error("lookupCustomerByIdForSession:", error);
+    captureServerError(error, {
+      operation: "scanner.lookup",
+      businessId: session.businessId,
+      severity: "warning",
+      extra: { customerId },
+    });
     return { ok: false, error: "No se pudo buscar el cliente. Intenta de nuevo." };
   }
 }
@@ -698,6 +713,17 @@ export async function registerStampForSession(
       };
     }
     console.error("registerStampForSession:", error);
+    // "critical": excepción NO controlada en el camino de escritura más
+    // sensible de la plataforma — nunca un OperationRejectedError/
+    // ReplayDetectedError esperado (esos ya se atraparon arriba). Solo
+    // identificadores internos (business_id, customer_id, location_id) —
+    // NUNCA el idempotencyKey (deriva del QR) ni PII de cliente.
+    captureServerError(error, {
+      operation: "scanner.stamp",
+      businessId: session.businessId,
+      severity: "critical",
+      extra: { customerId: input.customerId, locationId: input.locationId, role: session.role },
+    });
     return { ok: false, error: "No se pudo registrar el sello. Intenta de nuevo." };
   }
 }
@@ -903,6 +929,18 @@ export async function redeemRewardForSession(
       };
     }
     console.error("redeemRewardForSession:", error);
+    // "critical" — mismo criterio que registerStampForSession arriba.
+    captureServerError(error, {
+      operation: "scanner.redeem",
+      businessId: session.businessId,
+      severity: "critical",
+      extra: {
+        customerId: input.customerId,
+        locationId: input.locationId,
+        ruleId: input.ruleId,
+        role: session.role,
+      },
+    });
     return { ok: false, error: "No se pudo canjear. Intenta de nuevo." };
   }
 }
