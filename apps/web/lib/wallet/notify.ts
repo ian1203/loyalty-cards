@@ -179,6 +179,11 @@ async function notifyGoogleObject(businessId: VerifiedBusinessId, customerId: st
     validUntilText: snapshot.passBackFields?.validUntilText,
     reviewLinkUrl: snapshot.passBackFields?.reviewLinkUrl,
     reviewLinkLabel: snapshot.passBackFields?.reviewLinkLabel,
+    createdWithUrl: snapshot.passBackFields?.createdWithUrl,
+    createdWithLabel: snapshot.passBackFields?.createdWithLabel,
+    showAccountSummaryFields: snapshot.passBackFields?.showAccountSummaryFields,
+    totalStampsEarned: snapshot.lifetimeStamps ?? undefined,
+    stampsUntilNextReward: snapshot.stampsUntilNextReward,
   });
 
   await withRetries(

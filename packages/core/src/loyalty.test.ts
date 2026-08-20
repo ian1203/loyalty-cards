@@ -8,6 +8,7 @@ import {
   evaluateRedemption,
   evaluateStamp,
   stampProgress,
+  stampsUntilNextReward,
 } from "./loyalty";
 
 const T0 = new Date("2026-07-30T12:00:00.000Z");
@@ -265,6 +266,41 @@ describe("countAvailableRedemptions — canjes REALES posibles, no reglas distin
   it("regla inactiva no cuenta", () => {
     const rules = [{ isActive: false, stampsRequired: 3 }];
     expect(countAvailableRedemptions(12, rules)).toBe(0);
+  });
+});
+
+describe("stampsUntilNextReward — faltantes para la próxima recompensa AÚN NO desbloqueada", () => {
+  const oneRule = [{ isActive: true, stampsRequired: 8 }];
+
+  it("por debajo del costo, dice cuántos faltan", () => {
+    expect(stampsUntilNextReward(3, oneRule)).toBe(5);
+  });
+
+  it("exactamente el costo, ya no hay 'próxima' pendiente — null, no 0", () => {
+    expect(stampsUntilNextReward(8, oneRule)).toBeNull();
+  });
+
+  it("por encima del costo (arrastre), sigue sin haber pendiente — null", () => {
+    expect(stampsUntilNextReward(12, oneRule)).toBeNull();
+  });
+
+  it("con varias reglas activas, usa la más barata TODAVÍA no alcanzada — no la más barata del programa a secas", () => {
+    const rules = [
+      { isActive: true, stampsRequired: 3 },
+      { isActive: true, stampsRequired: 8 },
+    ];
+    // Con 3 sellos ya alcanza la regla de costo 3 (no cuenta como
+    // "pendiente") — la próxima pendiente real es la de costo 8.
+    expect(stampsUntilNextReward(3, rules)).toBe(5);
+  });
+
+  it("regla inactiva no cuenta como pendiente", () => {
+    const rules = [{ isActive: false, stampsRequired: 3 }];
+    expect(stampsUntilNextReward(1, rules)).toBeNull();
+  });
+
+  it("sin reglas activas, null", () => {
+    expect(stampsUntilNextReward(0, [])).toBeNull();
   });
 });
 

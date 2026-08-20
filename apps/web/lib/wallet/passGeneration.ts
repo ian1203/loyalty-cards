@@ -176,6 +176,11 @@ export async function generateApplePkpassForCustomer(
     validUntilText: snapshot.passBackFields?.validUntilText,
     reviewLinkUrl: snapshot.passBackFields?.reviewLinkUrl,
     reviewLinkLabel: snapshot.passBackFields?.reviewLinkLabel,
+    createdWithUrl: snapshot.passBackFields?.createdWithUrl,
+    createdWithLabel: snapshot.passBackFields?.createdWithLabel,
+    showAccountSummaryFields: snapshot.passBackFields?.showAccountSummaryFields,
+    totalStampsEarned: snapshot.lifetimeStamps ?? undefined,
+    stampsUntilNextReward: snapshot.stampsUntilNextReward,
   });
 
   const pkpass = await buildPkpass({

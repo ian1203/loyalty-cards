@@ -223,6 +223,21 @@ export type LoyaltyObjectInput = {
   validUntilText?: string;
   reviewLinkUrl?: string;
   reviewLinkLabel?: string;
+  createdWithUrl?: string;
+  createdWithLabel?: string;
+  // Activa 3 textModulesData dinámicos DE CUENTA (total histórico,
+  // faltantes para la próxima recompensa, disponibles) juntos — sin flag,
+  // ninguno se agrega, ni siquiera "Disponible" pese a que
+  // availableRewardsCount (arriba) siempre está presente. Ver
+  // apps/web/lib/wallet/passBackFieldsConfig.ts (showAccountSummaryFields).
+  showAccountSummaryFields?: boolean;
+  // Total HISTÓRICO de sellos ganados (nunca decrece con un canje) —
+  // DISTINTO de cycleStamps arriba. Ver loyaltySnapshot.ts (COUNT sobre
+  // transactions).
+  totalStampsEarned?: number;
+  // null cuando no hay ninguna recompensa pendiente — en ese caso el
+  // campo completo se omite, no se muestra "0".
+  stampsUntilNextReward?: number | null;
 };
 
 // Google Wallet no soporta una rejilla gráfica de sellos (a diferencia de
@@ -321,6 +336,29 @@ export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<str
     // que se pueda "llenar": textModulesData es una lista que Wallet
     // apila verticalmente sin límite de espacio horizontal, así que no
     // hay ningún truncamiento que evitar acá.
+    ...(input.showAccountSummaryFields
+      ? [
+          {
+            id: "totalStampsEarned",
+            header: "Total acumulado",
+            body: `${input.totalStampsEarned ?? 0} sellos`,
+          },
+          ...(input.stampsUntilNextReward != null
+            ? [
+                {
+                  id: "stampsUntilNextReward",
+                  header: "Para la siguiente recompensa",
+                  body: `${input.stampsUntilNextReward} sello${input.stampsUntilNextReward === 1 ? "" : "s"}`,
+                },
+              ]
+            : []),
+          {
+            id: "availableRewards",
+            header: "Disponible",
+            body: String(availableRewardsCount),
+          },
+        ]
+      : []),
     ...(input.howItWorksText ? [{ id: "howItWorks", header: "Cómo funciona", body: input.howItWorksText }] : []),
     ...(input.howToEarnStampText
       ? [{ id: "howToEarnStamp", header: "Cómo conseguir un sello", body: input.howToEarnStampText }]
@@ -329,6 +367,15 @@ export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<str
       ? [{ id: "validUntil", header: "La tarjeta es válida hasta", body: input.validUntilText }]
       : []),
     { id: "poweredBy", header: "", body: "Powered by Pragmia" },
+  ];
+
+  const linkUris = [
+    ...(input.reviewLinkUrl
+      ? [{ id: "review", uri: input.reviewLinkUrl, description: input.reviewLinkLabel ?? "Dejar reseña" }]
+      : []),
+    ...(input.createdWithUrl
+      ? [{ id: "createdWith", uri: input.createdWithUrl, description: input.createdWithLabel ?? "Pragmia" }]
+      : []),
   ];
 
   return {
@@ -341,23 +388,12 @@ export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<str
       balance: { string: `${input.cycleStamps} / ${input.stampsRequired}` },
     },
     textModulesData,
-    // linksModuleData: link tappable de Google Wallet (nivel OBJETO,
+    // linksModuleData: link(s) tappable de Google Wallet (nivel OBJETO,
     // mismo motivo que arriba) — a diferencia de Apple, no hay
     // value/attributedValue con respaldo: uri+description es el único
-    // shape.
-    ...(input.reviewLinkUrl
-      ? {
-          linksModuleData: {
-            uris: [
-              {
-                id: "review",
-                uri: input.reviewLinkUrl,
-                description: input.reviewLinkLabel ?? "Dejar reseña",
-              },
-            ],
-          },
-        }
-      : {}),
+    // shape. Reseña y "Creado con" comparten el mismo array de uris
+    // (linksModuleData es un único módulo, no uno por link).
+    ...(linkUris.length ? { linksModuleData: { uris: linkUris } } : {}),
     barcode: { type: "QR_CODE", value: input.walletToken },
   };
 }

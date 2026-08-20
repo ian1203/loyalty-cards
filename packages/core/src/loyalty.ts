@@ -103,6 +103,26 @@ export function cycleStampProgress(currentStamps: number, stampsRequired: number
   return remainder === 0 && currentStamps > 0 ? stampsRequired : remainder;
 }
 
+// Sellos faltantes para la próxima recompensa AÚN NO desbloqueada —
+// distinto de cycleStampProgress (progreso del ciclo del PROGRAMA, no de
+// una regla específica: dos negocios podrían tener reglas con costo menor
+// al ciclo completo). Toma la regla activa más barata cuyo stampsRequired
+// sea ESTRICTAMENTE mayor a currentStamps; null si no hay ninguna
+// pendiente (sin reglas activas, o currentStamps ya alcanza/supera todas
+// — en ese caso ya puede canjear, "faltante" no aplica).
+export function stampsUntilNextReward<T extends RewardRuleInput>(
+  currentStamps: number,
+  rules: readonly T[],
+): number | null {
+  assertNonNegativeInt(currentStamps, "currentStamps");
+  const upcoming = rules.filter((rule) => rule.isActive && rule.stampsRequired > currentStamps);
+  if (upcoming.length === 0) {
+    return null;
+  }
+  const cheapest = upcoming.reduce((min, rule) => (rule.stampsRequired < min.stampsRequired ? rule : min));
+  return cheapest.stampsRequired - currentStamps;
+}
+
 export type RedemptionEvaluationInput = {
   currentStamps: number;
   ruleActive: boolean;

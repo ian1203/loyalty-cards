@@ -321,4 +321,70 @@ describe("buildLoyaltyObjectPayload — contenido mínimo por cliente, sin PII d
     expect(cls).not.toHaveProperty("textModulesData");
     expect(cls).not.toHaveProperty("linksModuleData");
   });
+
+  it("con reviewLinkUrl Y createdWithUrl, linksModuleData.uris trae AMBOS en el mismo módulo", () => {
+    const obj = buildLoyaltyObjectPayload({
+      ...objectInput,
+      reviewLinkUrl: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8",
+      reviewLinkLabel: "Dejar reseña en Google",
+      createdWithUrl: "https://pragmia-data.com",
+      createdWithLabel: "Pragmia",
+    }) as { linksModuleData: { uris: Array<{ id: string; uri: string; description: string }> } };
+    expect(obj.linksModuleData.uris).toEqual([
+      { id: "review", uri: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8", description: "Dejar reseña en Google" },
+      { id: "createdWith", uri: "https://pragmia-data.com", description: "Pragmia" },
+    ]);
+  });
+
+  it("solo createdWithUrl (sin reviewLinkUrl), linksModuleData.uris trae solo esa entrada", () => {
+    const obj = buildLoyaltyObjectPayload({
+      ...objectInput,
+      createdWithUrl: "https://pragmia-data.com",
+    }) as { linksModuleData: { uris: Array<{ id: string; description: string }> } };
+    expect(obj.linksModuleData.uris).toEqual([
+      { id: "createdWith", uri: "https://pragmia-data.com", description: "Pragmia" },
+    ]);
+  });
+
+  it("sin showAccountSummaryFields, ninguno de los 3 campos dinámicos aparece — ni 'Disponible', pese a que availableRewardsCount siempre está presente", () => {
+    const obj = buildLoyaltyObjectPayload({ ...objectInput, availableRewardsCount: 3 }) as {
+      textModulesData: Array<{ id: string }>;
+    };
+    expect(obj.textModulesData.map((m) => m.id)).not.toContain("totalStampsEarned");
+    expect(obj.textModulesData.map((m) => m.id)).not.toContain("availableRewards");
+  });
+
+  it("con showAccountSummaryFields, agrega Total acumulado + Para la siguiente recompensa + Disponible, antes del contenido estático y de poweredBy", () => {
+    const obj = buildLoyaltyObjectPayload({
+      ...objectInput,
+      showAccountSummaryFields: true,
+      totalStampsEarned: 23,
+      stampsUntilNextReward: 5,
+      availableRewardsCount: 2,
+      validUntilText: "Ilimitado",
+    }) as { textModulesData: Array<{ id: string; header: string; body: string }> };
+    // "rewardsAvailable" también aparece (comportamiento ya existente,
+    // gatillado por availableRewardsCount > 1, distinto del nuevo módulo
+    // "availableRewards" de resumen de cuenta — coexisten sin problema).
+    expect(obj.textModulesData.map((m) => m.id)).toEqual([
+      "rewardsAvailable",
+      "totalStampsEarned",
+      "stampsUntilNextReward",
+      "availableRewards",
+      "validUntil",
+      "poweredBy",
+    ]);
+    expect(obj.textModulesData.find((m) => m.id === "totalStampsEarned")?.body).toBe("23 sellos");
+    expect(obj.textModulesData.find((m) => m.id === "stampsUntilNextReward")?.body).toBe("5 sellos");
+    expect(obj.textModulesData.find((m) => m.id === "availableRewards")?.body).toBe("2");
+  });
+
+  it("con showAccountSummaryFields pero stampsUntilNextReward null (ya puede canjear todo), OMITE ese módulo — no muestra '0 sellos'", () => {
+    const obj = buildLoyaltyObjectPayload({
+      ...objectInput,
+      showAccountSummaryFields: true,
+      stampsUntilNextReward: null,
+    }) as { textModulesData: Array<{ id: string }> };
+    expect(obj.textModulesData.map((m) => m.id)).not.toContain("stampsUntilNextReward");
+  });
 });

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull } from "drizzle-orm";
 import {
   businesses,
   customerBalances,
@@ -7,10 +7,16 @@ import {
   loyaltyPrograms,
   promoBroadcasts,
   rewardRules,
+  transactions,
   type TenantTransaction,
   type VerifiedBusinessId,
 } from "@loyalty/db";
-import { availableRewards, countAvailableRedemptions, cycleStampProgress } from "@loyalty/core";
+import {
+  availableRewards,
+  countAvailableRedemptions,
+  cycleStampProgress,
+  stampsUntilNextReward as computeStampsUntilNextReward,
+} from "@loyalty/core";
 import { isUuid } from "../tenant";
 import { getPassBackFieldsConfig, type PassBackFieldsConfig } from "./passBackFieldsConfig";
 
@@ -85,7 +91,46 @@ export type CustomerLoyaltySnapshot = {
   // (hoy, todos salvo Chilaquikes) — mismo criterio nullable que el resto
   // de campos opcionales de este snapshot.
   passBackFields: PassBackFieldsConfig | null;
+  // Campos dinámicos de resumen de cuenta — solo calculados cuando
+  // passBackFields?.showAccountSummaryFields está activo (hoy, solo
+  // Chilaquikes); null en cualquier otro caso. "Disponible" NO tiene
+  // campo propio acá — reusa availableRewardsCount tal cual (arriba).
+  //
+  // lifetimeStamps: total HISTÓRICO de sellos ganados, vía COUNT sobre
+  // transactions (ledger inmutable, solo tipo "stamp", nunca tocado por
+  // canjes) — a diferencia de currentStamps, que SÍ decrece al canjear
+  // (arrastra el sobrante, ver packages/core/loyalty.ts).
+  lifetimeStamps: number | null;
+  // stampsUntilNextReward: ver packages/core/loyalty.ts — null si no hay
+  // ninguna recompensa pendiente (ya puede canjear todas, o sin reglas
+  // activas).
+  stampsUntilNextReward: number | null;
 };
+
+// Total HISTÓRICO de sellos ganados por el cliente en un programa — COUNT
+// sobre transactions (ledger inmutable, solo tipo "stamp" hoy, nunca
+// tocado por un canje — ver packages/core/loyalty.ts). Exportada aparte
+// (no inline en loadCustomerLoyaltySnapshot) para poder probarla contra
+// Postgres real ante sellos/canjes reales, sin depender del gate de
+// negocio (passBackFieldsConfig) que la envuelve en producción.
+export async function loadLifetimeStamps(
+  tx: TenantTransaction,
+  businessId: VerifiedBusinessId,
+  customerId: string,
+  loyaltyProgramId: string,
+): Promise<number> {
+  const [{ value }] = await tx
+    .select({ value: count() })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.businessId, businessId),
+        eq(transactions.customerId, customerId),
+        eq(transactions.loyaltyProgramId, loyaltyProgramId),
+      ),
+    );
+  return value;
+}
 
 export async function loadCustomerLoyaltySnapshot(
   tx: TenantTransaction,
@@ -178,6 +223,15 @@ export async function loadCustomerLoyaltySnapshot(
       ),
     );
 
+  const passBackFields = getPassBackFieldsConfig(businessId);
+
+  // Query nueva SOLO para negocios con el flag activo (hoy, solo
+  // Chilaquikes) — evita el COUNT extra en cada regeneración/PATCH de
+  // pase para cualquier otro tenant.
+  const lifetimeStamps = passBackFields?.showAccountSummaryFields
+    ? await loadLifetimeStamps(tx, businessId, customerId, program.id)
+    : null;
+
   return {
     businessName: business.name,
     programName: program.name,
@@ -200,6 +254,10 @@ export async function loadCustomerLoyaltySnapshot(
     // lo que el WHERE ya garantiza, no lo cambia.
     businessLocations: locationRows as Array<{ latitude: number; longitude: number }>,
     businessLastPromoMessage: latestPromo?.message ?? null,
-    passBackFields: getPassBackFieldsConfig(businessId),
+    passBackFields,
+    lifetimeStamps,
+    stampsUntilNextReward: passBackFields?.showAccountSummaryFields
+      ? computeStampsUntilNextReward(currentStamps, rules)
+      : null,
   };
 }
