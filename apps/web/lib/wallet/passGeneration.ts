@@ -3,11 +3,25 @@ import { buildPassJson, buildPkpass, buildRelevantText, type RgbColor } from "@l
 import { walletPasses, type TenantTransaction, type VerifiedBusinessId } from "@loyalty/db";
 import { getApplePassTypeIdentifier, getAppleTeamIdentifier, getPkpassSigner } from "./adapters";
 import { deriveBrandColor, hexToRgb } from "./brandColor";
-import { loadCustomerLoyaltySnapshot } from "./loyaltySnapshot";
+import { loadCustomerLoyaltySnapshot, type CustomerLoyaltySnapshot } from "./loyaltySnapshot";
 import { resolveBusinessAssetBuffer } from "./businessAssets";
 
 export type GeneratePkpassResult =
   | { ok: true; pkpass: Buffer; walletPassId: string }
+  | { ok: false; reason: "no_program" | "no_pass_row" };
+
+// Datos ya resueltos de la DB, listos para construir el .pkpass SIN volver
+// a tocar Postgres — separado de GeneratePkpassResult para poder cruzar el
+// límite de una transacción (ver loadApplePassGenerationInputs/
+// buildApplePkpassFromInputs más abajo).
+export type ApplePassGenerationInputs = {
+  snapshot: CustomerLoyaltySnapshot;
+  walletPassId: string;
+  walletPassAuthenticationToken: string;
+};
+
+export type LoadApplePassGenerationInputsResult =
+  | { ok: true; inputs: ApplePassGenerationInputs }
   | { ok: false; reason: "no_program" | "no_pass_row" };
 
 // logo.png/strip.png son assets ESTÁTICOS (apps/web/public/passes/{slug}/,
@@ -66,23 +80,27 @@ async function loadStaticAssetSet(
   return { at1x, at2x, at3x };
 }
 
-// Genera el .pkpass más reciente para un cliente — usado tanto por el web
-// service público (GET /v1/passes/..., sirve la ACTUALIZACIÓN a un pase ya
-// instalado) como por la entrega inicial autenticada (paso h, primera
-// instalación). Misma función, dos callers con auth distinta — la
-// diferencia de auth vive en cada route.ts, no acá.
-export async function generateApplePkpassForCustomer(
+// FASE 1 — TODO lo que necesita tocar Postgres, y NADA más. Hallazgo real
+// de auditoría de rendimiento (ver docs/HISTORY.md): antes de este split,
+// esta lectura y la FASE 2 completa (fetches de red + firma PKCS#7, ver
+// buildApplePkpassFromInputs abajo) corrían juntas dentro de la misma
+// transacción — la conexión de Postgres quedaba abierta 2-3 segundos
+// enteros por trabajo que no la necesitaba, agravando exactamente el tipo
+// de agotamiento del pool ya documentado como incidente real (ver
+// vitest.config.ts, PG_POOL_MAX). El caller debe cerrar/salir de su
+// withTenantContext ANTES de llamar a buildApplePkpassFromInputs.
+export async function loadApplePassGenerationInputs(
   tx: TenantTransaction,
   businessId: VerifiedBusinessId,
   customerId: string,
-): Promise<GeneratePkpassResult> {
+): Promise<LoadApplePassGenerationInputsResult> {
   const snapshot = await loadCustomerLoyaltySnapshot(tx, businessId, customerId);
   if (!snapshot) {
     return { ok: false, reason: "no_program" };
   }
 
   const [walletPass] = await tx
-    .select()
+    .select({ id: walletPasses.id, authenticationToken: walletPasses.authenticationToken })
     .from(walletPasses)
     .where(
       and(
@@ -95,6 +113,27 @@ export async function generateApplePkpassForCustomer(
   if (!walletPass) {
     return { ok: false, reason: "no_pass_row" };
   }
+
+  return {
+    ok: true,
+    inputs: {
+      snapshot,
+      walletPassId: walletPass.id,
+      walletPassAuthenticationToken: walletPass.authenticationToken,
+    },
+  };
+}
+
+// FASE 2 — fetches de red (assets estáticos, ya cacheados por proceso) +
+// firma PKCS#7 (CPU). Deliberadamente SIN `tx`: nada acá toca la DB, así
+// que nunca debe correr con una conexión de Postgres esperando de brazos
+// cruzados. `businessId` se sigue necesitando (no para la DB — solo como
+// semilla determinística de `deriveBrandColor` más abajo).
+export async function buildApplePkpassFromInputs(
+  businessId: VerifiedBusinessId,
+  inputs: ApplePassGenerationInputs,
+): Promise<{ ok: true; pkpass: Buffer; walletPassId: string }> {
+  const { snapshot, walletPassId, walletPassAuthenticationToken } = inputs;
 
   // Sin fallback silencioso a localhost (sería un .pkpass firmado y
   // distribuido con un webServiceURL roto en producción, que nunca se
@@ -155,8 +194,8 @@ export async function generateApplePkpassForCustomer(
       : undefined;
 
   const passJson = buildPassJson({
-    serialNumber: walletPass.id,
-    authenticationToken: walletPass.authenticationToken,
+    serialNumber: walletPassId,
+    authenticationToken: walletPassAuthenticationToken,
     webServiceUrl: `${siteUrl}/api/wallet/apple`,
     passTypeIdentifier: getApplePassTypeIdentifier(),
     teamIdentifier: getAppleTeamIdentifier(),
@@ -192,5 +231,24 @@ export async function generateApplePkpassForCustomer(
     iconPng,
   });
 
-  return { ok: true, pkpass, walletPassId: walletPass.id };
+  return { ok: true, pkpass, walletPassId };
+}
+
+// Wrapper de conveniencia: combina FASE 1 + FASE 2 en una sola llamada,
+// mismo comportamiento observable que la función original antes de este
+// split — para callers donde el boundary de tx todavía no importa (o no
+// se migraron). Los 2 callers reales de descarga (customers/[id]/wallet/
+// apple y publicEnrollWallet) SÍ deben usar las dos fases por separado
+// para soltar la conexión de Postgres antes del trabajo lento — ver
+// docs/HISTORY.md.
+export async function generateApplePkpassForCustomer(
+  tx: TenantTransaction,
+  businessId: VerifiedBusinessId,
+  customerId: string,
+): Promise<GeneratePkpassResult> {
+  const loaded = await loadApplePassGenerationInputs(tx, businessId, customerId);
+  if (!loaded.ok) {
+    return loaded;
+  }
+  return buildApplePkpassFromInputs(businessId, loaded.inputs);
 }

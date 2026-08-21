@@ -1534,3 +1534,84 @@ pasada de `tenant-security-reviewer` no se pidió explícitamente para este
 fix puntual — el razonamiento del fix (detectar por forma, no por regex
 de mensaje; centralizar en un solo punto) es la misma disciplina que ya
 pidió la primera pasada.
+
+## Auditoría de rendimiento — "la plataforma se siente más lenta" (no numerada)
+
+Pedido explícito tras varias rondas de cambios recientes (observabilidad,
+panel de admin): auditar TODAS las causas posibles de lentitud percibida,
+y probarlo en vivo contra la plataforma real, no solo leer código.
+
+**Diagnóstico en vivo, con datos reales**: impersonando CHILAQUIKES real
+(admin de plataforma) y midiendo con cronómetro real (no solo status
+code), navegar entre pestañas del dashboard mostró un patrón claro en
+`_middleware` y en `/rewards`/`/customers`/`/dashboard`/`/scanner`: la
+MEDIANA es rápida (25-170ms), pero una minoría de requests cae en 1-3
+segundos — firma clásica de cold start ocasional en Vercel, no lentitud
+pareja. Confirmado con un export real de logs de Vercel (`durationMs` por
+función, no solo status code — un cold start que excede el timeout del
+borde nunca llega a loguearse como función ejecutada, así que buscar por
+"503" no encuentra nada aunque el problema sea real). Con Fluid Compute
+ya activo en la cuenta, el patrón persiste — no se aisló con certeza si
+Sentry (el cambio más reciente y pesado) lo agrava, un intento de
+comparación A/B con un deployment viejo de Vercel chocó con la protección
+SSO automática que Vercel pone a cualquier deployment que ya no es el
+actual — no se intentó rodear, es una protección de seguridad legítima.
+
+**Hallazgo real y medido, no cold start**: `/customers/{id}/wallet/apple`
+(entrega del pase de Apple) fue la única ruta consistentemente lenta —
+2.7 a 3.3 segundos, las 3 veces que se registró en la hora de logs
+exportada, sin ninguna muestra rápida. Investigado a fondo, dos causas
+reales en `generateApplePkpassForCustomer`
+(`apps/web/lib/wallet/passGeneration.ts`):
+
+1. **El culpable principal**: cada `.pkpass` generado disparaba hasta 9
+   fetches HTTPS de vuelta al propio dominio (`resolveBusinessAssetBuffer`,
+   logo/strip/icon × 1x/2x/3x) — archivos de branding estático que ya
+   viven en el mismo deploy, pero se leen así a propósito desde Fase 4
+   (`@vercel/nft` no traza de forma confiable una lectura directa de
+   filesystem entre bundles de función distintos). Nadie cacheó el
+   resultado. **Fix**: cache en memoria por proceso en
+   `resolveBusinessAssetBuffer` (TTL 10min — branding estático que solo
+   cambia al re-correr `generate-pass-assets.ts`, acción manual rara;
+   nunca cachea un fallo). Probado: segunda llamada a la misma URL no
+   refetchea, URLs distintas se cachean por separado, un 404 nunca queda
+   pegado.
+2. **Secundario**: `createRealPkpassSigner`
+   (`packages/wallet/src/apple/signer.ts`) re-parseaba el certificado y
+   la llave privada de PEM en CADA firma, aunque `getPkpassSigner()`
+   (`apps/web/lib/wallet/adapters.ts`) ya memoiza el signer una vez por
+   proceso — el parseo estaba mal ubicado, dentro del closure que sí
+   corre por request en vez de afuera. Movido fuera; el throw por
+   credenciales inválidas ahora ocurre al construir el signer (falla más
+   rápido, en la resolución de config) en vez de al firmar — mismo
+   comportamiento observable para los 4 callers reales, todos ya
+   envueltos en try/catch.
+
+Ambos, mergeados juntos (PR #90): cero cambio de comportamiento, mismo
+`.pkpass`, mismos bytes firmados, solo menos trabajo repetido. Suite
+completa: 186/186.
+
+**Tercer hallazgo, arreglado por separado** (pedido explícito: cada fix
+en su propio commit/PR): las 4 rutas reales que generan un `.pkpass`
+(`downloadApplePassForSession`, el web service público `getLatestPass`,
+y las dos de `publicEnrollWallet.ts`) corrían la FASE 2 completa (los 9
+fetches ya cacheados + la firma PKCS#7, ~2-3s reales) DENTRO de la misma
+transacción de Postgres que solo necesitaban para 2 queries — dejaba una
+conexión del pool de la conexión ocupada todo ese tiempo por trabajo que
+no la necesitaba, agravando exactamente el tipo de agotamiento de pool
+ya documentado como incidente real (`PG_POOL_MAX`, ver `vitest.config.ts`).
+Fix: `generateApplePkpassForCustomer` se partió en
+`loadApplePassGenerationInputs` (FASE 1, dentro de la tx — solo DB,
+devuelve datos planos) y `buildApplePkpassFromInputs` (FASE 2, sin `tx`
+en su firma — estructuralmente imposible que toque Postgre por
+accidente, no solo "por convención"). Los 4 callers reales se
+actualizaron para cerrar su `withTenantContext` ANTES de llamar a la
+FASE 2; `generateApplePkpassForCustomer` se conserva como wrapper de
+conveniencia (combina las dos fases) para no romper compatibilidad,
+aunque ningún caller de producción lo sigue usando. Cuidado real
+encontrado al migrar el web service público (`getLatestPass`): el status
+code de "row no encontrada" (401) y el de "no se pudo generar" (404) son
+casos distintos — una versión inicial del refactor los colapsaba en uno
+solo, corregido antes de mergear. Cero cambio de comportamiento
+observable: mismos bytes, mismos status codes, mismos headers. Suite
+completa: 186/186.

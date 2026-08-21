@@ -170,6 +170,15 @@ que rigió cada fase anterior, ver `docs/HISTORY.md`).
   agregadas, awaitéalas SECUENCIALMENTE — nunca `Promise.all`. Un `tx` es
   una sola conexión Postgres, no soporta queries concurrentes (bug real ya
   cometido y corregido; síntoma: `DeprecationWarning` de `pg`).
+- Nunca dejes trabajo lento que NO toca la DB (fetch de red, firma
+  criptográfica, cualquier CPU-bound) corriendo dentro de un `withTenantContext`
+  — mantiene una conexión del pool ocupada de brazos cruzados (hallazgo real:
+  `generateApplePkpassForCustomer` tardaba 2-3s con la conexión abierta todo
+  ese tiempo; ver docs/HISTORY.md, "Auditoría de rendimiento"). Patrón:
+  separa en una función que SOLO lee/escribe DB (dentro del `tx`, devuelve
+  datos planos) y otra que hace el trabajo lento (fuera del `tx`, sin
+  recibirlo como parámetro — así es estructuralmente imposible tocar
+  Postgres por accidente ahí).
 - Alta de negocio nuevo en producción (script + branding + programa
   placeholder): skill `tenant-onboarding`, patrón ya usado dos veces, no
   reinventarlo.
