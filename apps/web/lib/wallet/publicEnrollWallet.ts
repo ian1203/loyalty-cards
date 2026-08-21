@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { walletPasses, withTenantContext, type VerifiedBusinessId } from "@loyalty/db";
 import { buildGoogleSaveLinkForCustomer } from "./googleSaveLink";
 import { ensureWalletPass } from "./ensurePass";
-import { generateApplePkpassForCustomer } from "./passGeneration";
+import { buildApplePkpassFromInputs, loadApplePassGenerationInputs } from "./passGeneration";
 import { verifyBusinessIdForPassToken } from "./passAuth";
 
 // Igual que getVerifiedSession() (lib/supabase/session.ts) y
@@ -37,28 +37,39 @@ export async function buildWalletArtifactsForNewEnrollment(
 ): Promise<PublicEnrollWalletResult> {
   const businessId = rawBusinessId as VerifiedBusinessId;
 
-  return withTenantContext(businessId, async (tx) => {
+  // FASE 1, dentro de la tx: solo DB. FASE 2 (fetches de red + firma
+  // PKCS#7 de Apple) corre DESPUÉS, fuera de withTenantContext — mismo
+  // criterio que downloadApplePassForSession (ver docs/HISTORY.md).
+  const loaded = await withTenantContext(businessId, async (tx) => {
     const applePass = await ensureWalletPass(tx, businessId, customerId, "apple");
-    // Solo para confirmar que ESTE cliente puede generar un pase real ahora
-    // mismo (programa activo, etc.) antes de ofrecer el botón — los bytes
-    // se descartan, downloadEnrollmentApplePass los vuelve a generar al
-    // tocar el botón (misma función, siempre el estado más fresco).
-    const appleResult = await generateApplePkpassForCustomer(tx, businessId, customerId);
+    const appleInputs = await loadApplePassGenerationInputs(tx, businessId, customerId);
     let googleSaveLink: string | null = null;
     try {
       googleSaveLink = await buildGoogleSaveLinkForCustomer(tx, businessId, customerId);
     } catch (error) {
       console.error("buildGoogleSaveLinkForCustomer DIAGNOSTIC:", error);
     }
-
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-    const appleWalletDownloadUrl =
-      appleResult.ok && siteUrl
-        ? `${siteUrl}/api/wallet/apple/download/${applePass.id}?t=${encodeURIComponent(applePass.authenticationToken)}`
-        : null;
-
-    return { appleWalletDownloadUrl, googleSaveLink };
+    return { applePass, appleInputs, googleSaveLink };
   });
+
+  // Solo para confirmar que ESTE cliente puede generar un pase real ahora
+  // mismo (programa activo, etc.) antes de ofrecer el botón — los bytes
+  // se descartan, downloadEnrollmentApplePass los vuelve a generar al
+  // tocar el botón (misma función, siempre el estado más fresco). SIN
+  // try/catch acá a propósito, igual que antes de este split: un fallo
+  // real debe propagar hasta enrollCustomerForSlug, que ya lo reporta a
+  // Sentry como "enroll.wallet_artifacts" — atraparlo acá lo silenciaría.
+  const appleResult = loaded.appleInputs.ok
+    ? await buildApplePkpassFromInputs(businessId, loaded.appleInputs.inputs)
+    : loaded.appleInputs;
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  const appleWalletDownloadUrl =
+    appleResult.ok && siteUrl
+      ? `${siteUrl}/api/wallet/apple/download/${loaded.applePass.id}?t=${encodeURIComponent(loaded.applePass.authenticationToken)}`
+      : null;
+
+  return { appleWalletDownloadUrl, googleSaveLink: loaded.googleSaveLink };
 }
 
 export type DownloadEnrollmentApplePassResult = { ok: true; pkpass: Buffer } | { ok: false };
@@ -81,26 +92,26 @@ export async function downloadEnrollmentApplePass(
     return { ok: false };
   }
 
-  return withTenantContext(auth.businessId, async (tx) => {
+  const loaded = await withTenantContext(auth.businessId, async (tx) => {
     const [row] = await tx
       .select({ customerId: walletPasses.customerId })
       .from(walletPasses)
       .where(and(eq(walletPasses.id, auth.walletPassId), eq(walletPasses.businessId, auth.businessId)))
       .limit(1);
     if (!row) {
-      return { ok: false };
+      return { ok: false as const };
     }
-
-    let result;
-    try {
-      result = await generateApplePkpassForCustomer(tx, auth.businessId, row.customerId);
-    } catch (error) {
-      console.error("downloadEnrollmentApplePass:", error);
-      return { ok: false };
-    }
-    if (!result.ok) {
-      return { ok: false };
-    }
-    return { ok: true, pkpass: result.pkpass };
+    return loadApplePassGenerationInputs(tx, auth.businessId, row.customerId);
   });
+  if (!loaded.ok) {
+    return { ok: false };
+  }
+
+  try {
+    const result = await buildApplePkpassFromInputs(auth.businessId, loaded.inputs);
+    return { ok: true, pkpass: result.pkpass };
+  } catch (error) {
+    console.error("downloadEnrollmentApplePass:", error);
+    return { ok: false };
+  }
 }

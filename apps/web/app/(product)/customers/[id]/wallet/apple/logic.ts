@@ -8,7 +8,10 @@
 import { customers, withTenantContext } from "@loyalty/db";
 import { findInTenant, type TenantSession } from "../../../../../../lib/tenant";
 import { ensureWalletPass } from "../../../../../../lib/wallet/ensurePass";
-import { generateApplePkpassForCustomer } from "../../../../../../lib/wallet/passGeneration";
+import {
+  buildApplePkpassFromInputs,
+  loadApplePassGenerationInputs,
+} from "../../../../../../lib/wallet/passGeneration";
 
 export type DownloadApplePassResult = { ok: true; pkpass: Buffer } | { ok: false };
 
@@ -16,23 +19,28 @@ export async function downloadApplePassForSession(
   session: TenantSession,
   customerId: string,
 ): Promise<DownloadApplePassResult> {
-  return withTenantContext(session.businessId, async (tx) => {
+  // FASE 1, dentro de la tx: solo lectura/escritura de DB. FASE 2 (fetches
+  // de red + firma PKCS#7, 2-3s reales medidos en producción) corre
+  // DESPUÉS de que withTenantContext ya devolvió — nunca mientras la
+  // conexión de Postgres sigue abierta esperándola (ver docs/HISTORY.md).
+  const loaded = await withTenantContext(session.businessId, async (tx) => {
     const customer = await findInTenant(tx, session, customers, customerId);
     if (!customer) {
-      return { ok: false };
+      return { ok: false as const };
     }
 
     await ensureWalletPass(tx, session.businessId, customerId, "apple");
-    let result;
-    try {
-      result = await generateApplePkpassForCustomer(tx, session.businessId, customerId);
-    } catch (error) {
-      console.error("downloadApplePassForSession:", error);
-      return { ok: false };
-    }
-    if (!result.ok) {
-      return { ok: false };
-    }
-    return { ok: true, pkpass: result.pkpass };
+    return loadApplePassGenerationInputs(tx, session.businessId, customerId);
   });
+  if (!loaded.ok) {
+    return { ok: false };
+  }
+
+  try {
+    const result = await buildApplePkpassFromInputs(session.businessId, loaded.inputs);
+    return { ok: true, pkpass: result.pkpass };
+  } catch (error) {
+    console.error("downloadApplePassForSession:", error);
+    return { ok: false };
+  }
 }

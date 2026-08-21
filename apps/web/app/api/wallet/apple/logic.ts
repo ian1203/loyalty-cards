@@ -11,7 +11,7 @@ import { adminDb } from "@loyalty/db/admin";
 import { checkRateLimit } from "../../../../lib/rateLimit";
 import { getApplePassTypeIdentifier } from "../../../../lib/wallet/adapters";
 import { verifyBusinessIdForPassToken } from "../../../../lib/wallet/passAuth";
-import { generateApplePkpassForCustomer } from "../../../../lib/wallet/passGeneration";
+import { buildApplePkpassFromInputs, loadApplePassGenerationInputs } from "../../../../lib/wallet/passGeneration";
 
 export type WalletApiResult = {
   status: number;
@@ -214,45 +214,59 @@ export async function getLatestPass(input: {
     return UNAUTHORIZED;
   }
 
-  return withTenantContext(auth.businessId, async (tx) => {
+  // FASE 1, dentro de la tx: solo DB. FASE 2 (fetches de red + firma
+  // PKCS#7) corre DESPUÉS, fuera de withTenantContext — mismo criterio
+  // que downloadApplePassForSession (ver docs/HISTORY.md). "row ausente"
+  // (401, token no corresponde a ningún pase) y "no se pudo generar"
+  // (404, mismo status que antes de este split) son casos distintos —
+  // preservados por separado, no colapsados en un solo "ok: false".
+  const loaded = await withTenantContext(auth.businessId, async (tx) => {
     const [row] = await tx
       .select({ customerId: walletPasses.customerId, updatedAt: walletPasses.updatedAt })
       .from(walletPasses)
       .where(and(eq(walletPasses.id, auth.walletPassId), eq(walletPasses.businessId, auth.businessId)))
       .limit(1);
     if (!row) {
-      return UNAUTHORIZED;
+      return { status: "unauthorized" as const };
     }
-
-    let result;
-    try {
-      result = await generateApplePkpassForCustomer(tx, auth.businessId, row.customerId);
-    } catch (error) {
-      console.error("getLatestPass:", error);
-      return { status: 404, headers: NO_STORE };
+    const inputs = await loadApplePassGenerationInputs(tx, auth.businessId, row.customerId);
+    if (!inputs.ok) {
+      return { status: "not_found" as const };
     }
-    if (!result.ok) {
-      return { status: 404, headers: NO_STORE };
-    }
-
-    return {
-      status: 200,
-      body: result.pkpass,
-      // Last-Modified: exigido por el protocolo de PassKit — bug real
-      // encontrado vía POST /v1/log de un dispositivo real (mismo
-      // hallazgo que el de las keys duplicadas): sin este header, el
-      // dispositivo reporta "Server returned the pass data... but did
-      // not provide a 'last-modified' header" — walletPasses.updatedAt
-      // ya es el mismo timestamp que passesUpdatedSince usa para "qué
-      // cambió" (ver el comentario en notify.ts), así que es la fuente
-      // correcta, no un valor nuevo que mantener sincronizado aparte.
-      headers: {
-        ...NO_STORE,
-        "content-type": "application/vnd.apple.pkpass",
-        "last-modified": row.updatedAt.toUTCString(),
-      },
-    };
+    return { status: "ok" as const, inputs: inputs.inputs, updatedAt: row.updatedAt };
   });
+  if (loaded.status === "unauthorized") {
+    return UNAUTHORIZED;
+  }
+  if (loaded.status === "not_found") {
+    return { status: 404, headers: NO_STORE };
+  }
+
+  let result;
+  try {
+    result = await buildApplePkpassFromInputs(auth.businessId, loaded.inputs);
+  } catch (error) {
+    console.error("getLatestPass:", error);
+    return { status: 404, headers: NO_STORE };
+  }
+
+  return {
+    status: 200,
+    body: result.pkpass,
+    // Last-Modified: exigido por el protocolo de PassKit — bug real
+    // encontrado vía POST /v1/log de un dispositivo real (mismo
+    // hallazgo que el de las keys duplicadas): sin este header, el
+    // dispositivo reporta "Server returned the pass data... but did
+    // not provide a 'last-modified' header" — walletPasses.updatedAt
+    // ya es el mismo timestamp que passesUpdatedSince usa para "qué
+    // cambió" (ver el comentario en notify.ts), así que es la fuente
+    // correcta, no un valor nuevo que mantener sincronizado aparte.
+    headers: {
+      ...NO_STORE,
+      "content-type": "application/vnd.apple.pkpass",
+      "last-modified": loaded.updatedAt.toUTCString(),
+    },
+  };
 }
 
 // POST /v1/log — best-effort, Apple no espera nada más que 200. Público y
