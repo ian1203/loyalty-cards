@@ -1615,3 +1615,61 @@ casos distintos — una versión inicial del refactor los colapsaba en uno
 solo, corregido antes de mergear. Cero cambio de comportamiento
 observable: mismos bytes, mismos status codes, mismos headers. Suite
 completa: 186/186.
+
+**Cuarto hallazgo — reducir el peso de Sentry, qué es esencial y qué no**:
+pedido explícito de auditar qué partes del SDK de Sentry NO aportan valor
+real en esta app (server-only, sin tracing) vs. qué sí. Investigación
+real contra el código fuente instalado de `@sentry/node` (no
+documentación genérica): `getDefaultIntegrations()` importa de forma
+ESTÁTICA (require de nivel de módulo, nunca tree-shakeable por defecto)
+instrumentación automática para Express/Fastify/Kafka/MongoDB/Mongoose/
+MySQL/Redis/Hapi/Koa/LangChain/LangGraph/OpenAI/Anthropic/Google GenAI/
+Firebase/Prisma/Tedious/genericPool/amqplib — **ninguna de las cuales usa
+esta plataforma** — solo por tener `@sentry/nextjs` importado, sin
+importar que `tracesSampleRate: 0` (nunca se usó tracing, desde el día 1
+de esta ronda). Confirmado con build local: el código real desplegado
+(sin source maps) había crecido de 6.9MB a 12MB (+74%) al agregar
+Sentry.
+
+**Qué SÍ es esencial (se queda)**: `Sentry.captureException` (la captura
+en sí), `beforeSend`/`beforeBreadcrumb` (nuestro scrub de PII/secretos —
+crítico, no negociable), `sendDefaultPii: false`, las breadcrumbs básicas
+de http/fetch (`httpIntegration`/`nativeNodeFetchIntegration` — estas NO
+forman parte del set de integraciones de performance que se quitó, se
+mantienen), y la subida de source maps (solo afecta tiempo de build, no
+runtime/cold start — vale la pena por stack traces legibles).
+
+**Qué NO era esencial (se quitó, con evidencia medida, no supuesta)**:
+1. Toda la instrumentación automática de tracing de arriba —
+   `webpack.treeshake.removeTracing: true` (opción oficial documentada de
+   `@sentry/nextjs`, no un hack) tree-shakea ese código completo.
+2. El wrapping automático de rutas/middleware/componentes
+   (`autoInstrumentServerFunctions`/`autoInstrumentMiddleware`/
+   `autoInstrumentAppDirectory`, todos `true` por default): ese wrapping
+   alimenta `onRequestError`, que esta app deliberadamente NUNCA conectó
+   (ver `instrumentation.ts` — capturar automático de cualquier ruta
+   expondría PII de rutas no auditadas). Sin ese hook, el wrapping corría
+   en cada request sin que nada consumiera su resultado — puro costo,
+   cero beneficio real. Deshabilitado explícitamente.
+
+**Resultado medido** (build local, mismo método que el hallazgo original):
+código real desplegado bajó de 12MB a 10MB — recupera ~40% del
+crecimiento que trajo Sentry (el 60% restante, el propio runtime base de
+`@sentry/node`/OpenTelemetry, es estructural: no hay una opción
+documentada para quitarlo sin dejar de usar `@sentry/nextjs` — cambiar a
+`@sentry/node-core` de bajo nivel existe, pero exige armar el setup de
+OpenTelemetry a mano, más complejidad y mantenimiento del que justifica
+esta ronda). `middleware.js` volvió a 362K (contra 364K de antes de
+Sentry — esencialmente recuperado del todo). Cero cambio de
+comportamiento: `captureServerError`/`Sentry.captureException` siguen
+funcionando igual (11 tests de observabilidad en verde, suite completa
+186/186) — `removeTracing` solo quita código de performance monitoring,
+nunca el de captura de excepciones.
+
+Candidatos identificados pero NO tocados esta ronda (retorno menor,
+requieren más investigación antes de tocarlos): `localVariablesIntegration`
+(captura valores de variables locales en el stack — caro y un vector de
+PII potencial que iría en contra del trabajo de scrub ya hecho, buen
+candidato para una ronda futura) y `contextLinesIntegration` (lee líneas
+de código fuente en el momento del error — redundante con lo que ya da
+el source map subido).
