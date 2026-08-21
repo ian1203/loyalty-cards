@@ -19,10 +19,37 @@ const nextConfig = {
 // el auth token, este mismo plugin loguea un warning y omite la subida sin
 // fallar el build — no hace falta un flag separado para el caso "todavía
 // no hay token".
+//
+// Reducción de peso real, hallazgo de auditoría de rendimiento (ver
+// docs/HISTORY.md): el bundle de cada función serverless creció ~74% al
+// agregar Sentry — confirmado con build local, no supuesto. Dos causas
+// separadas, dos fixes separados:
+// - `removeTracing: true`: @sentry/node importa ESTÁTICAMENTE (require de
+//   nivel de módulo, no tree-shakeable por defecto) instrumentación
+//   automática para Express/Fastify/Kafka/MongoDB/Redis/LangChain/OpenAI/
+//   etc. — NINGUNA de las cuales usa esta app — solo por tener
+//   `@sentry/nextjs` importado, sin importar `tracesSampleRate`. Esta
+//   plataforma nunca usó tracing (`tracesSampleRate: 0` desde el día 1,
+//   solo error tracking) — este flag tree-shakea ese código completo.
+// - `autoInstrumentServerFunctions`/`autoInstrumentMiddleware`/
+//   `autoInstrumentAppDirectory: false`: el wrapping automático de Sentry
+//   sobre cada route/middleware/componente es el mecanismo que alimenta
+//   `onRequestError` — que esta app deliberadamente NO usa (ver
+//   instrumentation.ts: captura automática expondría PII de rutas nunca
+//   auditadas). Sin ese hook, el wrapping corre en cada request sin que
+//   nada consuma su resultado — puro costo, cero beneficio. La
+//   instrumentación real de esta app es 100% manual
+//   (captureServerError(), ver lib/observability/).
 export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: true,
-  webpack: { treeshake: { removeDebugLogging: true }, automaticVercelMonitors: false },
+  webpack: {
+    treeshake: { removeDebugLogging: true, removeTracing: true },
+    autoInstrumentServerFunctions: false,
+    autoInstrumentMiddleware: false,
+    autoInstrumentAppDirectory: false,
+    automaticVercelMonitors: false,
+  },
 });
