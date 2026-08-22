@@ -502,62 +502,66 @@ async function buildHeroStripAt3x(
 }
 
 // Modo --stamp-logo (sandbox, ver comentario del tipo Args): cada sello
-// GANADO es el logo completo recortado "cover" a un círculo (mismo
-// criterio de crop que --hero-cover: sharp fit:"cover" escala por el eje
-// que menos recorte deja y centra el sobrante) — nunca la mascota aislada
-// (eso ya se intentó y falló, ver comentario junto a
-// chilaquikes-emblem-attempt-NOT-USED.png arriba). El disco de fondo
-// blanco (mismo STRIP_BACKGROUND que buildStripSvg) deja ver el logo
-// completo incluso en las zonas transparentes del PNG fuente (el logo de
-// Chilaquikes no es un cuadrado perfecto — el crop recorta los bordes
-// izquierdo/derecho del wordmark para llenar el círculo). Reusa
-// computeStampLayout SIN modificarlo — misma grid de 1 fila que ya usa
-// Chilaquikes hoy, cero riesgo de tocar ese cálculo.
+// GANADO: el logo COMPLETO (mascota + wordmark, tal cual el PNG fuente),
+// sin recorte ni máscara circular — pedido explícito de replicar el
+// patrón del proveedor anterior de Chilaquikes (logo completo, compacto,
+// repetido por posición), no un ícono aislado. Ronda anterior de este
+// mismo modo probó "cover" a círculo (recortaba bordes del wordmark para
+// llenar un cuadrado) — se abandonó a propósito, ver commit. VACÍO: el
+// MISMO logo completo, desaturado + alpha reducido (EMPTY_LOGO_OPACITY),
+// nunca el círculo gris de buildStripSvg — mismo criterio visual que
+// Trópico/Sede Café (ícono de marca atenuado, no un placeholder
+// genérico). Reusa computeStampLayout SIN modificarlo (misma grid de 1
+// fila que Chilaquikes), solo reinterpreta su `diameter` como el ANCHO
+// disponible por sello en vez de un diámetro — la altura se deriva del
+// aspect ratio real del logo fuente (leído de sus metadatos, nunca
+// hardcodeado) para que quepa completo, sin recortar ningún lado.
+const EMPTY_LOGO_OPACITY = 0.3;
+
+async function fadeAlpha(png: Buffer, factor: number): Promise<Buffer> {
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  for (let i = 3; i < data.length; i += 4) {
+    data[i] = Math.round(data[i] * factor);
+  }
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .png()
+    .toBuffer();
+}
+
 async function buildLogoStampStripAt3x(
   stampLogoPath: string,
   filledCount: number,
   stampsRequired: number,
-  emptyStampStroke: string,
 ): Promise<Buffer> {
   const scale = 3;
   const width = STRIP_BASE_WIDTH * scale;
   const height = STRIP_BASE_HEIGHT * scale;
   const { diameter, centersX, centerY } = computeStampLayout(stampsRequired);
-  const d = Math.round(diameter * scale);
-  const r = d / 2;
+  const boxW = Math.round(diameter * scale);
 
-  const circleMask = Buffer.from(
-    `<svg width="${d}" height="${d}" xmlns="http://www.w3.org/2000/svg"><circle cx="${r}" cy="${r}" r="${r}" fill="#fff" /></svg>`,
-  );
+  const sourceMeta = await sharp(stampLogoPath).metadata();
+  const aspect = (sourceMeta.width ?? 1) / (sourceMeta.height ?? 1);
+  const boxH = Math.round(boxW / aspect);
 
-  // Se recorta UNA sola vez y se reusa en cada posición ganada — el logo
-  // fuente es el mismo para las N repeticiones, recompositar desde cero
-  // por sello sería trabajo idéntico repetido sin ganancia visual.
-  const logoStamp = await sharp(stampLogoPath)
-    .resize({ width: d, height: d, fit: "cover" })
-    .composite([{ input: circleMask, blend: "dest-in" }])
+  // Se resuelven UNA sola vez y se reusan en cada posición — el logo
+  // fuente es el mismo para las N repeticiones ganadas/vacías.
+  const filledStamp = await sharp(stampLogoPath)
+    .resize({ width: boxW, height: boxH, fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toBuffer();
+  const emptyStamp = await fadeAlpha(await sharp(filledStamp).grayscale().png().toBuffer(), EMPTY_LOGO_OPACITY);
 
-  const filledComposites: sharp.OverlayOptions[] = [];
-  const emptyCircles: string[] = [];
+  const composites: sharp.OverlayOptions[] = [];
   for (let i = 0; i < stampsRequired; i++) {
     const cxS = centersX[i] * scale;
     const cyS = centerY * scale;
-    if (i < filledCount) {
-      filledComposites.push({ input: logoStamp, left: Math.round(cxS - r), top: Math.round(cyS - r) });
-    } else {
-      emptyCircles.push(
-        `<circle cx="${cxS}" cy="${cyS}" r="${r - 2 * scale}" fill="none" stroke="${emptyStampStroke}" stroke-width="${2 * scale}" />`,
-      );
-    }
+    const left = Math.round(cxS - boxW / 2);
+    const top = Math.round(cyS - boxH / 2);
+    composites.push({ input: i < filledCount ? filledStamp : emptyStamp, left, top });
   }
-  const emptySvg = Buffer.from(
-    `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${emptyCircles.join("\n")}</svg>`,
-  );
 
   return sharp({ create: { width, height, channels: 3, background: STRIP_BACKGROUND } })
-    .composite([...filledComposites, { input: emptySvg, left: 0, top: 0 }])
+    .composite(composites)
     .png()
     .toBuffer();
 }
@@ -615,7 +619,7 @@ async function main() {
   const stampLogoPath = stampLogo ? path.resolve(process.cwd(), stampLogo) : null;
   for (let filledCount = 0; filledCount <= stampsRequired; filledCount++) {
     if (stampLogoPath) {
-      const at3x = await buildLogoStampStripAt3x(stampLogoPath, filledCount, stampsRequired, emptyStampStroke);
+      const at3x = await buildLogoStampStripAt3x(stampLogoPath, filledCount, stampsRequired);
       await sharp(at3x).toFile(path.join(outDir, `strip-${filledCount}@3x.png`));
       await sharp(at3x)
         .resize(STRIP_BASE_WIDTH * 2, STRIP_BASE_HEIGHT * 2)

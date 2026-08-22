@@ -88,6 +88,11 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     expect(pass.barcodes[0].message).not.toContain("María");
   });
 
+  it("'Powered by Pragmia' vive en altText del barcode — visible bajo el QR sin ocupar un campo real", () => {
+    const pass = buildPassJson(baseInput) as { barcodes: Array<{ altText: string }> };
+    expect(pass.barcodes[0].altText).toBe("Powered by Pragmia");
+  });
+
   it("'Powered by Pragmia' vive SIEMPRE en backFields, incondicional — el estado de recompensa puede persistir indefinidamente (acumulación), no hay un momento 'libre' confiable al frente", () => {
     const pass = buildPassJson(baseInput) as { storeCard: { backFields: unknown[] } };
     expect(pass.storeCard.backFields).toEqual([{ key: "poweredBy", label: "", value: "Powered by Pragmia" }]);
@@ -113,33 +118,24 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     expect(pass.storeCard.backFields).toEqual([{ key: "poweredBy", label: "", value: "Powered by Pragmia" }]);
   });
 
-  it("sin nombre de cliente (null), secondaryFields queda con SOLO el slot de poweredBy/rewardsAvailable — nunca 'undefined' ni vacío del todo", () => {
+  it("sin nombre de cliente (null) y sin 2+ recompensas, secondaryFields queda VACÍO — 'Powered by Pragmia' ya no vive acá, vive en altText del barcode", () => {
     const pass = buildPassJson({ ...baseInput, customerFirstName: null }) as {
       storeCard: { secondaryFields: Array<{ key: string }> };
     };
-    expect(pass.storeCard.secondaryFields).toEqual([
-      { key: "poweredBySecondary", label: "", value: "Powered by Pragmia" },
-    ]);
+    expect(pass.storeCard.secondaryFields).toEqual([]);
   });
 
-  it("'Powered by Pragmia' vive en secondaryFields (cara del pase) cuando no hay 2+ recompensas — pedido explícito de que vuelva a verse al frente", () => {
-    // key DISTINTO al de backFields ("poweredBy") a propósito — Apple exige
-    // keys únicos en TODO el pase, no solo dentro de cada grupo de campos
-    // (bug real encontrado vía POST /v1/log de un dispositivo real).
-    const passNoCount = buildPassJson(baseInput) as { storeCard: { secondaryFields: Array<{ key: string; value: string }> } };
-    expect(passNoCount.storeCard.secondaryFields).toContainEqual({
-      key: "poweredBySecondary",
-      label: "",
-      value: "Powered by Pragmia",
-    });
+  it("'Powered by Pragmia' YA NO vive en secondaryFields (cara del pase) — decisión revertida a propósito para liberar ese espacio, ver altText del barcode", () => {
+    const passNoCount = buildPassJson(baseInput) as { storeCard: { secondaryFields: Array<{ key: string }> } };
+    expect(passNoCount.storeCard.secondaryFields.map((f) => f.key)).not.toContain("poweredBySecondary");
 
     const passOne = buildPassJson({ ...baseInput, availableRewardsCount: 1 }) as {
       storeCard: { secondaryFields: Array<{ key: string }> };
     };
-    expect(passOne.storeCard.secondaryFields.map((f) => f.key)).toContain("poweredBySecondary");
+    expect(passOne.storeCard.secondaryFields.map((f) => f.key)).not.toContain("poweredBySecondary");
   });
 
-  it("con 2+ recompensas disponibles, 'Recompensas disponibles' TOMA el slot de poweredBy en secondaryFields (no conviven)", () => {
+  it("con 2+ recompensas disponibles, 'Recompensas disponibles' aparece en secondaryFields sin ningún campo poweredBy que remplazar", () => {
     const pass = buildPassJson({ ...baseInput, availableRewardsCount: 2 }) as {
       storeCard: { secondaryFields: Array<{ key: string }> };
     };

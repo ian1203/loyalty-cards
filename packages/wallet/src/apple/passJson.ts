@@ -170,27 +170,23 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
   const primaryFields: Array<{ key: string; label: string; value: string }> = [];
 
   const availableRewardsCount = input.availableRewardsCount ?? 0;
-  // Último slot de secondaryFields: "Recompensas disponibles" (solo con
-  // MÁS DE UNA desbloqueada — con exactamente 1, auxiliaryFields ya
-  // muestra su nombre, ver abajo, así que repetirlo ahí sería la misma
-  // redundancia que ya se evitó en otros campos) cuando aplica; "Powered
-  // by Pragmia" el resto del tiempo — pedido explícito de que la marca
-  // vuelva a verse en la cara del pase (backFields, más abajo, la sigue
-  // teniendo también, sin condición — ese panel no compite por espacio).
+  // Último slot de secondaryFields: "Recompensas disponibles", SOLO con
+  // MÁS DE UNA desbloqueada (con exactamente 1, auxiliaryFields ya
+  // muestra su nombre, ver abajo — repetirlo acá sería la misma
+  // redundancia que ya se evitó en otros campos). Decisión REVERTIDA
+  // (ver commit): "Powered by Pragmia" ya no ocupa este slot el resto
+  // del tiempo — pedido explícito de liberar la cara del pase, ahora que
+  // vive en altText del barcode (más abajo) donde es visible sin
+  // competir por espacio con ningún campo real. backFields (más abajo)
+  // lo sigue teniendo también, sin condición — ese panel nunca compitió
+  // por espacio, se deja igual.
   const secondaryFields = [
     ...(input.customerFirstName
       ? [{ key: "customer", label: "Cliente", value: input.customerFirstName }]
       : []),
-    availableRewardsCount > 1
-      ? { key: "rewardsAvailable", label: "Recompensas disponibles", value: String(availableRewardsCount) }
-      // key DISTINTO al de backFields (más abajo) a propósito — bug real
-      // encontrado vía POST /v1/log de un dispositivo real durante la
-      // verificación del broadcast de promociones: Apple exige keys
-      // únicos en TODO el pase, no solo dentro de cada grupo de campos.
-      // Ambos compartían literalmente "poweredBy" desde antes de esta
-      // sesión — "will be treated as an error in a future release" según
-      // el device log, hoy solo warning tolerado.
-      : { key: "poweredBySecondary", label: "", value: "Powered by Pragmia" },
+    ...(availableRewardsCount > 1
+      ? [{ key: "rewardsAvailable", label: "Recompensas disponibles", value: String(availableRewardsCount) }]
+      : []),
   ];
 
   // "Powered by Pragmia" vive SIEMPRE en backFields ahora (ver
@@ -301,6 +297,12 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
         message: input.walletToken,
         format: "PKBarcodeFormatQR",
         messageEncoding: "iso-8859-1",
+        // Texto fijo bajo el código de barras — reemplaza el slot de
+        // secondaryFields que "Powered by Pragmia" ocupaba antes (ver
+        // comentario ahí arriba). Nunca cambia con el estado del pase,
+        // así que vivir en altText (en vez de un campo real) no le quita
+        // visibilidad ni compite por espacio con datos del cliente.
+        altText: "Powered by Pragmia",
       },
     ],
     ...(input.locations?.length

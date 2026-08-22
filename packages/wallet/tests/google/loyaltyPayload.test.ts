@@ -204,6 +204,11 @@ describe("buildLoyaltyObjectPayload — contenido mínimo por cliente, sin PII d
     expect(obj.barcode.value).toBe("wallet-token-xyz");
   });
 
+  it("el barcode lleva 'Powered by Pragmia' en alternateText — mismo criterio que altText de Apple (passJson.ts)", () => {
+    const obj = buildLoyaltyObjectPayload(objectInput) as { barcode: { alternateText: string } };
+    expect(obj.barcode.alternateText).toBe("Powered by Pragmia");
+  });
+
   it("el progreso de sellos va en loyaltyPoints.balance.string (conteo compacto, siempre presente)", () => {
     const obj = buildLoyaltyObjectPayload(objectInput) as {
       loyaltyPoints: { balance: { string: string } };

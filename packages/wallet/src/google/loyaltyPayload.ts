@@ -394,6 +394,12 @@ export function buildLoyaltyObjectPayload(input: LoyaltyObjectInput): Record<str
     // shape. Reseña y "Creado con" comparten el mismo array de uris
     // (linksModuleData es un único módulo, no uno por link).
     ...(linkUris.length ? { linksModuleData: { uris: linkUris } } : {}),
-    barcode: { type: "QR_CODE", value: input.walletToken },
+    // alternateText: mismo criterio que altText de Apple (passJson.ts) —
+    // texto fijo bajo el QR, visible sin abrir "Detalles". textModulesData
+    // arriba conserva su propio "Powered by Pragmia" sin condición (nunca
+    // vivió al frente en Google Wallet — a diferencia de Apple, no había
+    // nada que "liberar" ahí), así que esto es una marca ADICIONAL, no un
+    // reemplazo.
+    barcode: { type: "QR_CODE", value: input.walletToken, alternateText: "Powered by Pragmia" },
   };
 }
