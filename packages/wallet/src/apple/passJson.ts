@@ -98,6 +98,14 @@ export type PassJsonInput = {
   // todas, o el negocio no tiene reglas activas) — en ese caso el campo
   // completo se omite, no se muestra "0".
   stampsUntilNextReward?: number | null;
+  // Nombre de la PRIMERA regla de recompensa del programa (loyaltySnapshot.ts,
+  // rules[0]?.name) — a diferencia de rewardName (arriba, solo cuando YA
+  // está disponible), este vive SIEMPRE que el negocio tenga al menos una
+  // regla activa, disponible o no. Ocupa el slot de secondaryFields que
+  // dejó libre "Powered by Pragmia" (ver altText del barcode más abajo) —
+  // null cuando el negocio no tiene ninguna regla configurada, nunca un
+  // placeholder inventado.
+  nextRewardName?: string | null;
 };
 
 // Texto del banner de lock screen al entrar en el geofence de una
@@ -173,20 +181,22 @@ export function buildPassJson(input: PassJsonInput): Record<string, unknown> {
   // Último slot de secondaryFields: "Recompensas disponibles", SOLO con
   // MÁS DE UNA desbloqueada (con exactamente 1, auxiliaryFields ya
   // muestra su nombre, ver abajo — repetirlo acá sería la misma
-  // redundancia que ya se evitó en otros campos). Decisión REVERTIDA
-  // (ver commit): "Powered by Pragmia" ya no ocupa este slot el resto
-  // del tiempo — pedido explícito de liberar la cara del pase, ahora que
-  // vive en altText del barcode (más abajo) donde es visible sin
-  // competir por espacio con ningún campo real. backFields (más abajo)
-  // lo sigue teniendo también, sin condición — ese panel nunca compitió
-  // por espacio, se deja igual.
+  // redundancia que ya se evitó en otros campos); "Siguiente recompensa"
+  // (nextRewardName) el resto del tiempo — pedido explícito de llenar el
+  // espacio que dejó libre "Powered by Pragmia" al mudarse al altText del
+  // barcode (más abajo). Mutuamente excluyentes, igual que antes: nunca
+  // conviven en el mismo slot. Sin ninguna regla de recompensa configurada
+  // (nextRewardName null), el campo se omite — nunca un placeholder
+  // inventado.
   const secondaryFields = [
     ...(input.customerFirstName
       ? [{ key: "customer", label: "Cliente", value: input.customerFirstName }]
       : []),
     ...(availableRewardsCount > 1
       ? [{ key: "rewardsAvailable", label: "Recompensas disponibles", value: String(availableRewardsCount) }]
-      : []),
+      : input.nextRewardName
+        ? [{ key: "nextReward", label: "Siguiente recompensa", value: input.nextRewardName }]
+        : []),
   ];
 
   // "Powered by Pragmia" vive SIEMPRE en backFields ahora (ver
