@@ -97,6 +97,14 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             <Link href="/login" className="hover:text-foreground">
               Iniciar sesión
             </Link>
+            <a
+              href="/docs/pragmia-wallet-bi-m.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground"
+            >
+              Descargar PDF
+            </a>
           </nav>
         </div>
       </footer>
