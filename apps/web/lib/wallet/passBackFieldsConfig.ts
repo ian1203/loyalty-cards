@@ -27,9 +27,26 @@ export type PassBackFieldsConfig = {
 };
 
 const CHILAQUIKES_BUSINESS_ID = "26166780-c160-4e91-81a5-a0694a96cecc";
+// Tenant sandbox para probar "sello = logo del negocio" (packages/wallet/
+// scripts/generate-pass-assets.ts, modo --stamp-logo) antes de tocar
+// producción de Chilaquikes — branding clonado de Iriz Style + sucursal de
+// prueba propia (ver docs/HISTORY.md). Contenido de placeholder: copia
+// literal del de Chilaquikes, sin significado real para este negocio.
+const WALLET_VERIFY_TEST_BUSINESS_ID = "71b80bf7-10cc-4d98-a980-88eef530775b";
 
 const CONFIG_BY_BUSINESS_ID: Record<string, PassBackFieldsConfig> = {
   [CHILAQUIKES_BUSINESS_ID]: {
+    howItWorksText: "8 sellos → orden gratis de chilaquiles",
+    howToEarnStampText:
+      "Por cada visita y compra en cualquiera de nuestras sucursales (local + 2 foodtrucks), ganas un sello.",
+    validUntilText: "Ilimitado",
+    reviewLinkUrl: "https://maps.app.goo.gl/QnLLo5F2h8p1Wwhf8",
+    reviewLinkLabel: "Dejar reseña en Google",
+    createdWithUrl: "https://pragmia-data.com",
+    createdWithLabel: "Pragmia",
+    showAccountSummaryFields: true,
+  },
+  [WALLET_VERIFY_TEST_BUSINESS_ID]: {
     howItWorksText: "8 sellos → orden gratis de chilaquiles",
     howToEarnStampText:
       "Por cada visita y compra en cualquiera de nuestras sucursales (local + 2 foodtrucks), ganas un sello.",
