@@ -143,6 +143,34 @@ describe("buildPassJson — contenido mínimo, sin PII de más", () => {
     expect(pass.storeCard.secondaryFields.map((f) => f.key)).toContain("rewardsAvailable");
   });
 
+  it("con nextRewardName y sin 2+ recompensas, 'Siguiente recompensa' llena el espacio que dejó libre poweredBySecondary", () => {
+    const pass = buildPassJson({ ...baseInput, nextRewardName: "Orden de chilaquiles" }) as {
+      storeCard: { secondaryFields: Array<{ key: string; label: string; value: string }> };
+    };
+    expect(pass.storeCard.secondaryFields).toContainEqual({
+      key: "nextReward",
+      label: "Siguiente recompensa",
+      value: "Orden de chilaquiles",
+    });
+  });
+
+  it("sin ninguna regla de recompensa (nextRewardName null), el campo se omite — nunca un placeholder inventado", () => {
+    const pass = buildPassJson({ ...baseInput, nextRewardName: null }) as {
+      storeCard: { secondaryFields: Array<{ key: string }> };
+    };
+    expect(pass.storeCard.secondaryFields.map((f) => f.key)).not.toContain("nextReward");
+  });
+
+  it("con 2+ recompensas Y nextRewardName, 'Recompensas disponibles' GANA el slot — mutuamente excluyentes", () => {
+    const pass = buildPassJson({
+      ...baseInput,
+      availableRewardsCount: 2,
+      nextRewardName: "Orden de chilaquiles",
+    }) as { storeCard: { secondaryFields: Array<{ key: string }> } };
+    expect(pass.storeCard.secondaryFields.map((f) => f.key)).toContain("rewardsAvailable");
+    expect(pass.storeCard.secondaryFields.map((f) => f.key)).not.toContain("nextReward");
+  });
+
   it("nunca incluye email — PassJsonInput ni siquiera acepta teléfono/email como campo (garantía de tipo)", () => {
     const pass = buildPassJson(baseInput);
     expect(JSON.stringify(pass)).not.toMatch(/@/); // ningún email

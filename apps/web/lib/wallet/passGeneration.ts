@@ -205,6 +205,7 @@ export async function buildApplePkpassFromInputs(
     cycleStamps: snapshot.cycleStamps,
     stampsRequired: snapshot.stampsRequired,
     rewardName: snapshot.rewardName,
+    nextRewardName: snapshot.nextRewardName,
     availableRewardsCount: snapshot.availableRewardsCount,
     walletToken: snapshot.walletToken,
     colors: { backgroundRgb, foregroundRgb, labelRgb },

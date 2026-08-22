@@ -128,14 +128,16 @@ type Args = {
   stampFilledFill?: string;
   iconFallbackLetter?: string;
   // --stamp-logo: modo EXCLUSIVO para tenants sandbox de prueba (hoy:
-  // wallet-verify-test) — cada sello GANADO muestra el logo completo
-  // (recorte "cover" a círculo), no un círculo de color plano. Nunca se
+  // wallet-verify-test) — cada sello (ganado a color, vacío atenuado)
+  // muestra el logo COMPLETO, ver buildLogoStampStripAt3x. Nunca se
   // combina con --hero (mutuamente excluyentes en main()): son dos
   // conceptos de fondo/sello distintos, mezclarlos no tiene un caso de uso
-  // real todavía. Los sellos VACÍOS siguen siendo el mismo contorno gris
-  // de siempre (buildStripSvg) — mostrar el logo ya "atenuado" para un
-  // sello no ganado se sintió ambiguo (¿ganado o no?) sin aportar nada.
+  // real todavía.
   stampLogo?: string;
+  // --stamp-bg: fondo decorativo detrás del grid en modo --stamp-logo
+  // (cover-fit, sin tile). Opcional — sin él, el fondo sigue siendo el
+  // blanco liso de siempre (STRIP_BACKGROUND).
+  stampBg?: string;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -205,13 +207,17 @@ function parseArgs(argv: string[]): Args {
   // arranca con la letra que tiene sentido mostrar (ver CLAUDE.md).
   const iconFallbackLetter = get("--icon-fallback-letter");
   const stampLogo = get("--stamp-logo");
+  const stampBg = get("--stamp-bg");
   if (!slug || !logo || !stampsRequiredRaw) {
     throw new Error(
-      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--hero-cover] [--no-strip-logo] [--empty-stamp-stroke <hex sin #>] [--stamp-backing-fill <hex sin #>] [--stamp-filled-fill <hex sin #>] [--icon-fallback-letter <letra>] [--stamp-logo <ruta al PNG transparente para el sello>]",
+      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--hero-cover] [--no-strip-logo] [--empty-stamp-stroke <hex sin #>] [--stamp-backing-fill <hex sin #>] [--stamp-filled-fill <hex sin #>] [--icon-fallback-letter <letra>] [--stamp-logo <ruta al PNG transparente para el sello>] [--stamp-bg <ruta a fondo decorativo>]",
     );
   }
   if (stampLogo && hero) {
     throw new Error("--stamp-logo y --hero son mutuamente excluyentes (ver comentario del tipo Args).");
+  }
+  if (stampBg && !stampLogo) {
+    throw new Error("--stamp-bg requiere --stamp-logo (solo aplica a ese modo).");
   }
   const stampsRequired = Number.parseInt(stampsRequiredRaw, 10);
   if (!Number.isInteger(stampsRequired) || stampsRequired < 1) {
@@ -235,6 +241,7 @@ function parseArgs(argv: string[]): Args {
     stampFilledFill,
     iconFallbackLetter,
     stampLogo,
+    stampBg,
   };
 }
 
@@ -511,12 +518,31 @@ async function buildHeroStripAt3x(
 // MISMO logo completo, desaturado + alpha reducido (EMPTY_LOGO_OPACITY),
 // nunca el círculo gris de buildStripSvg — mismo criterio visual que
 // Trópico/Sede Café (ícono de marca atenuado, no un placeholder
-// genérico). Reusa computeStampLayout SIN modificarlo (misma grid de 1
-// fila que Chilaquikes), solo reinterpreta su `diameter` como el ANCHO
-// disponible por sello en vez de un diámetro — la altura se deriva del
-// aspect ratio real del logo fuente (leído de sus metadatos, nunca
-// hardcodeado) para que quepa completo, sin recortar ningún lado.
-const EMPTY_LOGO_OPACITY = 0.3;
+// genérico).
+//
+// Layout de filas: reusa computeIrizStampGrid SIN modificarla (misma
+// función que ya usa Iriz vía buildHeroStripAt3x — ≤5 una fila, >5 dos
+// filas intercaladas para impares), reinterpretando su `diameter` como
+// el ANCHO disponible por sello en vez de un diámetro de círculo — la
+// altura se deriva del aspect ratio real del logo fuente (leído de sus
+// metadatos, nunca hardcodeado) para que quepa completo, sin recortar
+// ningún lado. reservedTopPt=0 siempre acá (a diferencia del modo
+// --hero, este modo no compone un logo separado arriba del grid — el
+// logo ES el sello).
+//
+// --stamp-bg (opcional): fondo decorativo detrás del grid completo
+// (cover-fit al canvas, sin tile — mismo criterio que --hero-cover).
+// Placa de respaldo blanca semi-transparente detrás de CADA sello
+// (LOGO_STAMP_BACKING_*) — sin fondo, no hace falta (fondo blanco liso
+// de siempre, contraste ya garantizado); con --stamp-bg, confirmado con
+// un render real que un fondo decorativo saturado (mascotas rojas sobre
+// rojo) deja el sello VACÍO (gris tenue) casi invisible sin esta placa —
+// ver la sesión que validó esto. EMPTY_LOGO_OPACITY subido de 0.3 a 0.55
+// en la misma ronda, por el mismo motivo.
+const EMPTY_LOGO_OPACITY = 0.55;
+const LOGO_STAMP_BACKING_FILL = "#FFFFFF";
+const LOGO_STAMP_BACKING_OPACITY = 0.92;
+const LOGO_STAMP_BACKING_PAD_RATIO = 0.12; // aire entre el logo y el borde de la placa
 
 async function fadeAlpha(png: Buffer, factor: number): Promise<Buffer> {
   const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -530,40 +556,75 @@ async function fadeAlpha(png: Buffer, factor: number): Promise<Buffer> {
 
 async function buildLogoStampStripAt3x(
   stampLogoPath: string,
+  stampBgPath: string | null,
   filledCount: number,
   stampsRequired: number,
 ): Promise<Buffer> {
   const scale = 3;
   const width = STRIP_BASE_WIDTH * scale;
   const height = STRIP_BASE_HEIGHT * scale;
-  const { diameter, centersX, centerY } = computeStampLayout(stampsRequired);
-  const boxW = Math.round(diameter * scale);
+  const positions = computeIrizStampGrid(stampsRequired, 0);
 
   const sourceMeta = await sharp(stampLogoPath).metadata();
   const aspect = (sourceMeta.width ?? 1) / (sourceMeta.height ?? 1);
-  const boxH = Math.round(boxW / aspect);
 
-  // Se resuelven UNA sola vez y se reusan en cada posición — el logo
-  // fuente es el mismo para las N repeticiones ganadas/vacías.
-  const filledStamp = await sharp(stampLogoPath)
-    .resize({ width: boxW, height: boxH, fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .png()
-    .toBuffer();
-  const emptyStamp = await fadeAlpha(await sharp(filledStamp).grayscale().png().toBuffer(), EMPTY_LOGO_OPACITY);
+  const background = stampBgPath
+    ? await sharp(stampBgPath).resize({ width, height, fit: "cover" }).png().toBuffer()
+    : await sharp({ create: { width, height, channels: 3, background: STRIP_BACKGROUND } }).png().toBuffer();
 
-  const composites: sharp.OverlayOptions[] = [];
-  for (let i = 0; i < stampsRequired; i++) {
-    const cxS = centersX[i] * scale;
-    const cyS = centerY * scale;
-    const left = Math.round(cxS - boxW / 2);
-    const top = Math.round(cyS - boxH / 2);
-    composites.push({ input: i < filledCount ? filledStamp : emptyStamp, left, top });
+  // Cache por diámetro real (el grid de 2 filas puede repetir el mismo
+  // diámetro en todas las posiciones, pero no lo garantiza distinto caso
+  // a caso — cachear por valor evita recompositar el mismo tamaño N
+  // veces sin asumir que todas las posiciones miden igual).
+  const stampCache = new Map<number, { filled: Buffer; empty: Buffer; plate: Buffer | null }>();
+  async function getStampAssets(diameterPt: number) {
+    const boxW = Math.round(diameterPt * scale);
+    const cached = stampCache.get(boxW);
+    if (cached) return { ...cached, boxW };
+    const boxH = Math.round(boxW / aspect);
+    const filled = await sharp(stampLogoPath)
+      .resize({ width: boxW, height: boxH, fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toBuffer();
+    const empty = await fadeAlpha(await sharp(filled).grayscale().png().toBuffer(), EMPTY_LOGO_OPACITY);
+    let plate: Buffer | null = null;
+    if (stampBgPath) {
+      const pad = Math.round(boxW * LOGO_STAMP_BACKING_PAD_RATIO);
+      const plateW = boxW + pad * 2;
+      const plateH = boxH + pad * 2;
+      const plateSvg = Buffer.from(
+        `<svg width="${plateW}" height="${plateH}" xmlns="http://www.w3.org/2000/svg"><rect width="${plateW}" height="${plateH}" rx="${Math.round(plateH * 0.18)}" fill="${LOGO_STAMP_BACKING_FILL}" fill-opacity="${LOGO_STAMP_BACKING_OPACITY}" /></svg>`,
+      );
+      plate = await sharp(plateSvg).png().toBuffer();
+    }
+    const entry = { filled, empty, plate };
+    stampCache.set(boxW, entry);
+    return { ...entry, boxW };
   }
 
-  return sharp({ create: { width, height, channels: 3, background: STRIP_BACKGROUND } })
-    .composite(composites)
-    .png()
-    .toBuffer();
+  const composites: sharp.OverlayOptions[] = [];
+  for (let i = 0; i < positions.length; i++) {
+    const pos = positions[i];
+    const { filled, empty, plate, boxW } = await getStampAssets(pos.diameter);
+    const boxH = Math.round(boxW / aspect);
+    const cxS = pos.cx * scale;
+    const cyS = pos.cy * scale;
+    if (plate) {
+      const pad = Math.round(boxW * LOGO_STAMP_BACKING_PAD_RATIO);
+      composites.push({
+        input: plate,
+        left: Math.round(cxS - boxW / 2 - pad),
+        top: Math.round(cyS - boxH / 2 - pad),
+      });
+    }
+    composites.push({
+      input: i < filledCount ? filled : empty,
+      left: Math.round(cxS - boxW / 2),
+      top: Math.round(cyS - boxH / 2),
+    });
+  }
+
+  return sharp(background).composite(composites).png().toBuffer();
 }
 
 async function main() {
@@ -582,6 +643,7 @@ async function main() {
     stampFilledFill,
     iconFallbackLetter,
     stampLogo,
+    stampBg,
   } = parseArgs(process.argv.slice(2));
   const outDir = path.join(PUBLIC_PASSES_DIR, slug);
   await mkdir(outDir, { recursive: true });
@@ -617,9 +679,10 @@ async function main() {
   // generación del .pkpass según el balance real del cliente.
   const heroPath = hero ? path.resolve(process.cwd(), hero) : null;
   const stampLogoPath = stampLogo ? path.resolve(process.cwd(), stampLogo) : null;
+  const stampBgPath = stampBg ? path.resolve(process.cwd(), stampBg) : null;
   for (let filledCount = 0; filledCount <= stampsRequired; filledCount++) {
     if (stampLogoPath) {
-      const at3x = await buildLogoStampStripAt3x(stampLogoPath, filledCount, stampsRequired);
+      const at3x = await buildLogoStampStripAt3x(stampLogoPath, stampBgPath, filledCount, stampsRequired);
       await sharp(at3x).toFile(path.join(outDir, `strip-${filledCount}@3x.png`));
       await sharp(at3x)
         .resize(STRIP_BASE_WIDTH * 2, STRIP_BASE_HEIGHT * 2)
