@@ -531,18 +531,16 @@ async function buildHeroStripAt3x(
 // logo ES el sello).
 //
 // --stamp-bg (opcional): fondo decorativo detrás del grid completo
-// (cover-fit al canvas, sin tile — mismo criterio que --hero-cover).
-// Placa de respaldo blanca semi-transparente detrás de CADA sello
-// (LOGO_STAMP_BACKING_*) — sin fondo, no hace falta (fondo blanco liso
-// de siempre, contraste ya garantizado); con --stamp-bg, confirmado con
-// un render real que un fondo decorativo saturado (mascotas rojas sobre
-// rojo) deja el sello VACÍO (gris tenue) casi invisible sin esta placa —
-// ver la sesión que validó esto. EMPTY_LOGO_OPACITY subido de 0.3 a 0.55
-// en la misma ronda, por el mismo motivo.
+// (cover-fit al canvas, sin tile — mismo criterio que --hero-cover). Sin
+// caja/placa de respaldo detrás del logo — se compone directo sobre el
+// fondo con su alpha real (transparencia intacta), pedido explícito
+// tras confirmar visualmente que el fondo decorativo quedaba tapado por
+// un rectángulo blanco. Verificado con render real (ver sesión que
+// probó esto sin placa): el sello LLENO se distingue bien por su propio
+// contorno/colores saturados, sin necesitar nada extra; el VACÍO (gris
+// + EMPTY_LOGO_OPACITY) se lee con más esfuerzo contra un fondo
+// saturado — aceptado tal cual, sin agregar tratamiento no pedido.
 const EMPTY_LOGO_OPACITY = 0.55;
-const LOGO_STAMP_BACKING_FILL = "#FFFFFF";
-const LOGO_STAMP_BACKING_OPACITY = 0.92;
-const LOGO_STAMP_BACKING_PAD_RATIO = 0.12; // aire entre el logo y el borde de la placa
 
 async function fadeAlpha(png: Buffer, factor: number): Promise<Buffer> {
   const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -576,7 +574,7 @@ async function buildLogoStampStripAt3x(
   // diámetro en todas las posiciones, pero no lo garantiza distinto caso
   // a caso — cachear por valor evita recompositar el mismo tamaño N
   // veces sin asumir que todas las posiciones miden igual).
-  const stampCache = new Map<number, { filled: Buffer; empty: Buffer; plate: Buffer | null }>();
+  const stampCache = new Map<number, { filled: Buffer; empty: Buffer }>();
   async function getStampAssets(diameterPt: number) {
     const boxW = Math.round(diameterPt * scale);
     const cached = stampCache.get(boxW);
@@ -587,17 +585,7 @@ async function buildLogoStampStripAt3x(
       .png()
       .toBuffer();
     const empty = await fadeAlpha(await sharp(filled).grayscale().png().toBuffer(), EMPTY_LOGO_OPACITY);
-    let plate: Buffer | null = null;
-    if (stampBgPath) {
-      const pad = Math.round(boxW * LOGO_STAMP_BACKING_PAD_RATIO);
-      const plateW = boxW + pad * 2;
-      const plateH = boxH + pad * 2;
-      const plateSvg = Buffer.from(
-        `<svg width="${plateW}" height="${plateH}" xmlns="http://www.w3.org/2000/svg"><rect width="${plateW}" height="${plateH}" rx="${Math.round(plateH * 0.18)}" fill="${LOGO_STAMP_BACKING_FILL}" fill-opacity="${LOGO_STAMP_BACKING_OPACITY}" /></svg>`,
-      );
-      plate = await sharp(plateSvg).png().toBuffer();
-    }
-    const entry = { filled, empty, plate };
+    const entry = { filled, empty };
     stampCache.set(boxW, entry);
     return { ...entry, boxW };
   }
@@ -605,18 +593,10 @@ async function buildLogoStampStripAt3x(
   const composites: sharp.OverlayOptions[] = [];
   for (let i = 0; i < positions.length; i++) {
     const pos = positions[i];
-    const { filled, empty, plate, boxW } = await getStampAssets(pos.diameter);
+    const { filled, empty, boxW } = await getStampAssets(pos.diameter);
     const boxH = Math.round(boxW / aspect);
     const cxS = pos.cx * scale;
     const cyS = pos.cy * scale;
-    if (plate) {
-      const pad = Math.round(boxW * LOGO_STAMP_BACKING_PAD_RATIO);
-      composites.push({
-        input: plate,
-        left: Math.round(cxS - boxW / 2 - pad),
-        top: Math.round(cyS - boxH / 2 - pad),
-      });
-    }
     composites.push({
       input: i < filledCount ? filled : empty,
       left: Math.round(cxS - boxW / 2),
