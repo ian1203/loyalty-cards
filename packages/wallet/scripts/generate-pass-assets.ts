@@ -354,6 +354,74 @@ function computeIrizStampGrid(stampsRequired: number, reservedTopPt: number): St
   return positions;
 }
 
+// Copia DELIBERADA de computeIrizStampGrid, exclusiva del modo
+// --stamp-logo (sandbox) — NUNCA la reusa Iriz. Se forkeó en vez de
+// parametrizar la original tras un hallazgo real: agrandar el sello acá
+// (pedido explícito) usando las MISMAS constantes que Iriz también
+// terminaba agrandando/apretando sus círculos de forma no deseada (ver
+// sesión que lo encontró con un render de control real). Constantes
+// LOGO_GRID_* — más chicas de margen/gap, más grande de bloque — solo
+// existen acá; computeIrizStampGrid queda intacta, byte-a-byte igual que
+// antes de esta ronda.
+const LOGO_GRID_PADDING_X = 12;
+const LOGO_GRID_GAP_RATIO = 0.2;
+const LOGO_GRID_VERTICAL_MARGIN_PT = 5;
+const LOGO_GRID_BLOCK_HEIGHT_RATIO = 0.72;
+const LOGO_GRID_ROW_GAP_RATIO = 0.35;
+
+function computeLogoStampGrid(stampsRequired: number): StampPosition[] {
+  const usableWidth = STRIP_BASE_WIDTH - LOGO_GRID_PADDING_X * 2;
+  const areaHeight = STRIP_BASE_HEIGHT;
+  const areaCenterY = areaHeight / 2;
+  const usableAreaHeight = areaHeight - LOGO_GRID_VERTICAL_MARGIN_PT * 2;
+
+  const rowCenters = (count: number, diameter: number): number[] => {
+    const gap = diameter * LOGO_GRID_GAP_RATIO;
+    const totalWidth = count * diameter + (count - 1) * gap;
+    const startX = (STRIP_BASE_WIDTH - totalWidth) / 2;
+    return Array.from({ length: count }, (_, i) => startX + diameter / 2 + i * (diameter + gap));
+  };
+
+  if (stampsRequired <= 5) {
+    const denom = stampsRequired + (stampsRequired - 1) * LOGO_GRID_GAP_RATIO;
+    const horizontalMax = usableWidth / denom;
+    const verticalMax = usableAreaHeight;
+    const diameter = Math.min(MAX_STAMP_DIAMETER, horizontalMax, verticalMax);
+    return rowCenters(stampsRequired, diameter).map((cx) => ({ cx, cy: areaCenterY, diameter }));
+  }
+
+  const topCount = Math.ceil(stampsRequired / 2);
+  const bottomCount = Math.floor(stampsRequired / 2);
+  const rowsEqual = topCount === bottomCount;
+
+  const horizontalDenom = topCount + (topCount - 1) * LOGO_GRID_GAP_RATIO;
+  const horizontalMax = usableWidth / horizontalDenom;
+  const targetBlockHeight = areaHeight * LOGO_GRID_BLOCK_HEIGHT_RATIO;
+  const ratioMax = targetBlockHeight / (2 + LOGO_GRID_ROW_GAP_RATIO);
+  const safetyMax = usableAreaHeight / (2 + LOGO_GRID_ROW_GAP_RATIO);
+  const diameter = Math.min(MAX_STAMP_DIAMETER, horizontalMax, ratioMax, safetyMax);
+
+  const rowGap = diameter * LOGO_GRID_ROW_GAP_RATIO;
+  const topRowY = areaCenterY - (diameter + rowGap) / 2;
+  const bottomRowY = areaCenterY + (diameter + rowGap) / 2;
+
+  const topCentersX = rowCenters(topCount, diameter);
+  const positions: StampPosition[] = topCentersX.map((cx) => ({ cx, cy: topRowY, diameter }));
+
+  if (rowsEqual) {
+    for (const cx of topCentersX) {
+      positions.push({ cx, cy: bottomRowY, diameter });
+    }
+  } else {
+    for (let i = 0; i < bottomCount; i++) {
+      const cx = (topCentersX[i] + topCentersX[i + 1]) / 2;
+      positions.push({ cx, cy: bottomRowY, diameter });
+    }
+  }
+
+  return positions;
+}
+
 // Fallback de icon.png cuando el logo real NO aísla limpio a 29x29pt —
 // confirmado visualmente (no supuesto): el logo de Chilaquikes trae
 // mascota + wordmark + subtítulo en la misma capa, y a 29px real (el
@@ -520,27 +588,27 @@ async function buildHeroStripAt3x(
 // Trópico/Sede Café (ícono de marca atenuado, no un placeholder
 // genérico).
 //
-// Layout de filas: reusa computeIrizStampGrid SIN modificarla (misma
-// función que ya usa Iriz vía buildHeroStripAt3x — ≤5 una fila, >5 dos
-// filas intercaladas para impares), reinterpretando su `diameter` como
-// el ANCHO disponible por sello en vez de un diámetro de círculo — la
-// altura se deriva del aspect ratio real del logo fuente (leído de sus
-// metadatos, nunca hardcodeado) para que quepa completo, sin recortar
-// ningún lado. reservedTopPt=0 siempre acá (a diferencia del modo
-// --hero, este modo no compone un logo separado arriba del grid — el
-// logo ES el sello).
+// Layout de filas: usa computeLogoStampGrid (fork DEDICADO de
+// computeIrizStampGrid, ver comentario ahí — Iriz nunca pasa por esta
+// función) — mismas reglas ≤5 una fila / >5 dos filas intercaladas para
+// impares, pero con constantes LOGO_GRID_* propias (sello más grande).
+// Reinterpreta su `diameter` como el ANCHO disponible por sello en vez
+// de un diámetro de círculo — la altura se deriva del aspect ratio real
+// del logo fuente (leído de sus metadatos, nunca hardcodeado) para que
+// quepa completo, sin recortar ningún lado. Este modo no compone un
+// logo separado arriba del grid — el logo ES el sello, por eso no
+// necesita el reservedTopPt que sí usa el modo --hero.
 //
 // --stamp-bg (opcional): fondo decorativo detrás del grid completo
 // (cover-fit al canvas, sin tile — mismo criterio que --hero-cover). Sin
 // caja/placa de respaldo detrás del logo — se compone directo sobre el
 // fondo con su alpha real (transparencia intacta), pedido explícito
 // tras confirmar visualmente que el fondo decorativo quedaba tapado por
-// un rectángulo blanco. Verificado con render real (ver sesión que
-// probó esto sin placa): el sello LLENO se distingue bien por su propio
-// contorno/colores saturados, sin necesitar nada extra; el VACÍO (gris
-// + EMPTY_LOGO_OPACITY) se lee con más esfuerzo contra un fondo
-// saturado — aceptado tal cual, sin agregar tratamiento no pedido.
-const EMPTY_LOGO_OPACITY = 0.55;
+// un rectángulo blanco. EMPTY_LOGO_OPACITY subido de 0.55 a 0.75 (pedido
+// explícito, sin placa) para que el sello vacío se distinga mejor del
+// fondo — nunca 1.0, tiene que seguir siendo claramente distinto del
+// sello GANADO (a color pleno, sin tocar).
+const EMPTY_LOGO_OPACITY = 0.75;
 
 async function fadeAlpha(png: Buffer, factor: number): Promise<Buffer> {
   const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -561,7 +629,7 @@ async function buildLogoStampStripAt3x(
   const scale = 3;
   const width = STRIP_BASE_WIDTH * scale;
   const height = STRIP_BASE_HEIGHT * scale;
-  const positions = computeIrizStampGrid(stampsRequired, 0);
+  const positions = computeLogoStampGrid(stampsRequired);
 
   const sourceMeta = await sharp(stampLogoPath).metadata();
   const aspect = (sourceMeta.width ?? 1) / (sourceMeta.height ?? 1);
