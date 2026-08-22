@@ -127,6 +127,15 @@ type Args = {
   stampBackingFill: string;
   stampFilledFill?: string;
   iconFallbackLetter?: string;
+  // --stamp-logo: modo EXCLUSIVO para tenants sandbox de prueba (hoy:
+  // wallet-verify-test) — cada sello GANADO muestra el logo completo
+  // (recorte "cover" a círculo), no un círculo de color plano. Nunca se
+  // combina con --hero (mutuamente excluyentes en main()): son dos
+  // conceptos de fondo/sello distintos, mezclarlos no tiene un caso de uso
+  // real todavía. Los sellos VACÍOS siguen siendo el mismo contorno gris
+  // de siempre (buildStripSvg) — mostrar el logo ya "atenuado" para un
+  // sello no ganado se sintió ambiguo (¿ganado o no?) sin aportar nada.
+  stampLogo?: string;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -195,10 +204,14 @@ function parseArgs(argv: string[]): Args {
   // icon.png) — explícito, no derivado del slug: el slug no siempre
   // arranca con la letra que tiene sentido mostrar (ver CLAUDE.md).
   const iconFallbackLetter = get("--icon-fallback-letter");
+  const stampLogo = get("--stamp-logo");
   if (!slug || !logo || !stampsRequiredRaw) {
     throw new Error(
-      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--hero-cover] [--no-strip-logo] [--empty-stamp-stroke <hex sin #>] [--stamp-backing-fill <hex sin #>] [--stamp-filled-fill <hex sin #>] [--icon-fallback-letter <letra>]",
+      "Uso: --slug <slug> --logo <ruta al PNG transparente> --stamps-required <n> [--brand-color <hex sin #>] [--hero <ruta a la imagen de fondo>] [--hero-patch-x <n>] [--hero-patch-y <n>] [--hero-cover] [--no-strip-logo] [--empty-stamp-stroke <hex sin #>] [--stamp-backing-fill <hex sin #>] [--stamp-filled-fill <hex sin #>] [--icon-fallback-letter <letra>] [--stamp-logo <ruta al PNG transparente para el sello>]",
     );
+  }
+  if (stampLogo && hero) {
+    throw new Error("--stamp-logo y --hero son mutuamente excluyentes (ver comentario del tipo Args).");
   }
   const stampsRequired = Number.parseInt(stampsRequiredRaw, 10);
   if (!Number.isInteger(stampsRequired) || stampsRequired < 1) {
@@ -221,6 +234,7 @@ function parseArgs(argv: string[]): Args {
     stampBackingFill,
     stampFilledFill,
     iconFallbackLetter,
+    stampLogo,
   };
 }
 
@@ -487,6 +501,67 @@ async function buildHeroStripAt3x(
     .toBuffer();
 }
 
+// Modo --stamp-logo (sandbox, ver comentario del tipo Args): cada sello
+// GANADO es el logo completo recortado "cover" a un círculo (mismo
+// criterio de crop que --hero-cover: sharp fit:"cover" escala por el eje
+// que menos recorte deja y centra el sobrante) — nunca la mascota aislada
+// (eso ya se intentó y falló, ver comentario junto a
+// chilaquikes-emblem-attempt-NOT-USED.png arriba). El disco de fondo
+// blanco (mismo STRIP_BACKGROUND que buildStripSvg) deja ver el logo
+// completo incluso en las zonas transparentes del PNG fuente (el logo de
+// Chilaquikes no es un cuadrado perfecto — el crop recorta los bordes
+// izquierdo/derecho del wordmark para llenar el círculo). Reusa
+// computeStampLayout SIN modificarlo — misma grid de 1 fila que ya usa
+// Chilaquikes hoy, cero riesgo de tocar ese cálculo.
+async function buildLogoStampStripAt3x(
+  stampLogoPath: string,
+  filledCount: number,
+  stampsRequired: number,
+  emptyStampStroke: string,
+): Promise<Buffer> {
+  const scale = 3;
+  const width = STRIP_BASE_WIDTH * scale;
+  const height = STRIP_BASE_HEIGHT * scale;
+  const { diameter, centersX, centerY } = computeStampLayout(stampsRequired);
+  const d = Math.round(diameter * scale);
+  const r = d / 2;
+
+  const circleMask = Buffer.from(
+    `<svg width="${d}" height="${d}" xmlns="http://www.w3.org/2000/svg"><circle cx="${r}" cy="${r}" r="${r}" fill="#fff" /></svg>`,
+  );
+
+  // Se recorta UNA sola vez y se reusa en cada posición ganada — el logo
+  // fuente es el mismo para las N repeticiones, recompositar desde cero
+  // por sello sería trabajo idéntico repetido sin ganancia visual.
+  const logoStamp = await sharp(stampLogoPath)
+    .resize({ width: d, height: d, fit: "cover" })
+    .composite([{ input: circleMask, blend: "dest-in" }])
+    .png()
+    .toBuffer();
+
+  const filledComposites: sharp.OverlayOptions[] = [];
+  const emptyCircles: string[] = [];
+  for (let i = 0; i < stampsRequired; i++) {
+    const cxS = centersX[i] * scale;
+    const cyS = centerY * scale;
+    if (i < filledCount) {
+      filledComposites.push({ input: logoStamp, left: Math.round(cxS - r), top: Math.round(cyS - r) });
+    } else {
+      emptyCircles.push(
+        `<circle cx="${cxS}" cy="${cyS}" r="${r - 2 * scale}" fill="none" stroke="${emptyStampStroke}" stroke-width="${2 * scale}" />`,
+      );
+    }
+  }
+  const emptySvg = Buffer.from(
+    `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${emptyCircles.join("\n")}</svg>`,
+  );
+
+  return sharp({ create: { width, height, channels: 3, background: STRIP_BACKGROUND } })
+    .composite([...filledComposites, { input: emptySvg, left: 0, top: 0 }])
+    .png()
+    .toBuffer();
+}
+
 async function main() {
   const {
     slug,
@@ -502,6 +577,7 @@ async function main() {
     stampBackingFill,
     stampFilledFill,
     iconFallbackLetter,
+    stampLogo,
   } = parseArgs(process.argv.slice(2));
   const outDir = path.join(PUBLIC_PASSES_DIR, slug);
   await mkdir(outDir, { recursive: true });
@@ -536,7 +612,19 @@ async function main() {
   // inclusive) — passGeneration.ts elige el correcto en tiempo de
   // generación del .pkpass según el balance real del cliente.
   const heroPath = hero ? path.resolve(process.cwd(), hero) : null;
+  const stampLogoPath = stampLogo ? path.resolve(process.cwd(), stampLogo) : null;
   for (let filledCount = 0; filledCount <= stampsRequired; filledCount++) {
+    if (stampLogoPath) {
+      const at3x = await buildLogoStampStripAt3x(stampLogoPath, filledCount, stampsRequired, emptyStampStroke);
+      await sharp(at3x).toFile(path.join(outDir, `strip-${filledCount}@3x.png`));
+      await sharp(at3x)
+        .resize(STRIP_BASE_WIDTH * 2, STRIP_BASE_HEIGHT * 2)
+        .toFile(path.join(outDir, `strip-${filledCount}@2x.png`));
+      await sharp(at3x)
+        .resize(STRIP_BASE_WIDTH, STRIP_BASE_HEIGHT)
+        .toFile(path.join(outDir, `strip-${filledCount}.png`));
+      continue;
+    }
     if (heroPath) {
       const at3x = await buildHeroStripAt3x(
         heroPath,
@@ -573,7 +661,7 @@ async function main() {
   console.log("  logo.png, logo@2x.png, logo@3x.png");
   console.log("  icon.png, icon@2x.png, icon@3x.png");
   console.log(
-    `  strip-0.png..strip-${stampsRequired}.png (+ @2x/@3x) — ${(stampsRequired + 1) * 3} archivos de strip${heroPath ? " (modo --hero)" : ""}`,
+    `  strip-0.png..strip-${stampsRequired}.png (+ @2x/@3x) — ${(stampsRequired + 1) * 3} archivos de strip${heroPath ? " (modo --hero)" : stampLogoPath ? " (modo --stamp-logo)" : ""}`,
   );
 }
 
